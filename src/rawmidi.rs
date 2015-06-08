@@ -26,15 +26,12 @@ impl RawmidiInfo {
 
     fn from_iter(c: &Ctl, device: i32, sub: i32, dir: Direction) -> Result<RawmidiInfo> {
         let r = try!(RawmidiInfo::new());
-//        try!(check("snd_rawmidi_info_set_device", 
         unsafe { alsa::snd_rawmidi_info_set_device(r.0, device as c_uint) };
         let d = match dir {
             Direction::Playback => alsa::SND_RAWMIDI_STREAM_OUTPUT,
             Direction::Capture => alsa::SND_RAWMIDI_STREAM_INPUT,
         };
-//        try!(check("snd_rawmidi_info_set_stream", 
         unsafe { alsa::snd_rawmidi_info_set_stream(r.0, d) };
-//        try!(check("snd_rawmidi_info_set_subdevice", 
         unsafe { alsa::snd_rawmidi_info_set_subdevice(r.0, sub as c_uint) };
         try!(check("snd_ctl_rawmidi_info", unsafe { alsa::snd_ctl_rawmidi_info(c.handle(), r.0) }));
         Ok(r)
