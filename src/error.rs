@@ -18,7 +18,7 @@ pub fn check(f: &'static str, r: c_int) -> Result<c_int> {
     else { Ok(r) }
 }
 
-pub fn from_const(func: &'static str, s: *const c_char) -> Result<&'static str> {
+pub fn from_const<'a>(func: &'static str, s: *const c_char) -> Result<&'a str> {
     if s == ptr::null() { return Err(Error::invalid_str(func)) };
     let cc = unsafe { CStr::from_ptr(s) };
     ::std::str::from_utf8(cc.to_bytes()).map_err(|_| Error::invalid_str(func))

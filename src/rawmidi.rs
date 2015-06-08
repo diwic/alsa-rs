@@ -1,8 +1,9 @@
-use libc::{c_int, c_uint};
+use libc::{c_int, c_uint, c_void, size_t};
 use super::{Ctl, Direction};
 use super::error::*;
 use alsa;
-use std::ptr;
+use std::{ptr, io};
+use std::ffi::CStr;
 
 pub struct Iter<'a> {
     ctl: &'a Ctl,
@@ -55,6 +56,10 @@ impl Info {
         let c = unsafe { alsa::snd_rawmidi_info_get_subdevice_name(self.0) };
         from_const("snd_rawmidi_info_get_subdevice_name", c).map(|s| s.to_string())
     }
+    pub fn get_id(&self) -> Result<String> {
+        let c = unsafe { alsa::snd_rawmidi_info_get_id(self.0) };
+        from_const("snd_rawmidi_info_get_id", c).map(|s| s.to_string())
+    }
 }
 
 
@@ -91,6 +96,59 @@ impl<'a> Iterator for Iter<'a> {
         }
     }
 }
+
+pub struct Rawmidi(*mut alsa::snd_rawmidi_t);
+
+impl Drop for Rawmidi {
+    fn drop(&mut self) { unsafe { alsa::snd_rawmidi_close(self.0) }; }
+}
+
+impl Rawmidi {
+    pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<Rawmidi> {
+        let mut h = ptr::null_mut();
+        let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_RAWMIDI_NONBLOCK does not exist in alsa-sys
+        check("snd_rawmidi_open", unsafe { alsa::snd_rawmidi_open(
+            if dir == Direction::Capture { &mut h } else { ptr::null_mut() },
+            if dir == Direction::Playback { &mut h } else { ptr::null_mut() },
+            name.as_ptr(), flags) })
+            .map(|_| Rawmidi(h))
+    }
+
+    pub fn info(&self) -> Result<Info> {
+        Info::new().and_then(|i| check("snd_rawmidi_info", unsafe { alsa::snd_rawmidi_info(self.0, i.0) }).map(|_| i))
+    }
+
+    pub fn drop(&self) -> Result<()> { check("snd_rawmidi_stop", unsafe { alsa::snd_rawmidi_drop(self.0) }).map(|_| ()) }
+    pub fn drain(&self) -> Result<()> { check("snd_rawmidi_drain", unsafe { alsa::snd_rawmidi_drain(self.0) }).map(|_| ()) }
+    pub fn name(&self) -> Result<String> {
+        let c = unsafe { alsa::snd_rawmidi_name(self.0) };
+        from_const("snd_rawmidi_name", c).map(|s| s.to_string())
+    }
+
+    pub fn io<'a>(&'a self) -> IO<'a> { IO(&self) }
+}
+
+/// The reason we have a separate PCM IO struct is because read and write takes &mut self,
+/// where as we only need and want &self for PCM.
+pub struct IO<'a>(&'a Rawmidi);
+
+impl<'a> io::Read for IO<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let r = unsafe { alsa::snd_rawmidi_read((self.0).0, buf.as_mut_ptr() as *mut c_void, buf.len() as size_t) };
+        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        else { Ok(r as usize) }
+    }
+}
+
+impl<'a> io::Write for IO<'a> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let r = unsafe { alsa::snd_rawmidi_write((self.0).0, buf.as_ptr() as *const c_void, buf.len() as size_t) };
+        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        else { Ok(r as usize) }
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
 
 #[test]
 fn print_rawmidis() {

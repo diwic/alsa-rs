@@ -11,7 +11,7 @@ pub struct PCM(*mut alsa::snd_pcm_t);
 
 impl PCM {
     // Does not offer async mode (it's not very Rustic anyway)
-    pub fn new(name: &CStr, dir: Direction, nonblock: bool) -> Result<PCM> {
+    pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<PCM> {
         let mut r = ptr::null_mut();
         let stream = match dir {
             Direction::Capture => alsa::SND_PCM_STREAM_CAPTURE,
@@ -30,6 +30,9 @@ impl PCM {
     pub fn drain(&self) -> Result<()> { check("snd_pcm_drain", unsafe { alsa::snd_pcm_drain(self.0) }).map(|_| ()) }
     pub fn prepare(&self) -> Result<()> { check("snd_pcm_prepare", unsafe { alsa::snd_pcm_prepare(self.0) }).map(|_| ()) }
     pub fn reset(&self) -> Result<()> { check("snd_pcm_reset", unsafe { alsa::snd_pcm_reset(self.0) }).map(|_| ()) }
+
+    pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
+        check("snd_pcm_wait", unsafe { alsa::snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1)) }).map(|i| i == 1) }
 
     pub fn state(&self) -> State { unsafe { mem::transmute(alsa::snd_pcm_state(self.0) as u8) } }
 
@@ -220,7 +223,7 @@ impl<'a> fmt::Debug for HwParams<'a> {
 fn record_from_default() {
     use std::ffi::CString;
     use std::io::Read;
-    let pcm = PCM::new(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(2).unwrap();
     hwp.set_rate(44100, 0).unwrap();
@@ -236,7 +239,7 @@ fn record_from_default() {
 fn playback_to_default() {
     use std::ffi::CString;
     use std::io::Write;
-    let pcm = PCM::new(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(1).unwrap();
     hwp.set_rate(44100, 0).unwrap();
