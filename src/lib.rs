@@ -10,15 +10,14 @@ pub enum Direction {
 mod error;
 pub use error::{Error, Result};
 
-mod card;
-pub use card::{Card, CardIter};
+pub mod card;
+pub use card::Card as Card;
 
-mod ctl;
-pub use ctl::{Ctl};
+pub mod ctl;
+pub use ctl::Ctl as Ctl;
 
-mod pcm;
-pub use pcm::{PCM, PCMFormat, PCMHwParams, PCMAccess};
+pub mod pcm;
+pub use pcm::PCM as PCM;
 
-mod rawmidi;
-pub use rawmidi::{RawmidiIter, RawmidiInfo};
+pub mod rawmidi;
 

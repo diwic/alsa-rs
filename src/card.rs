@@ -4,13 +4,13 @@ use alsa;
 use std::ffi::CStr;
 
 pub struct Card(c_int);
-pub struct CardIter(c_int);
+pub struct Iter(c_int);
 
-impl CardIter {
-    pub fn new() -> CardIter { CardIter(-1) }
+impl Iter {
+    pub fn new() -> Iter { Iter(-1) }
 }
 
-impl Iterator for CardIter {
+impl Iterator for Iter {
     type Item = Result<Card>;
 
     fn next(&mut self) -> Option<Result<Card>> {
@@ -38,16 +38,13 @@ impl Card {
         check("snd_card_get_longname", unsafe { alsa::snd_card_get_longname(self.0, &mut c) })
             .and_then(|_| from_alloc("snd_card_get_longname", c)) 
     }
-}
 
-impl ::std::ops::Deref for Card {
-    type Target = c_int;
-    fn deref(&self) -> &c_int { &self.0 }
+    pub fn get_index(&self) -> c_int { self.0 }
 }
 
 #[test]
 fn print_cards() {
-    for a in CardIter::new().map(|a| a.unwrap()) {
-        println!("Card #{}: {} ({})", *a, a.get_name().unwrap(), a.get_longname().unwrap())
+    for a in Iter::new().map(|a| a.unwrap()) {
+        println!("Card #{}: {} ({})", a.get_index(), a.get_name().unwrap(), a.get_longname().unwrap())
     }
 }

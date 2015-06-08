@@ -4,7 +4,7 @@ use super::error::*;
 use alsa;
 use std::ptr;
 
-pub struct RawmidiIter<'a> {
+pub struct Iter<'a> {
     ctl: &'a Ctl,
     device: c_int,
     in_count: i32,
@@ -12,20 +12,20 @@ pub struct RawmidiIter<'a> {
     current: i32,
 }
 
-pub struct RawmidiInfo(*mut alsa::snd_rawmidi_info_t);
+pub struct Info(*mut alsa::snd_rawmidi_info_t);
 
-impl Drop for RawmidiInfo {
+impl Drop for Info {
     fn drop(&mut self) { unsafe { alsa::snd_rawmidi_info_free(self.0) }; }
 }
 
-impl RawmidiInfo {
-    fn new() -> Result<RawmidiInfo> {
+impl Info {
+    fn new() -> Result<Info> {
         let mut p = ptr::null_mut();
-        check("snd_rawmidi_info_malloc", unsafe { alsa::snd_rawmidi_info_malloc(&mut p) }).map(|_| RawmidiInfo(p))
+        check("snd_rawmidi_info_malloc", unsafe { alsa::snd_rawmidi_info_malloc(&mut p) }).map(|_| Info(p))
     }
 
-    fn from_iter(c: &Ctl, device: i32, sub: i32, dir: Direction) -> Result<RawmidiInfo> {
-        let r = try!(RawmidiInfo::new());
+    fn from_iter(c: &Ctl, device: i32, sub: i32, dir: Direction) -> Result<Info> {
+        let r = try!(Info::new());
         unsafe { alsa::snd_rawmidi_info_set_device(r.0, device as c_uint) };
         let d = match dir {
             Direction::Playback => alsa::SND_RAWMIDI_STREAM_OUTPUT,
@@ -38,8 +38,8 @@ impl RawmidiInfo {
     }
 
     fn subdev_count(c: &Ctl, device: c_int) -> Result<(i32, i32)> {
-        let i = try!(RawmidiInfo::from_iter(c, device, 0, Direction::Capture));
-        let o = try!(RawmidiInfo::from_iter(c, device, 0, Direction::Playback));
+        let i = try!(Info::from_iter(c, device, 0, Direction::Capture));
+        let o = try!(Info::from_iter(c, device, 0, Direction::Playback));
         Ok((unsafe { alsa::snd_rawmidi_info_get_subdevices_count(o.0) as i32 },
             unsafe { alsa::snd_rawmidi_info_get_subdevices_count(i.0) as i32 }))
     }
@@ -58,20 +58,20 @@ impl RawmidiInfo {
 }
 
 
-impl<'a> RawmidiIter<'a> {
-    pub fn new(c: &'a Ctl) -> RawmidiIter<'a> { RawmidiIter { ctl: c, device: -1, in_count: 0, out_count: 0, current: 0 }}
+impl<'a> Iter<'a> {
+    pub fn new(c: &'a Ctl) -> Iter<'a> { Iter { ctl: c, device: -1, in_count: 0, out_count: 0, current: 0 }}
 }
 
-impl<'a> Iterator for RawmidiIter<'a> {
-    type Item = Result<RawmidiInfo>;
-    fn next(&mut self) -> Option<Result<RawmidiInfo>> {
+impl<'a> Iterator for Iter<'a> {
+    type Item = Result<Info>;
+    fn next(&mut self) -> Option<Result<Info>> {
         if self.current < self.in_count {
             self.current += 1;
-            return Some(RawmidiInfo::from_iter(&self.ctl, self.device, self.current-1, Direction::Capture));
+            return Some(Info::from_iter(&self.ctl, self.device, self.current-1, Direction::Capture));
         }
         if self.current - self.in_count < self.out_count {
             self.current += 1;
-            return Some(RawmidiInfo::from_iter(&self.ctl, self.device, self.current-1-self.in_count, Direction::Playback));
+            return Some(Info::from_iter(&self.ctl, self.device, self.current-1-self.in_count, Direction::Playback));
         }
 
         let r = check("snd_ctl_rawmidi_next_device", unsafe { alsa::snd_ctl_rawmidi_next_device(self.ctl.handle(), &mut self.device) });
@@ -81,7 +81,7 @@ impl<'a> Iterator for RawmidiIter<'a> {
             _ => {},
         }
         self.current = 0;
-        match RawmidiInfo::subdev_count(&self.ctl, self.device) {
+        match Info::subdev_count(&self.ctl, self.device) {
             Err(e) => Some(Err(e)),
             Ok((oo, ii)) => {
                 self.in_count = ii;
@@ -94,9 +94,9 @@ impl<'a> Iterator for RawmidiIter<'a> {
 
 #[test]
 fn print_rawmidis() {
-    for a in super::CardIter::new().map(|a| a.unwrap()) {
-        for b in RawmidiIter::new(&Ctl::from_card(&a, false).unwrap()).map(|b| b.unwrap()) {
-            println!("Rawmidi {:?} (hw:{},{},{}) {} - {}", b.get_stream(), *a, b.get_device(), b.get_subdevice(),
+    for a in super::card::Iter::new().map(|a| a.unwrap()) {
+        for b in Iter::new(&Ctl::from_card(&a, false).unwrap()).map(|b| b.unwrap()) {
+            println!("Rawmidi {:?} (hw:{},{},{}) {} - {}", b.get_stream(), a.get_index(), b.get_device(), b.get_subdevice(),
                  a.get_name().unwrap(), b.get_subdevice_name().unwrap())
         }
     }

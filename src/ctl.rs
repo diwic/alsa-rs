@@ -17,7 +17,7 @@ impl Ctl {
     }
 
     pub fn from_card(c: &Card, nonblock: bool) -> Result<Ctl> {
-        let s = format!("hw:{}", **c);
+        let s = format!("hw:{}", c.get_index());
         Ctl::new(&CString::new(s).unwrap(), nonblock)
     }
 

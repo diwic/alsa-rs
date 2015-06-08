@@ -31,7 +31,7 @@ impl PCM {
     pub fn prepare(&self) -> Result<()> { check("snd_pcm_prepare", unsafe { alsa::snd_pcm_prepare(self.0) }).map(|_| ()) }
     pub fn reset(&self) -> Result<()> { check("snd_pcm_reset", unsafe { alsa::snd_pcm_reset(self.0) }).map(|_| ()) }
 
-    pub fn state(&self) -> PCMState { unsafe { mem::transmute(alsa::snd_pcm_state(self.0) as u8) } }
+    pub fn state(&self) -> State { unsafe { mem::transmute(alsa::snd_pcm_state(self.0) as u8) } }
 
     pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
     pub fn frames_to_bytes(&self, i: Frames) -> isize { unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }}
@@ -51,14 +51,14 @@ impl PCM {
         check("snd_pcm_avail_delay", unsafe { alsa::snd_pcm_avail_delay(self.0, &mut a, &mut d) }).map(|_| (a, d))
     }
 
-    pub fn io<'a>(&'a self) -> PCMIO<'a> { PCMIO(&self) }
+    pub fn io<'a>(&'a self) -> IO<'a> { IO(&self) }
 
-    pub fn hw_params(&self, h: &PCMHwParams) -> Result<()> {
+    pub fn hw_params(&self, h: &HwParams) -> Result<()> {
         check("snd_pcm_hw_params", unsafe { alsa::snd_pcm_hw_params(self.0, h.0) }).map(|_| ())
     }
 
-    pub fn hw_params_current<'a>(&'a self) -> Result<PCMHwParams<'a>> {
-        PCMHwParams::new(&self).and_then(|h|
+    pub fn hw_params_current<'a>(&'a self) -> Result<HwParams<'a>> {
+        HwParams::new(&self).and_then(|h|
             check("snd_pcm_hw_params_current", unsafe { alsa::snd_pcm_hw_params_current(self.0, h.0) }).map(|_| h))
     }
 }
@@ -67,11 +67,11 @@ impl Drop for PCM {
     fn drop(&mut self) { unsafe { alsa::snd_pcm_close(self.0) }; }
 }
 
-/// The reason we have a separate PCMIO struct is because read and write takes &mut self,
+/// The reason we have a separate PCM IO struct is because read and write takes &mut self,
 /// where as we only need and want &self for PCM.
-pub struct PCMIO<'a>(&'a PCM);
+pub struct IO<'a>(&'a PCM);
 
-impl<'a> io::Read for PCMIO<'a> {
+impl<'a> io::Read for IO<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
@@ -80,7 +80,7 @@ impl<'a> io::Read for PCMIO<'a> {
     }
 }
 
-impl<'a> io::Write for PCMIO<'a> {
+impl<'a> io::Write for IO<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size) };
@@ -91,7 +91,7 @@ impl<'a> io::Write for PCMIO<'a> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PCMState {
+pub enum State {
     Open = alsa::SND_PCM_STATE_OPEN as isize,
     Setup = alsa::SND_PCM_STATE_SETUP as isize,
     Prepared = alsa::SND_PCM_STATE_PREPARED as isize,
@@ -104,7 +104,7 @@ pub enum PCMState {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PCMFormat {
+pub enum Format {
     Unknown = alsa::SND_PCM_FORMAT_UNKNOWN as isize,
     // S16 = alsa::SND_PCM_FORMAT_S16 as isize,
     S16LE = alsa::SND_PCM_FORMAT_S16_LE as isize,
@@ -113,7 +113,7 @@ pub enum PCMFormat {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PCMAccess {
+pub enum Access {
     MMapInterleaved = alsa::SND_PCM_ACCESS_MMAP_INTERLEAVED as isize,
     MMapNonInterleaved = alsa::SND_PCM_ACCESS_MMAP_NONINTERLEAVED as isize,
     MMapComplex = alsa::SND_PCM_ACCESS_MMAP_COMPLEX as isize,
@@ -121,19 +121,19 @@ pub enum PCMAccess {
     RWNonInterleaved = alsa::SND_PCM_ACCESS_RW_NONINTERLEAVED as isize,
 }
 
-pub struct PCMHwParams<'a>(*mut alsa::snd_pcm_hw_params_t, &'a PCM);
+pub struct HwParams<'a>(*mut alsa::snd_pcm_hw_params_t, &'a PCM);
 
-impl<'a> Drop for PCMHwParams<'a> {
+impl<'a> Drop for HwParams<'a> {
     fn drop(&mut self) { unsafe { alsa::snd_pcm_hw_params_free(self.0) }; }
 }
 
-impl<'a> PCMHwParams<'a> {
-    fn new(a: &'a PCM) -> Result<PCMHwParams<'a>> {
+impl<'a> HwParams<'a> {
+    fn new(a: &'a PCM) -> Result<HwParams<'a>> {
         let mut p = ptr::null_mut();
-        check("snd_pcm_hw_params_malloc", unsafe { alsa::snd_pcm_hw_params_malloc(&mut p) }).map(|_| PCMHwParams(p, a))
+        check("snd_pcm_hw_params_malloc", unsafe { alsa::snd_pcm_hw_params_malloc(&mut p) }).map(|_| HwParams(p, a))
     }
 
-    pub fn any(a: &'a PCM) -> Result<PCMHwParams<'a>> { PCMHwParams::new(a).and_then(|p|
+    pub fn any(a: &'a PCM) -> Result<HwParams<'a>> { HwParams::new(a).and_then(|p|
         check("snd_pcm_hw_params_any", unsafe { alsa::snd_pcm_hw_params_any(a.0, p.0) }).map(|_| p)
     )}
 
@@ -157,21 +157,21 @@ impl<'a> PCMHwParams<'a> {
             unsafe { alsa::snd_pcm_hw_params_get_rate(self.0, &mut v, &mut d) }).map(|_| v as u32)
     }
 
-    pub fn set_format(&self, v: PCMFormat) -> Result<()> { check("snd_pcm_hw_params_set_format",
+    pub fn set_format(&self, v: Format) -> Result<()> { check("snd_pcm_hw_params_set_format",
         unsafe { alsa::snd_pcm_hw_params_set_format((self.1).0, self.0, v as c_int) }).map(|_| ())
     }
 
-    pub fn get_format(&self) -> Result<PCMFormat> {
+    pub fn get_format(&self) -> Result<Format> {
         let mut v = 0;
         check("snd_pcm_hw_params_get_format",
             unsafe { alsa::snd_pcm_hw_params_get_format(self.0, &mut v) } ).map(|_| unsafe { mem::transmute(v as u8) })
     }
 
-    pub fn set_access(&self, v: PCMAccess) -> Result<()> { check("snd_pcm_hw_params_set_access",
+    pub fn set_access(&self, v: Access) -> Result<()> { check("snd_pcm_hw_params_set_access",
         unsafe { alsa::snd_pcm_hw_params_set_access((self.1).0, self.0, v as c_uint) }).map(|_| ())
     }
 
-    pub fn get_access(&self) -> Result<PCMAccess> {
+    pub fn get_access(&self) -> Result<Access> {
         let mut v = 0;
         check("snd_pcm_hw_params_get_access",
             unsafe { alsa::snd_pcm_hw_params_get_access(self.0, &mut v) } ).map(|_| unsafe { mem::transmute(v as u8) })
@@ -208,10 +208,10 @@ impl<'a> PCMHwParams<'a> {
     }
 }
 
-impl<'a> fmt::Debug for PCMHwParams<'a> {
+impl<'a> fmt::Debug for HwParams<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
-           "PCMHwParams(channels: {:?}, rate: {:?} Hz, format: {:?}, access: {:?}, period size: {:?} frames, buffer size: {:?} frames)",
+           "HwParams(channels: {:?}, rate: {:?} Hz, format: {:?}, access: {:?}, period size: {:?} frames, buffer size: {:?} frames)",
            self.get_channels(), self.get_rate(), self.get_format(), self.get_access(), self.get_period_size(), self.get_buffer_size())
     }
 }
@@ -221,11 +221,11 @@ fn record_from_default() {
     use std::ffi::CString;
     use std::io::Read;
     let pcm = PCM::new(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
-    let hwp = PCMHwParams::any(&pcm).unwrap();
+    let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(2).unwrap();
     hwp.set_rate(44100, 0).unwrap();
-    hwp.set_format(PCMFormat::S16LE).unwrap();
-    hwp.set_access(PCMAccess::RWInterleaved).unwrap();
+    hwp.set_format(Format::S16LE).unwrap();
+    hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
     pcm.start().unwrap();
     let mut buf = [0u8; 1024]; 
@@ -237,11 +237,11 @@ fn playback_to_default() {
     use std::ffi::CString;
     use std::io::Write;
     let pcm = PCM::new(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
-    let hwp = PCMHwParams::any(&pcm).unwrap();
+    let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(1).unwrap();
     hwp.set_rate(44100, 0).unwrap();
-    hwp.set_format(PCMFormat::S16LE).unwrap();
-    hwp.set_access(PCMAccess::RWInterleaved).unwrap();
+    hwp.set_format(Format::S16LE).unwrap();
+    hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
     println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
     let mut buf = [0i16; 1024];
@@ -252,6 +252,6 @@ fn playback_to_default() {
     for _ in 0..2*44100/1024 { // 2 seconds of playback
         assert_eq!(pcm.io().write(b).unwrap(), 2048);
     }
-    if pcm.state() != PCMState::Running { pcm.start().unwrap() };
+    if pcm.state() != State::Running { pcm.start().unwrap() };
     pcm.drain().unwrap();
 }
