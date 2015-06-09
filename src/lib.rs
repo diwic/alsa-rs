@@ -22,3 +22,5 @@ pub use pcm::PCM as PCM;
 pub mod rawmidi;
 pub use rawmidi::Rawmidi as Rawmidi;
 
+pub mod device_name;
+
