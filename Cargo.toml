@@ -1,11 +1,11 @@
 [package]
 name = "alsa"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Thin but safe wrappers for ALSA (Linux sound API)"
 repository = "https://github.com/diwic/alsa-rs"
-# documentation = "http://diwic.github.io/alsa-rs-docs/alsa"
+documentation = "http://diwic.github.io/alsa-rs-docs/alsa"
 keywords = ["ALSA", "audio", "sound"]
 license = "Apache-2.0/MIT"
 
