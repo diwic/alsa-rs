@@ -1,9 +1,13 @@
+//! Sound card enumeration
 use libc::{c_int, c_char};
 use super::error::*;
 use alsa;
 use std::ffi::CStr;
 
+/// An ALSA sound card, uniquely identified by its index.
 pub struct Card(c_int);
+
+/// Iterate over existing sound cards.
 pub struct Iter(c_int);
 
 impl Iter {

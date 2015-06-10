@@ -1,3 +1,5 @@
+//! Audio playback and capture
+
 use libc::{c_int, c_uint, c_void, ssize_t};
 use alsa;
 use std::ffi::CStr;
@@ -5,8 +7,10 @@ use std::{io, fmt, ptr, mem};
 use super::error::*;
 use super::Direction;
 
+/// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
 
+/// [snd_pcm_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - start here for audio playback and recording
 pub struct PCM(*mut alsa::snd_pcm_t);
 
 impl PCM {
@@ -64,14 +68,22 @@ impl PCM {
         HwParams::new(&self).and_then(|h|
             check("snd_pcm_hw_params_current", unsafe { alsa::snd_pcm_hw_params_current(self.0, h.0) }).map(|_| h))
     }
+
+    pub fn sw_params(&self, h: &SwParams) -> Result<()> {
+        check("snd_pcm_sw_params", unsafe { alsa::snd_pcm_sw_params(self.0, h.0) }).map(|_| ())
+    }
+
+    pub fn sw_params_current<'a>(&'a self) -> Result<SwParams<'a>> {
+        SwParams::new(&self).and_then(|h|
+            check("snd_pcm_sw_params_current", unsafe { alsa::snd_pcm_sw_params_current(self.0, h.0) }).map(|_| h))
+    }
 }
 
 impl Drop for PCM {
     fn drop(&mut self) { unsafe { alsa::snd_pcm_close(self.0) }; }
 }
 
-/// The reason we have a separate PCM IO struct is because read and write takes &mut self,
-/// where as we only need and want &self for PCM.
+/// Implements `std::io::Read` and `std::io::Write` for `PCM`
 pub struct IO<'a>(&'a PCM);
 
 impl<'a> io::Read for IO<'a> {
@@ -93,6 +105,7 @@ impl<'a> io::Write for IO<'a> {
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
 
+/// [SND_PCM_STATE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum State {
     Open = alsa::SND_PCM_STATE_OPEN as isize,
@@ -106,6 +119,7 @@ pub enum State {
     Disconnected = alsa::SND_PCM_STATE_DISCONNECTED as isize,
 }
 
+/// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Format {
     Unknown = alsa::SND_PCM_FORMAT_UNKNOWN as isize,
@@ -115,6 +129,7 @@ pub enum Format {
     // TODO: More formats...
 }
 
+/// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Access {
     MMapInterleaved = alsa::SND_PCM_ACCESS_MMAP_INTERLEAVED as isize,
@@ -124,6 +139,7 @@ pub enum Access {
     RWNonInterleaved = alsa::SND_PCM_ACCESS_RW_NONINTERLEAVED as isize,
 }
 
+/// [snd_pcm_hw_params_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___h_w___params.html) wrapper
 pub struct HwParams<'a>(*mut alsa::snd_pcm_hw_params_t, &'a PCM);
 
 impl<'a> Drop for HwParams<'a> {
@@ -216,6 +232,59 @@ impl<'a> fmt::Debug for HwParams<'a> {
         write!(f,
            "HwParams(channels: {:?}, rate: {:?} Hz, format: {:?}, access: {:?}, period size: {:?} frames, buffer size: {:?} frames)",
            self.get_channels(), self.get_rate(), self.get_format(), self.get_access(), self.get_period_size(), self.get_buffer_size())
+    }
+}
+
+/// [snd_pcm_sw_params_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___s_w___params.html) wrapper
+pub struct SwParams<'a>(*mut alsa::snd_pcm_sw_params_t, &'a PCM);
+
+impl<'a> Drop for SwParams<'a> {
+    fn drop(&mut self) { unsafe { alsa::snd_pcm_sw_params_free(self.0) }; }
+}
+
+impl<'a> SwParams<'a> {
+
+    fn new(a: &'a PCM) -> Result<SwParams<'a>> {
+        let mut p = ptr::null_mut();
+        check("snd_pcm_sw_params_malloc", unsafe { alsa::snd_pcm_sw_params_malloc(&mut p) }).map(|_| SwParams(p, a))
+    }
+
+    pub fn set_avail_min(&self, v: Frames) -> Result<()> { check("snd_pcm_sw_params_set_avail_min",
+        unsafe { alsa::snd_pcm_sw_params_set_avail_min((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    }
+
+    pub fn get_avail_min(&self) -> Result<Frames> {
+        let mut v = 0;
+        check("snd_pcm_sw_params_get_avail_min",
+            unsafe { alsa::snd_pcm_sw_params_get_avail_min(self.0, &mut v) }).map(|_| v as Frames)
+    }
+
+    pub fn set_start_threshold(&self, v: Frames) -> Result<()> { check("snd_pcm_sw_params_set_start_threshold",
+        unsafe { alsa::snd_pcm_sw_params_set_start_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    }
+
+    pub fn get_start_threshold(&self) -> Result<Frames> {
+        let mut v = 0;
+        check("snd_pcm_sw_params_get_start_threshold",
+            unsafe { alsa::snd_pcm_sw_params_get_start_threshold(self.0, &mut v) }).map(|_| v as Frames)
+    }
+
+    pub fn set_stop_threshold(&self, v: Frames) -> Result<()> { check("snd_pcm_sw_params_set_stop_threshold",
+        unsafe { alsa::snd_pcm_sw_params_set_stop_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    }
+
+    pub fn get_stop_threshold(&self) -> Result<Frames> {
+        let mut v = 0;
+        check("snd_pcm_sw_params_get_stop_threshold",
+            unsafe { alsa::snd_pcm_sw_params_get_stop_threshold(self.0, &mut v) }).map(|_| v as Frames)
+    }
+}
+
+impl<'a> fmt::Debug for SwParams<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,
+           "SwParams(avail_min: {:?} frames, start_threshold: {:?} frames, stop_threshold: {:?} frames)",
+           self.get_avail_min(), self.get_start_threshold(), self.get_stop_threshold())
     }
 }
 

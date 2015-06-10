@@ -1,3 +1,5 @@
+//! Enumerate devices in the alsa library configuration
+
 use std::ptr;
 use libc::{c_void, c_int};
 use alsa;
@@ -5,9 +7,7 @@ use super::{Card, Direction};
 use super::error::*;
 use std::ffi::{CStr, CString};
 
-//type HintsPtr = ;
-
-/// Wrapper around snd_device_name_hint API
+/// [snd_device_name_hint](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct HintIter(*mut *mut c_void, isize);
 
 impl Drop for HintIter {
@@ -15,6 +15,7 @@ impl Drop for HintIter {
 }
 
 impl HintIter {
+    /// typical interfaces are: "pcm", "ctl", "rawmidi", "timer", "seq" and "hwdep".
     pub fn new(card: Option<&Card>, iface: &CStr) -> Result<HintIter> {
         let mut p = ptr::null_mut();
         let cnr = card.map(|c| c.get_index()).unwrap_or(-1) as c_int;
@@ -34,6 +35,8 @@ impl Iterator for HintIter {
     }
 }
 
+
+/// [snd_device_name_get_hint](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 #[derive(Debug, Clone)]
 pub struct Hint {
     pub name: Option<String>,

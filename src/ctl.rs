@@ -1,14 +1,16 @@
-//use libc::c_int;
+//! Control device API
+
 use alsa;
 use std::ffi::{CStr, CString};
 use super::error::*;
 use std::ptr;
 use super::Card;
 
+/// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct Ctl(*mut alsa::snd_ctl_t);
 
 impl Ctl {
-    // Does not offer async mode (it's not very Rustic anyway)
+    /// Open does not support async mode (it's not very Rustic anyway)
     pub fn open(c: &CStr, nonblock: bool) -> Result<Ctl> {
         let mut r = ptr::null_mut();
         let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_CTL_NONBLOCK does not exist in alsa-sys
@@ -31,6 +33,7 @@ impl Drop for Ctl {
     fn drop(&mut self) { unsafe { alsa::snd_ctl_close(self.0) }; }
 }
 
+/// [snd_ctl_card_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct CardInfo(*mut alsa::snd_ctl_card_info_t);
 
 impl Drop for CardInfo {
@@ -57,3 +60,16 @@ impl CardInfo {
         from_const("snd_ctl_card_info_get_mixername", unsafe { alsa::snd_ctl_card_info_get_mixername(self.0) })}
     pub fn get_card(&self) -> Card { Card::new(unsafe { alsa::snd_ctl_card_info_get_card(self.0) })}
 }
+
+/// [SND_CTL_ELEM_IFACE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) constants
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ElemIface {
+    Card = alsa::SND_CTL_ELEM_IFACE_CARD as isize,
+    Hwdep = alsa::SND_CTL_ELEM_IFACE_HWDEP as isize,
+    Mixer = alsa::SND_CTL_ELEM_IFACE_MIXER as isize,
+    PCM = alsa::SND_CTL_ELEM_IFACE_PCM as isize,
+    Rawmidi = alsa::SND_CTL_ELEM_IFACE_RAWMIDI as isize,
+    Timer = alsa::SND_CTL_ELEM_IFACE_TIMER as isize,
+    Sequencer = alsa::SND_CTL_ELEM_IFACE_SEQUENCER as isize,
+}
+

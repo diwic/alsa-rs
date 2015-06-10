@@ -1,3 +1,5 @@
+//! MIDI devices I/O and enumeration
+
 use libc::{c_int, c_uint, c_void, size_t};
 use super::{Ctl, Direction};
 use super::error::*;
@@ -5,6 +7,7 @@ use alsa;
 use std::{ptr, io};
 use std::ffi::CStr;
 
+/// Iterator over [Rawmidi](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) devices and subdevices
 pub struct Iter<'a> {
     ctl: &'a Ctl,
     device: c_int,
@@ -13,6 +16,7 @@ pub struct Iter<'a> {
     current: i32,
 }
 
+/// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 pub struct Info(*mut alsa::snd_rawmidi_info_t);
 
 impl Drop for Info {
@@ -97,6 +101,7 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
+/// [snd_rawmidi_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 pub struct Rawmidi(*mut alsa::snd_rawmidi_t);
 
 impl Drop for Rawmidi {
@@ -128,8 +133,7 @@ impl Rawmidi {
     pub fn io<'a>(&'a self) -> IO<'a> { IO(&self) }
 }
 
-/// The reason we have a separate PCM IO struct is because read and write takes &mut self,
-/// where as we only need and want &self for PCM.
+/// Implements `std::io::Read` and `std::io::Write` for `Rawmidi`
 pub struct IO<'a>(&'a Rawmidi);
 
 impl<'a> io::Read for IO<'a> {

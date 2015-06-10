@@ -7,6 +7,10 @@ use std::ffi::CStr;
 
 const INVALID_STRING: c_int = 1;
 
+/// Most ALSA functions can return a negative error code.
+/// If so, then that error code is wrapped into this `Error` struct.
+/// An Error is also returned in case ALSA returns a string that
+/// cannot be translated into Rust's UTF-8 strings.
 #[derive(Debug)]
 pub struct Error(Option<Cow<'static, str>>, c_int);
 
