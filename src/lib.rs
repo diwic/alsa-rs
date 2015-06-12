@@ -12,7 +12,9 @@ pub enum Direction {
     Capture
 }
 impl Direction {
+    #[inline]
     pub fn input() -> Direction { Direction::Capture }
+    #[inline]
     pub fn output() -> Direction { Direction::Playback }
 }
 
@@ -23,7 +25,12 @@ pub use error::{Error, Result};
 pub mod card;
 pub use card::Card as Card;
 
-pub mod ctl;
+mod ctl_int;
+pub mod ctl {
+    //! Control device API
+    pub use super::ctl_int::{Ctl, CardInfo, ElemIface, ElemId, ElemType, ElemValue, ElemInfo};
+}
+
 pub use ctl::Ctl as Ctl;
 
 pub mod hctl;

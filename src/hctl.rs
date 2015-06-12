@@ -2,8 +2,8 @@
 use alsa;
 use std::ffi::{CStr};
 use super::error::*;
-use std::{ptr, mem};
-use super::ctl;
+use std::ptr;
+use super::ctl_int;
 
 
 /// [snd_hctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___h_control.html) wrapper
@@ -46,14 +46,23 @@ impl<'a> Iterator for ElemIter<'a> {
 pub struct Elem<'a>(&'a HCtl, *mut alsa::snd_hctl_elem_t);
 
 impl<'a> Elem<'a> {
-    pub fn get_name(&self) -> Result<&str> {
-        from_const("snd_hctl_elem_get_name", unsafe { alsa::snd_hctl_elem_get_name(self.1) })}
+    pub fn get_id(&self) -> Result<ctl_int::ElemId> {
+        let v = try!(ctl_int::elem_id_new());
+        unsafe { alsa::snd_hctl_elem_get_id(self.1, ctl_int::elem_id_ptr(&v)) };
+        Ok(v)
+    }
+    pub fn info(&self) -> Result<ctl_int::ElemInfo> {
+        let v = try!(ctl_int::elem_info_new());
+        check("snd_hctl_elem_info", unsafe { alsa::snd_hctl_elem_info(self.1, ctl_int::elem_info_ptr(&v)) }).map(|_| v)
+    }
+    pub fn read(&self) -> Result<ctl_int::ElemValue> {
+        let i = try!(self.info());
+        let v = try!(ctl_int::elem_value_new(i.get_type(), i.get_count()));
+        check("snd_hctl_elem_read", unsafe { alsa::snd_hctl_elem_read(self.1, ctl_int::elem_value_ptr(&v)) }).map(|_| v)
+    }
 
-    pub fn get_device(&self) -> u32 { unsafe { alsa::snd_hctl_elem_get_device(self.1) as u32 }}
-    pub fn get_subdevice(&self) -> u32 { unsafe { alsa::snd_hctl_elem_get_subdevice(self.1) as u32 }}
-    pub fn get_numid(&self) -> u32 { unsafe { alsa::snd_hctl_elem_get_numid(self.1) as u32 }}
-    pub fn get_index(&self) -> u32 { unsafe { alsa::snd_hctl_elem_get_index(self.1) as u32 }}
-    pub fn get_interface(&self) -> ctl::ElemIface { unsafe { mem::transmute(alsa::snd_hctl_elem_get_interface(self.1) as u8) }}
+    pub fn write(&self, v: &ctl_int::ElemValue) -> Result<bool> { check("snd_hctl_elem_write",
+        unsafe { alsa::snd_hctl_elem_write(self.1, ctl_int::elem_value_ptr(&v)) }).map(|e| e > 0) }
 }
 
 #[test]
@@ -64,12 +73,7 @@ fn print_hctls() {
         h.load().unwrap();
         println!("Card {}:", a.get_name().unwrap());
         for b in h.elem_iter() {
-            let index = b.get_index();
-            let device = b.get_device();
-            println!("  ({:?}) {}{}{}", b.get_interface(), b.get_name().unwrap(),
-                if index == 0 { "".to_string() } else { format!(", index={}", index) },
-                if device == 0 { "".to_string() } else { format!(", device={}", device) }
-            );
+            println!("  {:?} - {:?}", b.get_id().unwrap(), b.read().unwrap());
         }
     }
 }

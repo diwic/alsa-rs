@@ -1,7 +1,8 @@
 //! MIDI devices I/O and enumeration
 
 use libc::{c_int, c_uint, c_void, size_t};
-use super::{Ctl, Direction};
+use super::ctl_int::{ctl_ptr, Ctl};
+use super::{Direction};
 use super::error::*;
 use alsa;
 use std::{ptr, io};
@@ -38,7 +39,7 @@ impl Info {
         };
         unsafe { alsa::snd_rawmidi_info_set_stream(r.0, d) };
         unsafe { alsa::snd_rawmidi_info_set_subdevice(r.0, sub as c_uint) };
-        try!(check("snd_ctl_rawmidi_info", unsafe { alsa::snd_ctl_rawmidi_info(c.handle(), r.0) }));
+        try!(check("snd_ctl_rawmidi_info", unsafe { alsa::snd_ctl_rawmidi_info(ctl_ptr(&c), r.0) }));
         Ok(r)
     }
 
@@ -83,7 +84,8 @@ impl<'a> Iterator for Iter<'a> {
             return Some(Info::from_iter(&self.ctl, self.device, self.current-1-self.in_count, Direction::Playback));
         }
 
-        let r = check("snd_ctl_rawmidi_next_device", unsafe { alsa::snd_ctl_rawmidi_next_device(self.ctl.handle(), &mut self.device) });
+        let r = check("snd_ctl_rawmidi_next_device", unsafe {
+            alsa::snd_ctl_rawmidi_next_device(ctl_ptr(&self.ctl), &mut self.device) });
         match r {
             Err(e) => return Some(Err(e)),
             Ok(_) if self.device == -1 => return None,
