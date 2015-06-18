@@ -1,4 +1,18 @@
 //! Enumerate devices in the alsa library configuration
+//!
+//! # Example
+//! Print all devices found in various categories.
+//!
+//! ```
+//! use std::ffi::CString;
+//! use alsa::device_name::HintIter;
+//!
+//! for t in &["pcm", "ctl", "rawmidi", "timer", "seq", "hwdep"] {
+//!     println!("{} devices:", t);
+//!     let i = HintIter::new(None, &*CString::new(*t).unwrap()).unwrap();
+//!     for a in i { println!("  {:?}", a) }
+//! }
+//! ```
 
 use std::ptr;
 use libc::{c_void, c_int};

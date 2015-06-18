@@ -1,4 +1,43 @@
 //! Audio playback and capture
+//!
+//! # Example
+//! Playback a sine wave through the "default" device.
+//!
+//! ```
+//! use std::ffi::CString;
+//! use std::io::Write;
+//! use alsa::Direction;
+//! use alsa::pcm::{PCM, HwParams, Format, Access, State};
+//!
+//! // Open default playback device
+//! let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
+//!
+//! // Set hardware parameters: 44100 Hz / Mono / 16 bit
+//! let hwp = HwParams::any(&pcm).unwrap();
+//! hwp.set_channels(1).unwrap();
+//! hwp.set_rate(44100, 0).unwrap();
+//! hwp.set_format(Format::S16LE).unwrap();
+//! hwp.set_access(Access::RWInterleaved).unwrap();
+//! pcm.hw_params(&hwp).unwrap();
+//!
+//! // Make a sine wave
+//! let mut buf = [0i16; 1024];
+//! for (i, a) in buf.iter_mut().enumerate() {
+//!     *a = ((i as f32 * 2.0 * ::std::f32::consts::PI / 128.0).sin() * 8192.0) as i16
+//! }
+//! let b: &[u8] = unsafe { ::std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len() * 2) };
+//!
+//! // Play it back for 2 seconds.
+//! for _ in 0..2*44100/1024 {
+//!     assert_eq!(pcm.io().write(b).unwrap(), 2048);
+//! }
+//!
+//! // In case the buffer was larger than 2 seconds, start the stream manually.
+//! if pcm.state() != State::Running { pcm.start().unwrap() };
+//! // Wait for the stream to finish playback.
+//! pcm.drain().unwrap();
+//! ```
+
 
 use libc::{c_int, c_uint, c_void, ssize_t};
 use alsa;
