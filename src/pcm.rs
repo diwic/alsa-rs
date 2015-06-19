@@ -107,10 +107,14 @@ impl PCM {
         }
     }
 
+    pub fn io_i8<'a>(&'a self) -> Result<IO<'a, i8>> { self.verify_format(Format::S8).map(|_| IO(&self, PhantomData)) }
     pub fn io_u8<'a>(&'a self) -> Result<IO<'a, u8>> { self.verify_format(Format::U8).map(|_| IO(&self, PhantomData)) }
     pub fn io_i16<'a>(&'a self) -> Result<IO<'a, i16>> { self.verify_format(Format::s16()).map(|_| IO(&self, PhantomData)) }
+    pub fn io_u16<'a>(&'a self) -> Result<IO<'a, u16>> { self.verify_format(Format::u16()).map(|_| IO(&self, PhantomData)) }
     pub fn io_i32<'a>(&'a self) -> Result<IO<'a, i32>> { self.verify_format(Format::s32()).map(|_| IO(&self, PhantomData)) }
+    pub fn io_u32<'a>(&'a self) -> Result<IO<'a, u32>> { self.verify_format(Format::u32()).map(|_| IO(&self, PhantomData)) }
     pub fn io_f32<'a>(&'a self) -> Result<IO<'a, f32>> { self.verify_format(Format::float()).map(|_| IO(&self, PhantomData)) }
+    pub fn io_f64<'a>(&'a self) -> Result<IO<'a, f64>> { self.verify_format(Format::float64()).map(|_| IO(&self, PhantomData)) }
 
     pub fn io<'a>(&'a self) -> IO<'a, u8> { IO(&self, PhantomData) }
 
@@ -203,34 +207,41 @@ pub enum State {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Format {
     Unknown = alsa::SND_PCM_FORMAT_UNKNOWN as isize,
+    S8 = alsa::SND_PCM_FORMAT_S8 as isize,
     U8 = alsa::SND_PCM_FORMAT_U8 as isize,
     S16LE = alsa::SND_PCM_FORMAT_S16_LE as isize,
     S16BE = alsa::SND_PCM_FORMAT_S16_BE as isize,
+    U16LE = alsa::SND_PCM_FORMAT_U16_LE as isize,
+    U16BE = alsa::SND_PCM_FORMAT_U16_BE as isize,
     S32LE = alsa::SND_PCM_FORMAT_S32_LE as isize,
     S32BE = alsa::SND_PCM_FORMAT_S32_BE as isize,
+    U32LE = alsa::SND_PCM_FORMAT_U32_LE as isize,
+    U32BE = alsa::SND_PCM_FORMAT_U32_BE as isize,
     FloatLE = alsa::SND_PCM_FORMAT_FLOAT_LE as isize,
     FloatBE = alsa::SND_PCM_FORMAT_FLOAT_BE as isize,
+    Float64LE = alsa::SND_PCM_FORMAT_FLOAT64_LE as isize,
+    Float64BE = alsa::SND_PCM_FORMAT_FLOAT64_BE as isize,
     // TODO: More formats...
 }
 
 impl Format {
-    #[cfg(target_endian = "little")]
-    pub fn s16() -> Format { Format::S16LE }
+    #[cfg(target_endian = "little")] pub fn s16() -> Format { Format::S16LE }
+    #[cfg(target_endian = "big")] pub fn s16() -> Format { Format::S16BE }
 
-    #[cfg(target_endian = "big")]
-    pub fn s16() -> Format { Format::S16BE }
+    #[cfg(target_endian = "little")] pub fn u16() -> Format { Format::U16LE }
+    #[cfg(target_endian = "big")] pub fn u16() -> Format { Format::U16BE }
 
-    #[cfg(target_endian = "little")]
-    pub fn s32() -> Format { Format::S32LE }
+    #[cfg(target_endian = "little")] pub fn s32() -> Format { Format::S32LE }
+    #[cfg(target_endian = "big")] pub fn s32() -> Format { Format::S32BE }
 
-    #[cfg(target_endian = "big")]
-    pub fn s32() -> Format { Format::S32BE }
+    #[cfg(target_endian = "little")] pub fn u32() -> Format { Format::U32LE }
+    #[cfg(target_endian = "big")] pub fn u32() -> Format { Format::U32BE }
 
-    #[cfg(target_endian = "little")]
-    pub fn float() -> Format { Format::FloatLE }
+    #[cfg(target_endian = "little")] pub fn float() -> Format { Format::FloatLE }
+    #[cfg(target_endian = "big")] pub fn float() -> Format { Format::FloatBE }
 
-    #[cfg(target_endian = "big")]
-    pub fn float() -> Format { Format::FloatBE }
+    #[cfg(target_endian = "little")] pub fn float64() -> Format { Format::Float64LE }
+    #[cfg(target_endian = "big")] pub fn float64() -> Format { Format::Float64BE }
 }
 
 /// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
