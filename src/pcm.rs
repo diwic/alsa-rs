@@ -5,7 +5,6 @@
 //!
 //! ```
 //! use std::ffi::CString;
-//! use std::io::Write;
 //! use alsa::Direction;
 //! use alsa::pcm::{PCM, HwParams, Format, Access, State};
 //!
@@ -16,20 +15,20 @@
 //! let hwp = HwParams::any(&pcm).unwrap();
 //! hwp.set_channels(1).unwrap();
 //! hwp.set_rate(44100, 0).unwrap();
-//! hwp.set_format(Format::S16LE).unwrap();
+//! hwp.set_format(Format::s16()).unwrap();
 //! hwp.set_access(Access::RWInterleaved).unwrap();
 //! pcm.hw_params(&hwp).unwrap();
+//! let io = pcm.io_i16().unwrap();
 //!
 //! // Make a sine wave
 //! let mut buf = [0i16; 1024];
 //! for (i, a) in buf.iter_mut().enumerate() {
 //!     *a = ((i as f32 * 2.0 * ::std::f32::consts::PI / 128.0).sin() * 8192.0) as i16
 //! }
-//! let b: &[u8] = unsafe { ::std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len() * 2) };
 //!
 //! // Play it back for 2 seconds.
 //! for _ in 0..2*44100/1024 {
-//!     assert_eq!(pcm.io().write(b).unwrap(), 2048);
+//!     assert_eq!(io.writei(&buf[..]).unwrap(), 1024);
 //! }
 //!
 //! // In case the buffer was larger than 2 seconds, start the stream manually.
@@ -41,6 +40,8 @@
 
 use libc::{c_int, c_uint, c_void, ssize_t};
 use alsa;
+use std::marker::PhantomData;
+use std::mem::size_of;
 use std::ffi::CStr;
 use std::{io, fmt, ptr, mem};
 use super::error::*;
@@ -97,9 +98,24 @@ impl PCM {
         check("snd_pcm_avail_delay", unsafe { alsa::snd_pcm_avail_delay(self.0, &mut a, &mut d) }).map(|_| (a, d))
     }
 
-    pub fn io<'a>(&'a self) -> IO<'a> { IO(&self) }
+    fn verify_format(&self, f: Format) -> Result<()> {
+        let ff = try!(self.hw_params_current().and_then(|h| h.get_format()));
+        if ff == f { Ok(()) }
+        else { 
+            let s = format!("Invalid sample format ({:?}, expected {:?})", ff, f);
+            Err(Error::new(Some(s.into()), INVALID_FORMAT))
+        }
+    }
+
+    pub fn io_u8<'a>(&'a self) -> Result<IO<'a, u8>> { self.verify_format(Format::U8).map(|_| IO(&self, PhantomData)) }
+    pub fn io_i16<'a>(&'a self) -> Result<IO<'a, i16>> { self.verify_format(Format::s16()).map(|_| IO(&self, PhantomData)) }
+    pub fn io_i32<'a>(&'a self) -> Result<IO<'a, i32>> { self.verify_format(Format::s32()).map(|_| IO(&self, PhantomData)) }
+    pub fn io_f32<'a>(&'a self) -> Result<IO<'a, f32>> { self.verify_format(Format::float()).map(|_| IO(&self, PhantomData)) }
+
+    pub fn io<'a>(&'a self) -> IO<'a, u8> { IO(&self, PhantomData) }
 
     pub fn hw_params(&self, h: &HwParams) -> Result<()> {
+        // FIXME: how do we ensure no IO are in scope when this happens?
         check("snd_pcm_hw_params", unsafe { alsa::snd_pcm_hw_params(self.0, h.0) }).map(|_| ())
     }
 
@@ -122,10 +138,34 @@ impl Drop for PCM {
     fn drop(&mut self) { unsafe { alsa::snd_pcm_close(self.0) }; }
 }
 
-/// Implements `std::io::Read` and `std::io::Write` for `PCM`
-pub struct IO<'a>(&'a PCM);
 
-impl<'a> io::Read for IO<'a> {
+/// Sample format dependent struct for reading from and writing data to a `PCM`.
+/// Also implements `std::io::Read` and `std::io::Write`.
+pub struct IO<'a, S: Copy>(&'a PCM, PhantomData<S>);
+
+impl<'a, S: Copy> IO<'a, S> {
+    /// On success, returns number of *frames* written.
+    /// (Multiply with number of channels to get number of items in buf successfully written.)
+    pub fn writei(&self, buf: &[S]) -> Result<usize> {
+        // TODO: Do we need to check for overflow here?
+        let size = self.0.bytes_to_frames((buf.len() * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t;
+        let r = unsafe { alsa::snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size) };
+        if r < 0 { check("snd_pcm_writei", r as i32).map(|_| 0) }
+        else { Ok(r as usize) }
+    }
+
+    /// On success, returns number of *frames* read.
+    /// (Multiply with number of channels to get number of items in buf successfully read.)
+    pub fn readi(&self, buf: &mut [S]) -> Result<usize> {
+        // TODO: Do we need to check for overflow here?
+        let size = self.0.bytes_to_frames((buf.len() * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t;
+        let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
+        if r < 0 { check("snd_pcm_readi", r as i32).map(|_| 0) }
+        else { Ok(r as usize) }
+    }
+}
+
+impl<'a, S: Copy> io::Read for IO<'a, S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
@@ -134,7 +174,7 @@ impl<'a> io::Read for IO<'a> {
     }
 }
 
-impl<'a> io::Write for IO<'a> {
+impl<'a, S: Copy> io::Write for IO<'a, S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size) };
@@ -143,6 +183,7 @@ impl<'a> io::Write for IO<'a> {
     }
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
+
 
 /// [SND_PCM_STATE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -162,10 +203,34 @@ pub enum State {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Format {
     Unknown = alsa::SND_PCM_FORMAT_UNKNOWN as isize,
-    // S16 = alsa::SND_PCM_FORMAT_S16 as isize,
+    U8 = alsa::SND_PCM_FORMAT_U8 as isize,
     S16LE = alsa::SND_PCM_FORMAT_S16_LE as isize,
+    S16BE = alsa::SND_PCM_FORMAT_S16_BE as isize,
+    S32LE = alsa::SND_PCM_FORMAT_S32_LE as isize,
+    S32BE = alsa::SND_PCM_FORMAT_S32_BE as isize,
     FloatLE = alsa::SND_PCM_FORMAT_FLOAT_LE as isize,
+    FloatBE = alsa::SND_PCM_FORMAT_FLOAT_BE as isize,
     // TODO: More formats...
+}
+
+impl Format {
+    #[cfg(target_endian = "little")]
+    pub fn s16() -> Format { Format::S16LE }
+
+    #[cfg(target_endian = "big")]
+    pub fn s16() -> Format { Format::S16BE }
+
+    #[cfg(target_endian = "little")]
+    pub fn s32() -> Format { Format::S32LE }
+
+    #[cfg(target_endian = "big")]
+    pub fn s32() -> Format { Format::S32BE }
+
+    #[cfg(target_endian = "little")]
+    pub fn float() -> Format { Format::FloatLE }
+
+    #[cfg(target_endian = "big")]
+    pub fn float() -> Format { Format::FloatBE }
 }
 
 /// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
@@ -330,28 +395,26 @@ impl<'a> fmt::Debug for SwParams<'a> {
 #[test]
 fn record_from_default() {
     use std::ffi::CString;
-    use std::io::Read;
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(2).unwrap();
     hwp.set_rate(44100, 0).unwrap();
-    hwp.set_format(Format::S16LE).unwrap();
+    hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
     pcm.start().unwrap();
-    let mut buf = [0u8; 1024]; 
-    assert_eq!(pcm.io().read(&mut buf).unwrap(), 1024);
+    let mut buf = [0i16; 1024];
+    assert_eq!(pcm.io_i16().unwrap().readi(&mut buf).unwrap(), 1024/2);
 }
 
 #[test]
 fn playback_to_default() {
     use std::ffi::CString;
-    use std::io::Write;
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(1).unwrap();
     hwp.set_rate(44100, 0).unwrap();
-    hwp.set_format(Format::S16LE).unwrap();
+    hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
     println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
@@ -359,9 +422,9 @@ fn playback_to_default() {
     for (i, a) in buf.iter_mut().enumerate() {
         *a = ((i as f32 * 2.0 * ::std::f32::consts::PI / 128.0).sin() * 8192.0) as i16
     }
-    let b: &[u8] = unsafe { ::std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len() * 2) };
+    let io = pcm.io_i16().unwrap();
     for _ in 0..2*44100/1024 { // 2 seconds of playback
-        assert_eq!(pcm.io().write(b).unwrap(), 2048);
+        assert_eq!(io.writei(&buf[..]).unwrap(), 1024);
     }
     if pcm.state() != State::Running { pcm.start().unwrap() };
     pcm.drain().unwrap();
