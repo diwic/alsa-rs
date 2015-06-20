@@ -62,40 +62,32 @@ impl PCM {
             Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK
         };
         let flags = if nonblock { alsa::SND_PCM_NONBLOCK } else { 0 };
-        check("snd_pcm_open", unsafe { alsa::snd_pcm_open(&mut r, name.as_ptr(), stream, flags) })
-            .map(|_| PCM(r))
+        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r))
     }
 
-    pub fn start(&self) -> Result<()> { check("snd_pcm_start", unsafe { alsa::snd_pcm_start(self.0) }).map(|_| ()) }
-    pub fn drop(&self) -> Result<()> { check("snd_pcm_drop", unsafe { alsa::snd_pcm_drop(self.0) }).map(|_| ()) }
+    pub fn start(&self) -> Result<()> { acheck!(snd_pcm_start(self.0)).map(|_| ()) }
+    pub fn drop(&self) -> Result<()> { acheck!(snd_pcm_drop(self.0)).map(|_| ()) }
     pub fn pause(&self, pause: bool) -> Result<()> {
-        check("snd_pcm_pause", unsafe { alsa::snd_pcm_pause(self.0, if pause { 1 } else { 0 }) }).map(|_| ()) }
-    pub fn resume(&self) -> Result<()> { check("snd_pcm_resume", unsafe { alsa::snd_pcm_resume(self.0) }).map(|_| ()) }
-    pub fn drain(&self) -> Result<()> { check("snd_pcm_drain", unsafe { alsa::snd_pcm_drain(self.0) }).map(|_| ()) }
-    pub fn prepare(&self) -> Result<()> { check("snd_pcm_prepare", unsafe { alsa::snd_pcm_prepare(self.0) }).map(|_| ()) }
-    pub fn reset(&self) -> Result<()> { check("snd_pcm_reset", unsafe { alsa::snd_pcm_reset(self.0) }).map(|_| ()) }
+        acheck!(snd_pcm_pause(self.0, if pause { 1 } else { 0 })).map(|_| ()) }
+    pub fn resume(&self) -> Result<()> { acheck!(snd_pcm_resume(self.0)).map(|_| ()) }
+    pub fn drain(&self) -> Result<()> { acheck!(snd_pcm_drain(self.0)).map(|_| ()) }
+    pub fn prepare(&self) -> Result<()> { acheck!(snd_pcm_prepare(self.0)).map(|_| ()) }
+    pub fn reset(&self) -> Result<()> { acheck!(snd_pcm_reset(self.0)).map(|_| ()) }
 
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
-        check("snd_pcm_wait", unsafe { alsa::snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1)) }).map(|i| i == 1) }
+        acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
     pub fn state(&self) -> State { unsafe { mem::transmute(alsa::snd_pcm_state(self.0) as u8) } }
 
     pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
     pub fn frames_to_bytes(&self, i: Frames) -> isize { unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }}
 
-    pub fn avail_update(&self) -> Result<Frames> {
-        let r = unsafe { alsa::snd_pcm_avail_update(self.0) };
-        check("snd_pcm_avail_update", r as c_int).map(|_| r)
-    }
-
-    pub fn avail(&self) -> Result<Frames> {
-        let r = unsafe { alsa::snd_pcm_avail(self.0) };
-        check("snd_pcm_avail", r as c_int).map(|_| r)
-    }
+    pub fn avail_update(&self) -> Result<Frames> { acheck!(snd_pcm_avail_update(self.0)) }
+    pub fn avail(&self) -> Result<Frames> { acheck!(snd_pcm_avail(self.0)) }
 
     pub fn avail_delay(&self) -> Result<(Frames, Frames)> {
         let (mut a, mut d) = (0, 0);
-        check("snd_pcm_avail_delay", unsafe { alsa::snd_pcm_avail_delay(self.0, &mut a, &mut d) }).map(|_| (a, d))
+        acheck!(snd_pcm_avail_delay(self.0, &mut a, &mut d)).map(|_| (a, d))
     }
 
     fn verify_format(&self, f: Format) -> Result<()> {
@@ -120,21 +112,21 @@ impl PCM {
 
     pub fn hw_params(&self, h: &HwParams) -> Result<()> {
         // FIXME: how do we ensure no IO are in scope when this happens?
-        check("snd_pcm_hw_params", unsafe { alsa::snd_pcm_hw_params(self.0, h.0) }).map(|_| ())
+        acheck!(snd_pcm_hw_params(self.0, h.0)).map(|_| ())
     }
 
     pub fn hw_params_current<'a>(&'a self) -> Result<HwParams<'a>> {
         HwParams::new(&self).and_then(|h|
-            check("snd_pcm_hw_params_current", unsafe { alsa::snd_pcm_hw_params_current(self.0, h.0) }).map(|_| h))
+            acheck!(snd_pcm_hw_params_current(self.0, h.0)).map(|_| h))
     }
 
     pub fn sw_params(&self, h: &SwParams) -> Result<()> {
-        check("snd_pcm_sw_params", unsafe { alsa::snd_pcm_sw_params(self.0, h.0) }).map(|_| ())
+        acheck!(snd_pcm_sw_params(self.0, h.0)).map(|_| ())
     }
 
     pub fn sw_params_current<'a>(&'a self) -> Result<SwParams<'a>> {
         SwParams::new(&self).and_then(|h|
-            check("snd_pcm_sw_params_current", unsafe { alsa::snd_pcm_sw_params_current(self.0, h.0) }).map(|_| h))
+            acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
     }
 }
 
@@ -153,9 +145,7 @@ impl<'a, S: Copy> IO<'a, S> {
     pub fn writei(&self, buf: &[S]) -> Result<usize> {
         // TODO: Do we need to check for overflow here?
         let size = self.0.bytes_to_frames((buf.len() * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t;
-        let r = unsafe { alsa::snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size) };
-        if r < 0 { check("snd_pcm_writei", r as i32).map(|_| 0) }
-        else { Ok(r as usize) }
+        acheck!(snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size)).map(|r| r as usize)
     }
 
     /// On success, returns number of *frames* read.
@@ -163,9 +153,7 @@ impl<'a, S: Copy> IO<'a, S> {
     pub fn readi(&self, buf: &mut [S]) -> Result<usize> {
         // TODO: Do we need to check for overflow here?
         let size = self.0.bytes_to_frames((buf.len() * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t;
-        let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
-        if r < 0 { check("snd_pcm_readi", r as i32).map(|_| 0) }
-        else { Ok(r as usize) }
+        acheck!(snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size)).map(|r| r as usize)
     }
 }
 
@@ -264,81 +252,74 @@ impl<'a> Drop for HwParams<'a> {
 impl<'a> HwParams<'a> {
     fn new(a: &'a PCM) -> Result<HwParams<'a>> {
         let mut p = ptr::null_mut();
-        check("snd_pcm_hw_params_malloc", unsafe { alsa::snd_pcm_hw_params_malloc(&mut p) }).map(|_| HwParams(p, a))
+        acheck!(snd_pcm_hw_params_malloc(&mut p)).map(|_| HwParams(p, a))
     }
 
     pub fn any(a: &'a PCM) -> Result<HwParams<'a>> { HwParams::new(a).and_then(|p|
-        check("snd_pcm_hw_params_any", unsafe { alsa::snd_pcm_hw_params_any(a.0, p.0) }).map(|_| p)
+        acheck!(snd_pcm_hw_params_any(a.0, p.0)).map(|_| p)
     )}
 
-    pub fn set_channels(&self, v: u32) -> Result<()> { check("snd_pcm_hw_params_set_channels",
-        unsafe { alsa::snd_pcm_hw_params_set_channels((self.1).0, self.0, v as c_uint) }).map(|_| ())
+    pub fn set_channels(&self, v: u32) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_channels((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn get_channels(&self) -> Result<u32> {
         let mut v = 0;
-        check("snd_pcm_hw_params_get_channels",
-            unsafe { alsa::snd_pcm_hw_params_get_channels(self.0, &mut v) }).map(|_| v as u32)
+        acheck!(snd_pcm_hw_params_get_channels(self.0, &mut v)).map(|_| v as u32)
     }
 
-    pub fn set_rate(&self, v: u32, dir: i32) -> Result<()> { check("snd_pcm_hw_params_set_rate",
-        unsafe { alsa::snd_pcm_hw_params_set_rate((self.1).0, self.0, v as c_uint, dir as c_int) }).map(|_| ())
+    pub fn set_rate(&self, v: u32, dir: i32) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_rate((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn get_rate(&self) -> Result<u32> {
         let (mut v, mut d) = (0,0);
-        check("snd_pcm_hw_params_get_rate",
-            unsafe { alsa::snd_pcm_hw_params_get_rate(self.0, &mut v, &mut d) }).map(|_| v as u32)
+        acheck!(snd_pcm_hw_params_get_rate(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
-    pub fn set_format(&self, v: Format) -> Result<()> { check("snd_pcm_hw_params_set_format",
-        unsafe { alsa::snd_pcm_hw_params_set_format((self.1).0, self.0, v as c_int) }).map(|_| ())
+    pub fn set_format(&self, v: Format) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_format((self.1).0, self.0, v as c_int)).map(|_| ())
     }
 
     pub fn get_format(&self) -> Result<Format> {
         let mut v = 0;
-        check("snd_pcm_hw_params_get_format",
-            unsafe { alsa::snd_pcm_hw_params_get_format(self.0, &mut v) } ).map(|_| unsafe { mem::transmute(v as u8) })
+        acheck!(snd_pcm_hw_params_get_format(self.0, &mut v)).map(|_| unsafe { mem::transmute(v as u8) })
     }
 
-    pub fn set_access(&self, v: Access) -> Result<()> { check("snd_pcm_hw_params_set_access",
-        unsafe { alsa::snd_pcm_hw_params_set_access((self.1).0, self.0, v as c_uint) }).map(|_| ())
+    pub fn set_access(&self, v: Access) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_access((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn get_access(&self) -> Result<Access> {
         let mut v = 0;
-        check("snd_pcm_hw_params_get_access",
-            unsafe { alsa::snd_pcm_hw_params_get_access(self.0, &mut v) } ).map(|_| unsafe { mem::transmute(v as u8) })
+        acheck!(snd_pcm_hw_params_get_access(self.0, &mut v)).map(|_| unsafe { mem::transmute(v as u8) })
     }
 
-    pub fn set_period_size(&self, v: Frames, dir: i32) -> Result<()> { check("snd_pcm_hw_params_set_period_size",
-        unsafe { alsa::snd_pcm_hw_params_set_period_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t, dir as c_int) }).map(|_| ())
+    pub fn set_period_size(&self, v: Frames, dir: i32) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_period_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t, dir as c_int)).map(|_| ())
     }
 
     pub fn get_period_size(&self) -> Result<Frames> {
         let (mut v, mut d) = (0,0);
-        check("snd_pcm_hw_params_get_period_size",
-            unsafe { alsa::snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d) }).map(|_| v as Frames)
+        acheck!(snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
-    pub fn set_periods(&self, v: u32, dir: i32) -> Result<()> { check("snd_pcm_hw_params_set_periods",
-        unsafe { alsa::snd_pcm_hw_params_set_periods((self.1).0, self.0, v as c_uint, dir as c_int) }).map(|_| ())
+    pub fn set_periods(&self, v: u32, dir: i32) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_periods((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn get_periods(&self) -> Result<u32> {
         let (mut v, mut d) = (0,0);
-        check("snd_pcm_hw_params_get_periods",
-            unsafe { alsa::snd_pcm_hw_params_get_periods(self.0, &mut v, &mut d) }).map(|_| v as u32)
+        acheck!(snd_pcm_hw_params_get_periods(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
-    pub fn set_buffer_size(&self, v: Frames) -> Result<()> { check("snd_pcm_hw_params_set_buffer_size",
-        unsafe { alsa::snd_pcm_hw_params_set_buffer_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    pub fn set_buffer_size(&self, v: Frames) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_buffer_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_buffer_size(&self) -> Result<Frames> {
         let mut v = 0;
-        check("snd_pcm_hw_params_get_buffer_size",
-            unsafe { alsa::snd_pcm_hw_params_get_buffer_size(self.0, &mut v) }).map(|_| v as Frames)
+        acheck!(snd_pcm_hw_params_get_buffer_size(self.0, &mut v)).map(|_| v as Frames)
     }
 }
 
@@ -361,37 +342,34 @@ impl<'a> SwParams<'a> {
 
     fn new(a: &'a PCM) -> Result<SwParams<'a>> {
         let mut p = ptr::null_mut();
-        check("snd_pcm_sw_params_malloc", unsafe { alsa::snd_pcm_sw_params_malloc(&mut p) }).map(|_| SwParams(p, a))
+        acheck!(snd_pcm_sw_params_malloc(&mut p)).map(|_| SwParams(p, a))
     }
 
-    pub fn set_avail_min(&self, v: Frames) -> Result<()> { check("snd_pcm_sw_params_set_avail_min",
-        unsafe { alsa::snd_pcm_sw_params_set_avail_min((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    pub fn set_avail_min(&self, v: Frames) -> Result<()> {
+        acheck!(snd_pcm_sw_params_set_avail_min((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_avail_min(&self) -> Result<Frames> {
         let mut v = 0;
-        check("snd_pcm_sw_params_get_avail_min",
-            unsafe { alsa::snd_pcm_sw_params_get_avail_min(self.0, &mut v) }).map(|_| v as Frames)
+        acheck!(snd_pcm_sw_params_get_avail_min(self.0, &mut v)).map(|_| v as Frames)
     }
 
-    pub fn set_start_threshold(&self, v: Frames) -> Result<()> { check("snd_pcm_sw_params_set_start_threshold",
-        unsafe { alsa::snd_pcm_sw_params_set_start_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    pub fn set_start_threshold(&self, v: Frames) -> Result<()> {
+        acheck!(snd_pcm_sw_params_set_start_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_start_threshold(&self) -> Result<Frames> {
         let mut v = 0;
-        check("snd_pcm_sw_params_get_start_threshold",
-            unsafe { alsa::snd_pcm_sw_params_get_start_threshold(self.0, &mut v) }).map(|_| v as Frames)
+        acheck!(snd_pcm_sw_params_get_start_threshold(self.0, &mut v)).map(|_| v as Frames)
     }
 
-    pub fn set_stop_threshold(&self, v: Frames) -> Result<()> { check("snd_pcm_sw_params_set_stop_threshold",
-        unsafe { alsa::snd_pcm_sw_params_set_stop_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t) }).map(|_| ())
+    pub fn set_stop_threshold(&self, v: Frames) -> Result<()> {
+        acheck!(snd_pcm_sw_params_set_stop_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_stop_threshold(&self) -> Result<Frames> {
         let mut v = 0;
-        check("snd_pcm_sw_params_get_stop_threshold",
-            unsafe { alsa::snd_pcm_sw_params_get_stop_threshold(self.0, &mut v) }).map(|_| v as Frames)
+        acheck!(snd_pcm_sw_params_get_stop_threshold(self.0, &mut v)).map(|_| v as Frames)
     }
 }
 
@@ -440,3 +418,5 @@ fn playback_to_default() {
     if pcm.state() != State::Running { pcm.start().unwrap() };
     pcm.drain().unwrap();
 }
+
+

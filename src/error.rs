@@ -1,3 +1,5 @@
+#![macro_use]
+
 use libc::{c_void, c_int, c_char, free};
 use std::ptr;
 use std::borrow::Cow;
@@ -16,6 +18,14 @@ pub const INVALID_FORMAT: c_int = 2;
 pub struct Error(Option<Cow<'static, str>>, c_int);
 
 pub type Result<T> = ::std::result::Result<T, Error>;
+
+macro_rules! acheck {
+    ($f: ident ( $($x: expr),* ) ) => {{
+        let r = unsafe { alsa::$f( $($x),* ) };
+        if r < 0 { Err(Error::new(Some(stringify!($f).into()), r as ::libc::c_int)) }
+        else { Ok(r) }
+    }}
+}
 
 #[inline]
 pub fn check(f: &'static str, r: c_int) -> Result<c_int> {
@@ -61,3 +71,9 @@ impl fmt::Display for Error {
     }
 }
 
+#[test]
+fn broken_pcm_name() {
+    use std::ffi::CString;
+    let e = ::PCM::open(&*CString::new("this_PCM_does_not_exist").unwrap(), ::Direction::Playback, false).err().unwrap();
+    assert_eq!(e.0, Some("snd_pcm_open".into()));
+}
