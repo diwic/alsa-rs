@@ -45,11 +45,11 @@ impl HCtl {
     pub fn open(c: &CStr, nonblock: bool) -> Result<HCtl> {
         let mut r = ptr::null_mut();
         let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_CTL_NONBLOCK does not exist in alsa-sys
-        check("snd_hctl_open", unsafe { alsa::snd_hctl_open(&mut r, c.as_ptr(), flags) })
+        acheck!(snd_hctl_open(&mut r, c.as_ptr(), flags))
             .map(|_| HCtl(r))
     }
 
-    pub fn load(&self) -> Result<()> { check("snd_hctl_load", unsafe { alsa::snd_hctl_load(self.0) }).map(|_| ()) }
+    pub fn load(&self) -> Result<()> { acheck!(snd_hctl_load(self.0)).map(|_| ()) }
 
     pub fn elem_iter<'a>(&'a self) -> ElemIter<'a> { ElemIter(self, ptr::null_mut()) }
 }
@@ -79,16 +79,17 @@ impl<'a> Elem<'a> {
     }
     pub fn info(&self) -> Result<ctl_int::ElemInfo> {
         let v = try!(ctl_int::elem_info_new());
-        check("snd_hctl_elem_info", unsafe { alsa::snd_hctl_elem_info(self.1, ctl_int::elem_info_ptr(&v)) }).map(|_| v)
+        acheck!(snd_hctl_elem_info(self.1, ctl_int::elem_info_ptr(&v))).map(|_| v)
     }
     pub fn read(&self) -> Result<ctl_int::ElemValue> {
         let i = try!(self.info());
         let v = try!(ctl_int::elem_value_new(i.get_type(), i.get_count()));
-        check("snd_hctl_elem_read", unsafe { alsa::snd_hctl_elem_read(self.1, ctl_int::elem_value_ptr(&v)) }).map(|_| v)
+        acheck!(snd_hctl_elem_read(self.1, ctl_int::elem_value_ptr(&v))).map(|_| v)
     }
 
-    pub fn write(&self, v: &ctl_int::ElemValue) -> Result<bool> { check("snd_hctl_elem_write",
-        unsafe { alsa::snd_hctl_elem_write(self.1, ctl_int::elem_value_ptr(&v)) }).map(|e| e > 0) }
+    pub fn write(&self, v: &ctl_int::ElemValue) -> Result<bool> {
+        acheck!(snd_hctl_elem_write(self.1, ctl_int::elem_value_ptr(&v))).map(|e| e > 0)
+    }
 }
 
 #[test]

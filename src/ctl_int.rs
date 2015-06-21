@@ -14,8 +14,7 @@ impl Ctl {
     pub fn open(c: &CStr, nonblock: bool) -> Result<Ctl> {
         let mut r = ptr::null_mut();
         let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_CTL_NONBLOCK does not exist in alsa-sys
-        check("snd_ctl_open", unsafe { alsa::snd_ctl_open(&mut r, c.as_ptr(), flags) })
-            .map(|_| Ctl(r))
+        acheck!(snd_ctl_open(&mut r, c.as_ptr(), flags)).map(|_| Ctl(r))
     }
 
     pub fn from_card(c: &Card, nonblock: bool) -> Result<Ctl> {
@@ -24,7 +23,7 @@ impl Ctl {
     }
 
     pub fn card_info(&self) -> Result<CardInfo> { CardInfo::new().and_then(|c|
-        check("snd_ctl_card_info", unsafe { alsa::snd_ctl_card_info(self.0, c.0) }).map(|_| c)) }
+        acheck!(snd_ctl_card_info(self.0, c.0)).map(|_| c)) }
 }
 
 impl Drop for Ctl {
@@ -43,7 +42,7 @@ impl Drop for CardInfo {
 impl CardInfo {
     fn new() -> Result<CardInfo> {
         let mut p = ptr::null_mut();
-        check("snd_ctl_card_info_malloc", unsafe { alsa::snd_ctl_card_info_malloc(&mut p) }).map(|_| CardInfo(p))
+        acheck!(snd_ctl_card_info_malloc(&mut p)).map(|_| CardInfo(p))
     }
 
     pub fn get_id(&self) -> Result<&str> {
@@ -100,7 +99,7 @@ pub fn elem_value_ptr(a: &ElemValue) -> *mut alsa::snd_ctl_elem_value_t { a.ptr 
 
 pub fn elem_value_new(t: ElemType, count: u32) -> Result<ElemValue> {
     let mut p = ptr::null_mut();
-    check("snd_ctl_elem_value_malloc", unsafe { alsa::snd_ctl_elem_value_malloc(&mut p) })
+    acheck!(snd_ctl_elem_value_malloc(&mut p))
         .map(|_| ElemValue { ptr: p, etype: t, count: count })
 }
 
@@ -203,7 +202,7 @@ impl Drop for ElemInfo {
 
 pub fn elem_info_new() -> Result<ElemInfo> {
     let mut p = ptr::null_mut();
-    check("snd_ctl_elem_info_malloc", unsafe { alsa::snd_ctl_elem_info_malloc(&mut p) }).map(|_| ElemInfo(p))
+    acheck!(snd_ctl_elem_info_malloc(&mut p)).map(|_| ElemInfo(p))
 }
 
 impl ElemInfo {
@@ -220,7 +219,7 @@ impl Drop for ElemId {
 
 pub fn elem_id_new() -> Result<ElemId> {
     let mut p = ptr::null_mut();
-    check("snd_ctl_elem_id_malloc", unsafe { alsa::snd_ctl_elem_id_malloc(&mut p) }).map(|_| ElemId(p))
+    acheck!(snd_ctl_elem_id_malloc(&mut p)).map(|_| ElemId(p))
 }
 
 pub fn elem_id_ptr(a: &ElemId) -> *mut alsa::snd_ctl_elem_id_t { a.0 }

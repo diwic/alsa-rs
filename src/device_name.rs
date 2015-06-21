@@ -33,7 +33,7 @@ impl HintIter {
     pub fn new(card: Option<&Card>, iface: &CStr) -> Result<HintIter> {
         let mut p = ptr::null_mut();
         let cnr = card.map(|c| c.get_index()).unwrap_or(-1) as c_int;
-        check("snd_device_name_hint", unsafe { alsa::snd_device_name_hint(cnr, iface.as_ptr(), &mut p) })
+        acheck!(snd_device_name_hint(cnr, iface.as_ptr(), &mut p))
             .map(|_| HintIter(p, 0))
     }
 }

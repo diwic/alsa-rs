@@ -418,5 +418,3 @@ fn playback_to_default() {
     if pcm.state() != State::Running { pcm.start().unwrap() };
     pcm.drain().unwrap();
 }
-
-

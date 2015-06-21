@@ -27,7 +27,7 @@ impl Drop for Info {
 impl Info {
     fn new() -> Result<Info> {
         let mut p = ptr::null_mut();
-        check("snd_rawmidi_info_malloc", unsafe { alsa::snd_rawmidi_info_malloc(&mut p) }).map(|_| Info(p))
+        acheck!(snd_rawmidi_info_malloc(&mut p)).map(|_| Info(p))
     }
 
     fn from_iter(c: &Ctl, device: i32, sub: i32, dir: Direction) -> Result<Info> {
@@ -39,8 +39,7 @@ impl Info {
         };
         unsafe { alsa::snd_rawmidi_info_set_stream(r.0, d) };
         unsafe { alsa::snd_rawmidi_info_set_subdevice(r.0, sub as c_uint) };
-        try!(check("snd_ctl_rawmidi_info", unsafe { alsa::snd_ctl_rawmidi_info(ctl_ptr(&c), r.0) }));
-        Ok(r)
+        acheck!(snd_ctl_rawmidi_info(ctl_ptr(&c), r.0)).map(|_| r)
     }
 
     fn subdev_count(c: &Ctl, device: c_int) -> Result<(i32, i32)> {
@@ -84,8 +83,7 @@ impl<'a> Iterator for Iter<'a> {
             return Some(Info::from_iter(&self.ctl, self.device, self.current-1-self.in_count, Direction::Playback));
         }
 
-        let r = check("snd_ctl_rawmidi_next_device", unsafe {
-            alsa::snd_ctl_rawmidi_next_device(ctl_ptr(&self.ctl), &mut self.device) });
+        let r = acheck!(snd_ctl_rawmidi_next_device(ctl_ptr(&self.ctl), &mut self.device));
         match r {
             Err(e) => return Some(Err(e)),
             Ok(_) if self.device == -1 => return None,
@@ -114,19 +112,19 @@ impl Rawmidi {
     pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<Rawmidi> {
         let mut h = ptr::null_mut();
         let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_RAWMIDI_NONBLOCK does not exist in alsa-sys
-        check("snd_rawmidi_open", unsafe { alsa::snd_rawmidi_open(
+        acheck!(snd_rawmidi_open(
             if dir == Direction::Capture { &mut h } else { ptr::null_mut() },
             if dir == Direction::Playback { &mut h } else { ptr::null_mut() },
-            name.as_ptr(), flags) })
+            name.as_ptr(), flags))
             .map(|_| Rawmidi(h))
     }
 
     pub fn info(&self) -> Result<Info> {
-        Info::new().and_then(|i| check("snd_rawmidi_info", unsafe { alsa::snd_rawmidi_info(self.0, i.0) }).map(|_| i))
+        Info::new().and_then(|i| acheck!(snd_rawmidi_info(self.0, i.0)).map(|_| i))
     }
 
-    pub fn drop(&self) -> Result<()> { check("snd_rawmidi_stop", unsafe { alsa::snd_rawmidi_drop(self.0) }).map(|_| ()) }
-    pub fn drain(&self) -> Result<()> { check("snd_rawmidi_drain", unsafe { alsa::snd_rawmidi_drain(self.0) }).map(|_| ()) }
+    pub fn drop(&self) -> Result<()> { acheck!(snd_rawmidi_drop(self.0)).map(|_| ()) }
+    pub fn drain(&self) -> Result<()> { acheck!(snd_rawmidi_drain(self.0)).map(|_| ()) }
     pub fn name(&self) -> Result<String> {
         let c = unsafe { alsa::snd_rawmidi_name(self.0) };
         from_const("snd_rawmidi_name", c).map(|s| s.to_string())
