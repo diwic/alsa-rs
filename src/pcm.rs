@@ -140,20 +140,51 @@ impl Drop for PCM {
 pub struct IO<'a, S: Copy>(&'a PCM, PhantomData<S>);
 
 impl<'a, S: Copy> IO<'a, S> {
+
+    fn to_frames(&self, b: usize) -> alsa::snd_pcm_uframes_t {
+        // TODO: Do we need to check for overflow here?
+        self.0.bytes_to_frames((b * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t
+    }
+
+    fn from_frames(&self, b: alsa::snd_pcm_uframes_t) -> usize {
+        // TODO: Do we need to check for overflow here?
+        (self.0.frames_to_bytes(b as Frames) as usize) * size_of::<S>()
+    }
+
     /// On success, returns number of *frames* written.
     /// (Multiply with number of channels to get number of items in buf successfully written.)
     pub fn writei(&self, buf: &[S]) -> Result<usize> {
-        // TODO: Do we need to check for overflow here?
-        let size = self.0.bytes_to_frames((buf.len() * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size)).map(|r| r as usize)
+        acheck!(snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, self.to_frames(buf.len()))).map(|r| r as usize)
     }
 
     /// On success, returns number of *frames* read.
     /// (Multiply with number of channels to get number of items in buf successfully read.)
     pub fn readi(&self, buf: &mut [S]) -> Result<usize> {
-        // TODO: Do we need to check for overflow here?
-        let size = self.0.bytes_to_frames((buf.len() * size_of::<S>()) as isize) as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size)).map(|r| r as usize)
+        acheck!(snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, self.to_frames(buf.len()))).map(|r| r as usize)
+    }
+
+    /// Wrapper around snd_pcm_mmap_begin and snd_pcm_mmap_commit.
+    ///
+    /// You can read/write into the sound card's buffer during the call to the closure.
+    /// According to alsa-lib docs, you should call avail_update before calling this function.
+    ///
+    /// All calculations are in *frames*, i e, the closure should return number of frames processed.
+    /// Also, there might not be as many frames to read/write as requested, and there can even be
+    /// an empty buffer supplied to the closure.
+    ///
+    /// Note: This function works only with interleaved access mode.
+    pub fn mmap<F: FnOnce(&mut [S]) -> usize>(&self, frames: usize, func: F) -> Result<usize> {
+        let mut f = frames as alsa::snd_pcm_uframes_t;
+        let mut offs: alsa::snd_pcm_uframes_t = 0;
+        let mut areas = ptr::null();
+        try!(acheck!(snd_pcm_mmap_begin((self.0).0, &mut areas, &mut offs, &mut f)));
+        let buf = unsafe {
+            let p = ((*areas).addr as *mut S).offset(self.from_frames(offs) as isize);
+            ::std::slice::from_raw_parts_mut(p, self.from_frames(f))
+        };
+        let fres = func(buf);
+        debug_assert!(fres <= f as usize);
+        acheck!(snd_pcm_mmap_commit((self.0).0, offs, fres as alsa::snd_pcm_uframes_t)).map(|r| r as usize)
     }
 }
 
