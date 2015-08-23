@@ -43,7 +43,7 @@ use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ffi::CStr;
-use std::{io, fmt, ptr, mem};
+use std::{io, fmt, ptr, mem, cell};
 use super::error::*;
 use super::Direction;
 
@@ -51,9 +51,13 @@ use super::Direction;
 pub type Frames = alsa::snd_pcm_sframes_t;
 
 /// [snd_pcm_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - start here for audio playback and recording
-pub struct PCM(*mut alsa::snd_pcm_t);
+pub struct PCM(*mut alsa::snd_pcm_t, cell::Cell<bool>);
 
 impl PCM {
+    fn check_has_io(&self) {
+        if self.1.get() { panic!("No hw_params call or additional IO objects allowed") }
+    }
+
     // Does not offer async mode (it's not very Rustic anyway)
     pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<PCM> {
         let mut r = ptr::null_mut();
@@ -62,7 +66,7 @@ impl PCM {
             Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK
         };
         let flags = if nonblock { alsa::SND_PCM_NONBLOCK } else { 0 };
-        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r))
+        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r, cell::Cell::new(false)))
     }
 
     pub fn start(&self) -> Result<()> { acheck!(snd_pcm_start(self.0)).map(|_| ()) }
@@ -99,19 +103,21 @@ impl PCM {
         }
     }
 
-    pub fn io_i8<'a>(&'a self) -> Result<IO<'a, i8>> { self.verify_format(Format::S8).map(|_| IO(&self, PhantomData)) }
-    pub fn io_u8<'a>(&'a self) -> Result<IO<'a, u8>> { self.verify_format(Format::U8).map(|_| IO(&self, PhantomData)) }
-    pub fn io_i16<'a>(&'a self) -> Result<IO<'a, i16>> { self.verify_format(Format::s16()).map(|_| IO(&self, PhantomData)) }
-    pub fn io_u16<'a>(&'a self) -> Result<IO<'a, u16>> { self.verify_format(Format::u16()).map(|_| IO(&self, PhantomData)) }
-    pub fn io_i32<'a>(&'a self) -> Result<IO<'a, i32>> { self.verify_format(Format::s32()).map(|_| IO(&self, PhantomData)) }
-    pub fn io_u32<'a>(&'a self) -> Result<IO<'a, u32>> { self.verify_format(Format::u32()).map(|_| IO(&self, PhantomData)) }
-    pub fn io_f32<'a>(&'a self) -> Result<IO<'a, f32>> { self.verify_format(Format::float()).map(|_| IO(&self, PhantomData)) }
-    pub fn io_f64<'a>(&'a self) -> Result<IO<'a, f64>> { self.verify_format(Format::float64()).map(|_| IO(&self, PhantomData)) }
+    pub fn io_i8<'a>(&'a self) -> Result<IO<'a, i8>> { self.verify_format(Format::S8).map(|_| IO::new(&self)) }
+    pub fn io_u8<'a>(&'a self) -> Result<IO<'a, u8>> { self.verify_format(Format::U8).map(|_| IO::new(&self)) }
+    pub fn io_i16<'a>(&'a self) -> Result<IO<'a, i16>> { self.verify_format(Format::s16()).map(|_| IO::new(&self)) }
+    pub fn io_u16<'a>(&'a self) -> Result<IO<'a, u16>> { self.verify_format(Format::u16()).map(|_| IO::new(&self)) }
+    pub fn io_i32<'a>(&'a self) -> Result<IO<'a, i32>> { self.verify_format(Format::s32()).map(|_| IO::new(&self)) }
+    pub fn io_u32<'a>(&'a self) -> Result<IO<'a, u32>> { self.verify_format(Format::u32()).map(|_| IO::new(&self)) }
+    pub fn io_f32<'a>(&'a self) -> Result<IO<'a, f32>> { self.verify_format(Format::float()).map(|_| IO::new(&self)) }
+    pub fn io_f64<'a>(&'a self) -> Result<IO<'a, f64>> { self.verify_format(Format::float64()).map(|_| IO::new(&self)) }
 
-    pub fn io<'a>(&'a self) -> IO<'a, u8> { IO(&self, PhantomData) }
+    pub fn io<'a>(&'a self) -> IO<'a, u8> { IO::new(&self) }
 
+    /// Sets hw parameters. Note: No IO object can exist for this PCM
+    /// when hw parameters are set.
     pub fn hw_params(&self, h: &HwParams) -> Result<()> {
-        // FIXME: how do we ensure no IO are in scope when this happens?
+        self.check_has_io();
         acheck!(snd_pcm_hw_params(self.0, h.0)).map(|_| ())
     }
 
@@ -137,9 +143,21 @@ impl Drop for PCM {
 
 /// Sample format dependent struct for reading from and writing data to a `PCM`.
 /// Also implements `std::io::Read` and `std::io::Write`.
+///
+/// Note: Only one IO object is allowed in scope at a time (for mmap safety).
 pub struct IO<'a, S: Copy>(&'a PCM, PhantomData<S>);
 
+impl<'a, S: Copy> Drop for IO<'a, S> {
+    fn drop(&mut self) { (self.0).1.set(false) }
+}
+
 impl<'a, S: Copy> IO<'a, S> {
+
+    fn new(a: &'a PCM) -> IO<'a, S> {
+        a.check_has_io();
+        a.1.set(true);
+        IO(a, PhantomData)
+    }
 
     fn to_frames(&self, b: usize) -> alsa::snd_pcm_uframes_t {
         // TODO: Do we need to check for overflow here?
