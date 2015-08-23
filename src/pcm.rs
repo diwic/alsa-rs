@@ -166,7 +166,7 @@ impl<'a, S: Copy> IO<'a, S> {
 
     fn from_frames(&self, b: alsa::snd_pcm_uframes_t) -> usize {
         // TODO: Do we need to check for overflow here?
-        (self.0.frames_to_bytes(b as Frames) as usize) * size_of::<S>()
+        (self.0.frames_to_bytes(b as Frames) as usize) / size_of::<S>()
     }
 
     /// On success, returns number of *frames* written.
@@ -196,6 +196,14 @@ impl<'a, S: Copy> IO<'a, S> {
         let mut offs: alsa::snd_pcm_uframes_t = 0;
         let mut areas = ptr::null();
         try!(acheck!(snd_pcm_mmap_begin((self.0).0, &mut areas, &mut offs, &mut f)));
+
+        let (first, step) = unsafe { ((*areas).first, (*areas).step) };
+        if first != 0 || step as isize != self.0.frames_to_bytes(1) * 8 {
+            unsafe { alsa::snd_pcm_mmap_commit((self.0).0, offs, 0) };
+            let s = format!("Can only mmap a single interleaved buffer (first = {:?}, step = {:?})", first, step);
+            return Err(Error::new(Some(s.into()), INVALID_FORMAT));
+        }
+
         let buf = unsafe {
             let p = ((*areas).addr as *mut S).offset(self.from_frames(offs) as isize);
             ::std::slice::from_raw_parts_mut(p, self.from_frames(f))

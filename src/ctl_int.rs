@@ -6,6 +6,14 @@ use std::{ptr, mem, fmt};
 use super::Card;
 use libc::{c_uint, c_void, size_t, c_long};
 
+/// We prefer not to allocate for every ElemId, ElemInfo or ElemValue.
+/// But we don't know if these will increase in the future or on other platforms.
+/// Unfortunately, Rust does not support alloca, so hard-code the sizes for now.
+
+const ELEM_ID_SIZE: usize = 64;
+// const ELEM_VALUE_SIZE: usize = 1224;
+// const ELEM_INFO_SIZE: usize = 272;
+
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct Ctl(*mut alsa::snd_ctl_t);
 
@@ -210,6 +218,27 @@ impl ElemInfo {
     pub fn get_count(&self) -> u32 { unsafe { alsa::snd_ctl_elem_info_get_count(self.0) as u32 } }
 }
 
+//
+// Non-allocating version of ElemId
+//
+
+/// [snd_ctl_elem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+pub struct ElemId([u8; ELEM_ID_SIZE]);
+
+pub fn elem_id_new() -> Result<ElemId> {
+    assert!(unsafe { alsa::snd_ctl_elem_id_sizeof() } as usize <= ELEM_ID_SIZE);
+    Ok(ElemId(unsafe { mem::zeroed() }))
+}
+
+#[inline]
+pub fn elem_id_ptr(a: &ElemId) -> *mut alsa::snd_ctl_elem_id_t { a.0.as_ptr() as *const _ as *mut alsa::snd_ctl_elem_id_t }
+
+//
+// Allocating version of ElemId
+//
+
+/*
+
 /// [snd_ctl_elem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct ElemId(*mut alsa::snd_ctl_elem_id_t);
 
@@ -224,14 +253,16 @@ pub fn elem_id_new() -> Result<ElemId> {
 
 pub fn elem_id_ptr(a: &ElemId) -> *mut alsa::snd_ctl_elem_id_t { a.0 }
 
+*/
+
 impl ElemId {
     pub fn get_name(&self) -> Result<&str> {
-        from_const("snd_hctl_elem_id_get_name", unsafe { alsa::snd_ctl_elem_id_get_name(self.0) })}
-    pub fn get_device(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_device(self.0) as u32 }}
-    pub fn get_subdevice(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_subdevice(self.0) as u32 }}
-    pub fn get_numid(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_numid(self.0) as u32 }}
-    pub fn get_index(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_index(self.0) as u32 }}
-    pub fn get_interface(&self) -> ElemIface { unsafe { mem::transmute(alsa::snd_ctl_elem_id_get_interface(self.0) as u8) }}
+        from_const("snd_hctl_elem_id_get_name", unsafe { alsa::snd_ctl_elem_id_get_name(elem_id_ptr(&self)) })}
+    pub fn get_device(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_device(elem_id_ptr(&self)) as u32 }}
+    pub fn get_subdevice(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_subdevice(elem_id_ptr(&self)) as u32 }}
+    pub fn get_numid(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_numid(elem_id_ptr(&self)) as u32 }}
+    pub fn get_index(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_index(elem_id_ptr(&self)) as u32 }}
+    pub fn get_interface(&self) -> ElemIface { unsafe { mem::transmute(alsa::snd_ctl_elem_id_get_interface(elem_id_ptr(&self)) as u8) }}
 }
 
 impl fmt::Debug for ElemId {
@@ -246,5 +277,18 @@ impl fmt::Debug for ElemId {
         if subdevice > 0 { try!(write!(f, ", subdevice={}", device)) };
         write!(f, ")")
     }
+}
+
+#[test]
+fn print_sizeof() {
+    let elemid = unsafe { alsa::snd_ctl_elem_id_sizeof() } as usize;
+    let elemvalue = unsafe { alsa::snd_ctl_elem_value_sizeof() } as usize;
+    let eleminfo = unsafe { alsa::snd_ctl_elem_info_sizeof() } as usize;
+
+    assert!(elemid >= ELEM_ID_SIZE);
+//    assert!(elemvalue >= ELEM_VALUE_SIZE);
+//    assert!(eleminfo >= ELEM_INFO_SIZE);
+
+    println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
 }
 
