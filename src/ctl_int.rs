@@ -285,9 +285,9 @@ fn print_sizeof() {
     let elemvalue = unsafe { alsa::snd_ctl_elem_value_sizeof() } as usize;
     let eleminfo = unsafe { alsa::snd_ctl_elem_info_sizeof() } as usize;
 
-    assert!(elemid >= ELEM_ID_SIZE);
-//    assert!(elemvalue >= ELEM_VALUE_SIZE);
-//    assert!(eleminfo >= ELEM_INFO_SIZE);
+    assert!(elemid <= ELEM_ID_SIZE);
+//    assert!(elemvalue <= ELEM_VALUE_SIZE);
+//    assert!(eleminfo <= ELEM_INFO_SIZE);
 
     println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
 }

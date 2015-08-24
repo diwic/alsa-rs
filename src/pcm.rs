@@ -38,7 +38,7 @@
 //! ```
 
 
-use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort};
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort, timespec};
 use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -94,6 +94,11 @@ impl PCM {
     pub fn avail_delay(&self) -> Result<(Frames, Frames)> {
         let (mut a, mut d) = (0, 0);
         acheck!(snd_pcm_avail_delay(self.0, &mut a, &mut d)).map(|_| (a, d))
+    }
+
+    pub fn status(&self) -> Result<Status> {
+        let z = Status::new();
+        acheck!(snd_pcm_status(self.0, z.ptr())).map(|_| z)
     }
 
     fn verify_format(&self, f: Format) -> Result<()> {
@@ -510,6 +515,16 @@ impl<'a> SwParams<'a> {
         acheck!(snd_pcm_sw_params_get_stop_threshold(self.0, &mut v)).map(|_| v as Frames)
     }
 
+    pub fn set_tstamp_mode(&self, v: bool) -> Result<()> {
+        let z = if v { alsa::SND_PCM_TSTAMP_ENABLE } else { alsa::SND_PCM_TSTAMP_NONE };
+        acheck!(snd_pcm_sw_params_set_tstamp_mode((self.1).0, self.0, z)).map(|_| ())
+    }
+
+    pub fn get_tstamp_mode(&self) -> Result<bool> {
+        let mut v = 0;
+        acheck!(snd_pcm_sw_params_get_tstamp_mode(self.0, &mut v)).map(|_| v != 0)
+    }
+
     pub fn dump(&self, o: &mut Output) -> Result<()> {
         acheck!(snd_pcm_sw_params_dump(self.0, super::io::output_handle(o))).map(|_| ())
     }
@@ -522,6 +537,50 @@ impl<'a> fmt::Debug for SwParams<'a> {
            self.get_avail_min(), self.get_start_threshold(), self.get_stop_threshold())
     }
 }
+
+const STATUS_SIZE: usize = 152;
+
+/// [snd_pcm_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___status.html) wrapper
+pub struct Status([u8; STATUS_SIZE]);
+
+impl Status {
+    fn new() -> Status {
+        assert!(unsafe { alsa::snd_pcm_status_sizeof() } as usize <= STATUS_SIZE);
+        Status([0; STATUS_SIZE])
+    }
+
+    fn ptr(&self) -> *mut alsa::snd_pcm_status_t { self.0.as_ptr() as *const _ as *mut alsa::snd_pcm_status_t }
+
+    pub fn get_htstamp(&self) -> timespec {
+        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
+        unsafe { alsa::snd_pcm_status_get_htstamp(self.ptr(), &mut h) };
+        h
+    }
+
+    pub fn get_trigger_htstamp(&self) -> timespec {
+        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
+        unsafe { alsa::snd_pcm_status_get_trigger_htstamp(self.ptr(), &mut h) };
+        h
+    }
+
+    pub fn get_audio_htstamp(&self) -> timespec {
+        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
+        unsafe { alsa::snd_pcm_status_get_audio_htstamp(self.ptr(), &mut h) };
+        h
+    }
+
+    pub fn get_state(&self) -> State { unsafe { mem::transmute(alsa::snd_pcm_status_get_state(self.ptr()) as u8) }}
+
+    pub fn get_avail(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_avail(self.ptr()) as Frames }}
+    pub fn get_delay(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_delay(self.ptr()) }}
+    pub fn get_avail_max(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_avail_max(self.ptr()) as Frames }}
+    pub fn get_overrange(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_overrange(self.ptr()) as Frames }}
+
+    pub fn dump(&self, o: &mut Output) -> Result<()> {
+        acheck!(snd_pcm_status_dump(self.ptr(), super::io::output_handle(o))).map(|_| ())
+    }
+}
+
 
 #[test]
 fn record_from_default() {
@@ -552,7 +611,7 @@ fn playback_to_default() {
     println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
     let mut outp = Output::buffer_open().unwrap();
     pcm.dump(&mut outp).unwrap();
-    println!("PCM dump: {}", outp);
+    println!("== PCM dump ==\n{}", outp);
 
     let mut buf = [0i16; 1024];
     for (i, a) in buf.iter_mut().enumerate() {
@@ -563,5 +622,18 @@ fn playback_to_default() {
         assert_eq!(io.writei(&buf[..]).unwrap(), 1024);
     }
     if pcm.state() != State::Running { pcm.start().unwrap() };
+
+    let mut outp2 = Output::buffer_open().unwrap();
+    pcm.status().unwrap().dump(&mut outp2).unwrap();
+    println!("== PCM status dump ==\n{}", outp2);
+
     pcm.drain().unwrap();
+}
+
+#[test]
+fn print_sizeof() {
+    let s = unsafe { alsa::snd_pcm_status_sizeof() } as usize;
+    println!("Status size: {}", s);
+
+    assert!(s <= STATUS_SIZE);
 }
