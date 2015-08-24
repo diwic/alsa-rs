@@ -12,3 +12,4 @@ license = "Apache-2.0/MIT"
 [dependencies]
 libc = "*"
 alsa-sys = "*"
+bitflags = "*"

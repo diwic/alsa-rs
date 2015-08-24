@@ -38,14 +38,14 @@
 //! ```
 
 
-use libc::{c_int, c_uint, c_void, ssize_t};
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort};
 use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ffi::CStr;
 use std::{io, fmt, ptr, mem, cell};
 use super::error::*;
-use super::Direction;
+use super::{Direction, Output, poll};
 
 /// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
@@ -77,6 +77,8 @@ impl PCM {
     pub fn drain(&self) -> Result<()> { acheck!(snd_pcm_drain(self.0)).map(|_| ()) }
     pub fn prepare(&self) -> Result<()> { acheck!(snd_pcm_prepare(self.0)).map(|_| ()) }
     pub fn reset(&self) -> Result<()> { acheck!(snd_pcm_reset(self.0)).map(|_| ()) }
+    pub fn recover(&self, err: c_int, silent: bool) -> Result<()> {
+        acheck!(snd_pcm_recover(self.0, err, if silent { 1 } else { 0 })).map(|_| ()) }
 
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
@@ -134,12 +136,43 @@ impl PCM {
         SwParams::new(&self).and_then(|h|
             acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
     }
+
+    pub fn dump(&self, o: &mut Output) -> Result<()> {
+        acheck!(snd_pcm_dump(self.0, super::io::output_handle(o))).map(|_| ())
+    }
+
+    pub fn dump_hw_setup(&self, o: &mut Output) -> Result<()> {
+        acheck!(snd_pcm_dump_hw_setup(self.0, super::io::output_handle(o))).map(|_| ())
+    }
+
+    pub fn dump_sw_setup(&self, o: &mut Output) -> Result<()> {
+        acheck!(snd_pcm_dump_sw_setup(self.0, super::io::output_handle(o))).map(|_| ())
+    }
 }
 
 impl Drop for PCM {
     fn drop(&mut self) { unsafe { alsa::snd_pcm_close(self.0) }; }
 }
 
+extern "C" {
+    fn snd_pcm_poll_descriptors(pcm: *mut alsa::snd_pcm_t, pfds: *mut poll::PollFd, space: c_uint) -> c_int;
+    fn snd_pcm_poll_descriptors_revents(pcm: *mut alsa::snd_pcm_t, pfds: *mut poll::PollFd, nfds: c_uint, revents: *mut c_ushort) -> c_int;
+}
+
+impl poll::PollDescriptors for PCM {
+    fn count(&self) -> usize {
+        unsafe { alsa::snd_pcm_poll_descriptors_count(self.0) as usize }
+    }
+    fn fill(&self, p: &mut [poll::PollFd]) -> Result<usize> {
+        let z = unsafe { snd_pcm_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
+        from_code("snd_pcm_poll_descriptors", z).map(|_| z as usize)
+    }
+    fn revents(&self, p: &[poll::PollFd]) -> Result<poll::PollFlags> {
+        let mut r = 0;
+        let z = unsafe { snd_pcm_poll_descriptors_revents(self.0, p.as_ptr() as *mut poll::PollFd, p.len() as c_uint, &mut r) };
+        from_code("snd_pcm_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
+    }
+}
 
 /// Sample format dependent struct for reading from and writing data to a `PCM`.
 /// Also implements `std::io::Read` and `std::io::Write`.
@@ -378,6 +411,10 @@ impl<'a> HwParams<'a> {
         let mut v = 0;
         acheck!(snd_pcm_hw_params_get_buffer_size(self.0, &mut v)).map(|_| v as Frames)
     }
+
+    pub fn dump(&self, o: &mut Output) -> Result<()> {
+        acheck!(snd_pcm_hw_params_dump(self.0, super::io::output_handle(o))).map(|_| ())
+    }
 }
 
 impl<'a> fmt::Debug for HwParams<'a> {
@@ -428,6 +465,10 @@ impl<'a> SwParams<'a> {
         let mut v = 0;
         acheck!(snd_pcm_sw_params_get_stop_threshold(self.0, &mut v)).map(|_| v as Frames)
     }
+
+    pub fn dump(&self, o: &mut Output) -> Result<()> {
+        acheck!(snd_pcm_sw_params_dump(self.0, super::io::output_handle(o))).map(|_| ())
+    }
 }
 
 impl<'a> fmt::Debug for SwParams<'a> {
@@ -463,7 +504,12 @@ fn playback_to_default() {
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
+
     println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
+    let mut outp = Output::buffer_open().unwrap();
+    pcm.dump(&mut outp).unwrap();
+    println!("PCM dump: {}", outp);
+
     let mut buf = [0i16; 1024];
     for (i, a) in buf.iter_mut().enumerate() {
         *a = ((i as f32 * 2.0 * ::std::f32::consts::PI / 128.0).sin() * 8192.0) as i16

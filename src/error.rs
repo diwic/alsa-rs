@@ -44,6 +44,11 @@ pub fn from_alloc(func: &'static str, s: *mut c_char) -> Result<String> {
     Ok(ss)
 }
 
+pub fn from_code(func: &'static str, r: c_int) -> Result<c_int> {
+    if r < 0 { Err(Error::new(Some(func.into()), r)) }
+    else { Ok(r) }
+}
+
 impl Error {
     pub fn new(func: Option<Cow<'static, str>>, res: c_int) -> Error { Error(func, res) }
     fn invalid_str(func: &'static str) -> Error { Error(Some(func.into()), INVALID_STRING) }

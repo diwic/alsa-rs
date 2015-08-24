@@ -3,6 +3,8 @@
 
 extern crate alsa_sys as alsa;
 extern crate libc;
+#[macro_use]
+extern crate bitflags;
 
 /// Replaces constants ending with PLAYBACK/CAPTURE as well as
 /// INPUT/OUTPUT 
@@ -44,3 +46,8 @@ pub use rawmidi::Rawmidi as Rawmidi;
 
 pub mod device_name;
 
+pub mod poll;
+pub use poll::PollDescriptors as PollDescriptors;
+
+mod io;
+pub use io::Output;
