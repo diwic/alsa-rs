@@ -20,6 +20,18 @@ impl Direction {
     pub fn output() -> Direction { Direction::Playback }
 }
 
+/// Used to restrict hw parameters. In case the submitted
+/// value is unavailable, in which direction should one search
+/// for available values?
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ValueOr {
+    /// The value set is the submitted value, or less
+    Less = -1,
+    /// The value set is the submitted value, or the nearest
+    Nearest = 0,
+    /// The value set is the submitted value, or greater
+    Greater = 1,
+}
 
 mod error;
 pub use error::{Error, Result};

@@ -5,7 +5,7 @@
 //!
 //! ```
 //! use std::ffi::CString;
-//! use alsa::Direction;
+//! use alsa::{Direction, ValueOr};
 //! use alsa::pcm::{PCM, HwParams, Format, Access, State};
 //!
 //! // Open default playback device
@@ -14,7 +14,7 @@
 //! // Set hardware parameters: 44100 Hz / Mono / 16 bit
 //! let hwp = HwParams::any(&pcm).unwrap();
 //! hwp.set_channels(1).unwrap();
-//! hwp.set_rate(44100, 0).unwrap();
+//! hwp.set_rate(44100, ValueOr::Nearest).unwrap();
 //! hwp.set_format(Format::s16()).unwrap();
 //! hwp.set_access(Access::RWInterleaved).unwrap();
 //! pcm.hw_params(&hwp).unwrap();
@@ -45,7 +45,7 @@ use std::mem::size_of;
 use std::ffi::CStr;
 use std::{io, fmt, ptr, mem, cell};
 use super::error::*;
-use super::{Direction, Output, poll};
+use super::{Direction, Output, poll, ValueOr};
 
 /// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
@@ -349,6 +349,20 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_any(a.0, p.0)).map(|_| p)
     )}
 
+    pub fn get_rate_resample(&self) -> Result<bool> {
+        let mut v = 0;
+        acheck!(snd_pcm_hw_params_get_channels(self.0, &mut v)).map(|_| v != 0)
+    }
+
+    pub fn set_rate_resample(&self, resample: bool) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_rate_resample((self.1).0, self.0, if resample {1} else {0})).map(|_| ())
+    }
+
+    pub fn set_channels_near(&self, v: u32) -> Result<u32> {
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_channels_near((self.1).0, self.0, &mut r)).map(|_| r)
+    }
+
     pub fn set_channels(&self, v: u32) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_channels((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
@@ -358,7 +372,13 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_channels(self.0, &mut v)).map(|_| v as u32)
     }
 
-    pub fn set_rate(&self, v: u32, dir: i32) -> Result<()> {
+    pub fn set_rate_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_rate_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r)
+    }
+
+    pub fn set_rate(&self, v: u32, dir: ValueOr) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_rate((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
@@ -385,7 +405,13 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_access(self.0, &mut v)).map(|_| unsafe { mem::transmute(v as u8) })
     }
 
-    pub fn set_period_size(&self, v: Frames, dir: i32) -> Result<()> {
+    pub fn set_period_size_near(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
+        let mut d = dir as c_int;
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_period_size_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as Frames)
+    }
+
+    pub fn set_period_size(&self, v: Frames, dir: ValueOr) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_period_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t, dir as c_int)).map(|_| ())
     }
 
@@ -394,13 +420,18 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
-    pub fn set_periods(&self, v: u32, dir: i32) -> Result<()> {
+    pub fn set_periods(&self, v: u32, dir: ValueOr) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_periods((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn get_periods(&self) -> Result<u32> {
         let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_periods(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    pub fn set_buffer_size_near(&self, v: Frames) -> Result<Frames> {
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_buffer_size_near((self.1).0, self.0, &mut r)).map(|_| r as Frames)
     }
 
     pub fn set_buffer_size(&self, v: Frames) -> Result<()> {
@@ -414,6 +445,19 @@ impl<'a> HwParams<'a> {
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
         acheck!(snd_pcm_hw_params_dump(self.0, super::io::output_handle(o))).map(|_| ())
+    }
+
+    pub fn copy_from(&mut self, other: &HwParams<'a>) {
+        self.1 = other.1;
+        unsafe { alsa::snd_pcm_hw_params_copy(self.0, other.0) };
+    }
+}
+
+impl<'a> Clone for HwParams<'a> {
+    fn clone(&self) -> HwParams<'a> {
+        let mut r = HwParams::new(self.1).unwrap();
+        r.copy_from(&self);
+        r
     }
 }
 
@@ -485,7 +529,7 @@ fn record_from_default() {
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(2).unwrap();
-    hwp.set_rate(44100, 0).unwrap();
+    hwp.set_rate(44100, ValueOr::Nearest).unwrap();
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
@@ -500,7 +544,7 @@ fn playback_to_default() {
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(1).unwrap();
-    hwp.set_rate(44100, 0).unwrap();
+    hwp.set_rate(44100, ValueOr::Nearest).unwrap();
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
