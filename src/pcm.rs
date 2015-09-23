@@ -38,14 +38,16 @@
 //! ```
 
 
-use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort, timespec};
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort, timespec, EINVAL};
 use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ffi::CStr;
 use std::{io, fmt, ptr, mem, cell};
 use super::error::*;
-use super::{Direction, Output, poll, ValueOr};
+use super::{Direction, Output, poll, ValueOr, chmap};
+
+pub use super::chmap::{Chmap, ChmapPosition, ChmapType, ChmapsQuery};
 
 /// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
@@ -152,6 +154,20 @@ impl PCM {
 
     pub fn dump_sw_setup(&self, o: &mut Output) -> Result<()> {
         acheck!(snd_pcm_dump_sw_setup(self.0, super::io::output_handle(o))).map(|_| ())
+    }
+
+    pub fn query_chmaps(&self) -> ChmapsQuery {
+        chmap::chmaps_query_new(unsafe { alsa::snd_pcm_query_chmaps(self.0) })
+    }
+
+    pub fn set_chmap(&self, c: &Chmap) -> Result<()> {
+        acheck!(snd_pcm_set_chmap(self.0, chmap::chmap_handle(c))).map(|_| ())
+    }
+
+    pub fn get_chmap(&self) -> Result<Chmap> {
+        let p = unsafe { alsa::snd_pcm_get_chmap(self.0) };
+        if p == ptr::null_mut() { Err(Error::new(Some("snd_pcm_get_chmap".into()), -EINVAL)) }
+        else { Ok(chmap::chmap_new(p)) }
     }
 }
 

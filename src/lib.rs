@@ -63,3 +63,6 @@ pub use poll::PollDescriptors as PollDescriptors;
 
 mod io;
 pub use io::Output;
+
+// Reexported inside PCM module
+mod chmap;

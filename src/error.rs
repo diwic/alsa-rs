@@ -70,6 +70,10 @@ impl fmt::Display for Error {
     }
 }
 
+impl From<Error> for fmt::Error {
+    fn from(_: Error) -> fmt::Error { fmt::Error }
+}
+
 #[test]
 fn broken_pcm_name() {
     use std::ffi::CString;
