@@ -53,6 +53,11 @@ impl HCtl {
     pub fn load(&self) -> Result<()> { acheck!(snd_hctl_load(self.0)).map(|_| ()) }
 
     pub fn elem_iter<'a>(&'a self) -> ElemIter<'a> { ElemIter(self, ptr::null_mut()) }
+
+    pub fn find_elem<'a>(&'a self, id: &ctl_int::ElemId) -> Option<Elem<'a>> {
+        let p = unsafe { alsa::snd_hctl_find_elem(self.0, ctl_int::elem_id_ptr(&id)) };
+        if p == ptr::null_mut() { None } else { Some(Elem(&self, p)) }
+    }
 }
 
 extern "C" {

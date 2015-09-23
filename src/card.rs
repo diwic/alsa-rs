@@ -5,6 +5,7 @@ use alsa;
 use std::ffi::CStr;
 
 /// An ALSA sound card, uniquely identified by its index.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Card(c_int);
 
 /// Iterate over existing sound cards.
