@@ -10,7 +10,7 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::io;
 
 bitflags! {
-    flags PollFlags: libc::c_short {
+    pub flags PollFlags: ::libc::c_short {
         const POLLIN  = 0x001,
         const POLLPRI = 0x002,
         const POLLOUT = 0x004,
@@ -73,7 +73,7 @@ pub fn poll(fds: &mut[PollFd], timeout: i32) -> Result<usize> {
 
 /// Builds a pollfd array, polls it, and returns the poll descriptors which have non-zero revents.
 pub fn poll_all<'a>(desc: &[&'a PollDescriptors], timeout: i32) -> Result<Vec<(&'a PollDescriptors, PollFlags)>> {
-    
+
     let mut pollfds: Vec<PollFd> = vec!();
     let mut indices = vec!();
     for v2 in desc.iter().map(|q| q.get()) {
@@ -91,4 +91,3 @@ pub fn poll_all<'a>(desc: &[&'a PollDescriptors], timeout: i32) -> Result<Vec<(&
     }
     Ok(res)
 }
-
