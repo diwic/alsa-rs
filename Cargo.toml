@@ -10,6 +10,6 @@ keywords = ["ALSA", "audio", "sound"]
 license = "Apache-2.0/MIT"
 
 [dependencies]
-libc = "*"
-alsa-sys = "*"
-bitflags = "*"
+libc = "0.2.7"
+alsa-sys = "0.0.8"
+bitflags = "0.5"

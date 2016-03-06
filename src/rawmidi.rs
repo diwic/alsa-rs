@@ -1,6 +1,6 @@
 //! MIDI devices I/O and enumeration
 
-use libc::{c_int, c_uint, c_void, size_t, c_short, c_ushort};
+use libc::{c_int, c_uint, c_void, size_t, c_short, c_ushort, pollfd};
 use super::ctl_int::{ctl_ptr, Ctl};
 use super::{Direction, poll};
 use super::error::*;
@@ -134,8 +134,8 @@ impl Rawmidi {
 }
 
 extern "C" {
-    fn snd_rawmidi_poll_descriptors(rawmidi: *mut alsa::snd_rawmidi_t, pfds: *mut poll::PollFd, space: c_uint) -> c_int;
-    fn snd_rawmidi_poll_descriptors_revents(rawmidi: *mut alsa::snd_rawmidi_t, pfds: *mut poll::PollFd,
+    fn snd_rawmidi_poll_descriptors(rawmidi: *mut alsa::snd_rawmidi_t, pfds: *mut pollfd, space: c_uint) -> c_int;
+    fn snd_rawmidi_poll_descriptors_revents(rawmidi: *mut alsa::snd_rawmidi_t, pfds: *mut pollfd,
         nfds: c_uint, revents: *mut c_ushort) -> c_int;
 }
 
@@ -143,13 +143,13 @@ impl poll::PollDescriptors for Rawmidi {
     fn count(&self) -> usize {
         unsafe { alsa::snd_rawmidi_poll_descriptors_count(self.0) as usize }
     }
-    fn fill(&self, p: &mut [poll::PollFd]) -> Result<usize> {
+    fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
         let z = unsafe { snd_rawmidi_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
         from_code("snd_rawmidi_poll_descriptors", z).map(|_| z as usize)
     }
-    fn revents(&self, p: &[poll::PollFd]) -> Result<poll::PollFlags> {
+    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
         let mut r = 0;
-        let z = unsafe { snd_rawmidi_poll_descriptors_revents(self.0, p.as_ptr() as *mut poll::PollFd, p.len() as c_uint, &mut r) };
+        let z = unsafe { snd_rawmidi_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
         from_code("snd_rawmidi_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
     }
 }

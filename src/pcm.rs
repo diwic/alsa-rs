@@ -38,7 +38,7 @@
 //! ```
 
 
-use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort, timespec, EINVAL};
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, c_ushort, timespec, EINVAL, pollfd};
 use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -176,21 +176,21 @@ impl Drop for PCM {
 }
 
 extern "C" {
-    fn snd_pcm_poll_descriptors(pcm: *mut alsa::snd_pcm_t, pfds: *mut poll::PollFd, space: c_uint) -> c_int;
-    fn snd_pcm_poll_descriptors_revents(pcm: *mut alsa::snd_pcm_t, pfds: *mut poll::PollFd, nfds: c_uint, revents: *mut c_ushort) -> c_int;
+    fn snd_pcm_poll_descriptors(pcm: *mut alsa::snd_pcm_t, pfds: *mut pollfd, space: c_uint) -> c_int;
+    fn snd_pcm_poll_descriptors_revents(pcm: *mut alsa::snd_pcm_t, pfds: *mut pollfd, nfds: c_uint, revents: *mut c_ushort) -> c_int;
 }
 
 impl poll::PollDescriptors for PCM {
     fn count(&self) -> usize {
         unsafe { alsa::snd_pcm_poll_descriptors_count(self.0) as usize }
     }
-    fn fill(&self, p: &mut [poll::PollFd]) -> Result<usize> {
+    fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
         let z = unsafe { snd_pcm_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
         from_code("snd_pcm_poll_descriptors", z).map(|_| z as usize)
     }
-    fn revents(&self, p: &[poll::PollFd]) -> Result<poll::PollFlags> {
+    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
         let mut r = 0;
-        let z = unsafe { snd_pcm_poll_descriptors_revents(self.0, p.as_ptr() as *mut poll::PollFd, p.len() as c_uint, &mut r) };
+        let z = unsafe { snd_pcm_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
         from_code("snd_pcm_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
     }
 }
