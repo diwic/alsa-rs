@@ -131,12 +131,14 @@ impl Iterator for ChmapsQuery {
 
 
 #[test]
-fn chmap_for_hw0() {
+fn chmap_for_first_pcm() {
     use super::*;
     use std::ffi::CString;
-    let a = PCM::open(&CString::new("hw:0").unwrap(), Direction::Playback, false).unwrap();
+    use device_name::HintIter;
+    let mut i = HintIter::new(None, &*CString::new("pcm").unwrap()).unwrap();
+
+    let a = PCM::open(&CString::new(i.next().unwrap().name.unwrap()).unwrap(), Direction::Playback, false).unwrap();
     for c in a.query_chmaps() {
         println!("{:?}, {}", c.0, c.1);
     }
 }
-
