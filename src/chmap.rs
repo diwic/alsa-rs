@@ -135,10 +135,14 @@ fn chmap_for_first_pcm() {
     use super::*;
     use std::ffi::CString;
     use device_name::HintIter;
-    let mut i = HintIter::new(None, &*CString::new("pcm").unwrap()).unwrap();
-
-    let a = PCM::open(&CString::new(i.next().unwrap().name.unwrap()).unwrap(), Direction::Playback, false).unwrap();
-    for c in a.query_chmaps() {
-        println!("{:?}, {}", c.0, c.1);
+    let i = HintIter::new(None, &*CString::new("pcm").unwrap()).unwrap();
+    for p in i.map(|n| n.name.unwrap()) {
+        println!("Chmaps for {:?}:", p);
+        match PCM::open(&CString::new(p).unwrap(),  Direction::Playback, false) {
+            Ok(a) => for c in a.query_chmaps() {
+               println!("  {:?}, {}", c.0, c.1);
+            },
+            Err(a) => println!("  {}", a) // It's okay to have entries in the name hint array that can't be opened
+        }
     }
 }
