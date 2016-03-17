@@ -7,7 +7,7 @@ extern crate libc;
 extern crate bitflags;
 
 /// Replaces constants ending with PLAYBACK/CAPTURE as well as
-/// INPUT/OUTPUT 
+/// INPUT/OUTPUT
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Direction {
     Playback,
@@ -60,6 +60,8 @@ pub mod device_name;
 
 pub mod poll;
 pub use poll::PollDescriptors as PollDescriptors;
+
+pub mod mixer;
 
 mod io;
 pub use io::Output;
