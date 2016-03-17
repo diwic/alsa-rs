@@ -56,7 +56,7 @@ impl Error {
 }
 
 impl ::std::error::Error for Error {
-    fn description(&self) -> &str { "ALSA error" } 
+    fn description(&self) -> &str { "ALSA error" }
 }
 
 impl fmt::Display for Error {
