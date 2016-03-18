@@ -15,10 +15,11 @@ const SND_MIXER_SCHN_LAST: i32 = 31;
 /// uses [snd_mixer_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___mixer.html)
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// use alsa::card;
+/// use alsa:mixer;
 /// let card = card::Card::new(0);  // use soundcard 0
-/// for mixer in Iter::new(card).unwrap().map(|m| m.unwrap()) {
+/// for mixer in mixer::Iter::new(card).unwrap().map(|m| m.unwrap()) {
 ///   println!("Card #{}: {} ({})", card.get_index(), card.get_name().unwrap(), card.get_longname().unwrap());
 /// }
 /// ```
@@ -75,7 +76,7 @@ impl Iterator for Iter {
     }
 }
 
-// use fixed size structure for selem_id
+/// use fixed size structure for selem_id
 pub struct SelemId([u8; SELEM_ID_SIZE]);
 
 /// Creates a new `selem_id` using `SelemId` of hardcoded size. This size is checked with `snd_mixer_selem_id_sizeof`
@@ -163,7 +164,8 @@ impl Mixer {
 
     /// returns array of [min,max] values in decibels*100. To get correct dB value, devide by 100, i.e.
     ///
-    /// ```
+    /// # Example
+    /// ```ignore
     /// let db_value = mixer.capture_decibel_range() as f32 / 100.0;
     /// ```
     pub fn capture_decibel_range(&self) -> [i64;2] {
@@ -183,7 +185,8 @@ impl Mixer {
 
     /// returns array of [min,max] values in decibels*100. To get correct dB value, devide by 100, i.e.
     ///
-    /// ```
+    /// # Example
+    /// ```ignore
     /// let db_value = mixer.playback_decibel_range() as f32 / 100.0;
     /// ```
     pub fn playback_decibel_range(&self) -> [i64;2] {
@@ -227,9 +230,10 @@ impl<'a> MixerChannel<'a> {
         acheck!(snd_mixer_selem_get_playback_volume(self.mixer.handle, self.channel, &mut value)).and_then(|_| Ok(value))
     }
 
-    /// returns volume in decibels*100. To get correct dB value, devide by 100, i.e.
+    /// returns volume in decibels*100. To get correct dB value, devide by 100
     ///
-    /// ```
+    /// # Example
+    /// ```ignore
     /// let db_value = channel.playback_volume_decibel().unwrap() as f32 / 100.0;
     /// ```
     pub fn playback_volume_decibel(&self) -> Result<i64> {
@@ -246,7 +250,8 @@ impl<'a> MixerChannel<'a> {
 
     /// returns volume in decibels*100. To get correct dB value, devide by 100, i.e.
     ///
-    /// ```
+    /// # Example
+    /// ```ignore
     /// let db_value = channel.capture_volume_decibel().unwrap() as f32 / 100.0;
     /// ```
     pub fn capture_volume_decibel(&self) -> Result<i64> {
@@ -259,7 +264,8 @@ impl<'a> MixerChannel<'a> {
 
 /// Iterator over all possible channels. Use can_capture and can_playback to check if the channel is used or not
 ///
-/// ```
+/// # Example
+/// ```ignore
 /// let mixer = ...
 /// for c in MixerChannelIter::new(&mixer).filter(|c| c.can_playback() ) {
 ///    ...
