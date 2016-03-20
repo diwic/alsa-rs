@@ -33,6 +33,7 @@ impl Drop for Mixer {
     }
 }
 
+/// Wraps [snd_mixer_selem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html)
 #[derive(Copy, Clone)]
 pub struct Elem<'a>{
     handle: *mut alsa::snd_mixer_elem_t,
@@ -46,6 +47,8 @@ impl<'a> Elem<'a> {
     }
 }
 
+
+/// Iterator for all elements of mixer
 #[derive(Copy, Clone)]
 pub struct Iter<'a>{
     last_handle: *mut alsa::snd_mixer_elem_t,
@@ -81,6 +84,7 @@ impl<'a> Iterator for Iter<'a> {
 
 }
 
+/// Wrapper for `snd_mixer_selem_id_t`, using array of hardcoded length
 // #[derive(Copy, Clone)]
 pub struct SelemId([u8; SELEM_ID_SIZE]);
 
@@ -94,6 +98,8 @@ impl SelemId {
         sid
     }
 
+    /// Returns an empty (zeroed) SelemId. This id is not a useable id and need to be initialized
+    /// like `SelemId::new()` does
     pub fn empty() -> SelemId {
         assert!(unsafe { alsa::snd_mixer_selem_id_sizeof() } as usize <= SELEM_ID_SIZE);
         // Create empty selem_id and fill from mixer
@@ -108,14 +114,17 @@ impl SelemId {
     }
 }
 
+/// Wraps an Elem as a Selem
 // #[derive(Copy, Clone)]
 pub struct Selem<'a>(SelemId, Elem<'a>);
 
 impl<'a> Selem<'a> {
+    /// Creates a Selem by wrapping `elem`.
     pub fn new(elem: Elem<'a>) -> Selem<'a> {
         Selem(SelemId::new(elem), elem)
     }
 
+    /// Creates a Selem by lookung for a specific selem by name given a mixer (of a card)
     pub fn find_by_name(mixer: &'a Mixer, name: &str) -> Result<Selem<'a>> {
         let sid = SelemId::empty();
         unsafe { alsa::snd_mixer_selem_id_set_index(sid.as_ptr(), 0) };
@@ -129,7 +138,7 @@ impl<'a> Selem<'a> {
         }
     }
 
-
+    /// returns the elem of this selem
     pub fn get_elem(&self) -> Elem<'a> {
         self.1
     }
@@ -211,6 +220,10 @@ impl<'a> Selem<'a> {
         let mut max: i64 = 0;
         unsafe { alsa::snd_mixer_selem_get_playback_dB_range(self.1.handle, &mut min, &mut max) };
         [min, max]
+    }
+
+    pub fn is_playback_mono(&self) -> bool {
+        unsafe { alsa::snd_mixer_selem_is_playback_mono(self.1.handle) == 1 }
     }
 
     pub fn has_capture_channel(&self, channel: i32) -> bool {
@@ -332,19 +345,25 @@ fn print_mixer_of_cards() {
 
             if selem.can_playback() {
                 print!("\t  Playback channels: ");
-                for channel in 0..SelemChannelId::Last as i32 {
-                    if selem.has_playback_channel(channel) { print!("{}:{} ", channel, selem.channel_name(channel).unwrap()) };
+                if selem.is_playback_mono() {
+                    print!("Mono");
+                } else {
+                    for channel in 0..SelemChannelId::Last as i32 {
+                        if selem.has_playback_channel(channel) { print!("{}:{} ", channel, selem.channel_name(channel).unwrap()) };
+                    }
                 }
                 println!("");
-                print!("\t  Playback volumes: ");
-                for channel in 0..SelemChannelId::Last as i32 {
-                    if selem.has_playback_channel(channel) { print!("{}:{}/{}dB ",
-                        channel,
-                        match selem.get_playback_volume(channel) {Ok(v) => format!("{}",v).to_string(), Err(_) => "n/a".to_string()},
-                        match selem.ask_playback_vol_decibel(channel) {Ok(v) => format!("{}",(v as f32) / 100.0).to_string(), Err(_) => "n/a".to_string()}
-                    );}
+                if selem.has_playback_volume() {
+                    print!("\t  Playback volumes: ");
+                    for channel in 0..SelemChannelId::Last as i32 {
+                        if selem.has_playback_channel(channel) { print!("{}:{}/{}dB ",
+                            channel,
+                            match selem.get_playback_volume(channel) {Ok(v) => format!("{}",v).to_string(), Err(_) => "n/a".to_string()},
+                            match selem.ask_playback_vol_decibel(channel) {Ok(v) => format!("{}",(v as f32) / 100.0).to_string(), Err(_) => "n/a".to_string()}
+                        );}
+                    }
+                    println!("");
                 }
-                println!("");
             }
         }
     }
