@@ -263,13 +263,18 @@ impl<'a> Selem<'a> {
     ///
     /// # Example
     /// ```ignore
-    /// let db_value = selem.playback_volume_decibel(SelemChannelId::FrontLeft as i32).unwrap() as f32 / 100.0;
+    /// let db_value = selem.get_playback_volume_decibel(SelemChannelId::FrontLeft as i32).unwrap() as f32 / 100.0;
     /// ```
-    pub fn ask_playback_vol_decibel(&self, channel: i32) -> Result<i64> {
-        let mut decibel_value: i64 = 0;
+    pub fn get_playback_vol_decibel(&self, channel: i32) -> Result<i64> {
         self.get_playback_volume(channel)
-            .and_then(|volume| acheck!(snd_mixer_selem_ask_playback_vol_dB (self.1.handle, volume, &mut decibel_value)))
-            .and_then(|_| Ok(decibel_value))
+            .and_then(|volume| self.ask_playback_vol_decibel(volume))
+    }
+
+    /// Asks alsa to convert playback volume to decibels
+    pub fn ask_playback_vol_decibel(&self, volume: i64) -> Result<i64> {
+        let mut decibel_value: i64 = 0;
+        acheck!(snd_mixer_selem_ask_playback_vol_dB (self.1.handle, volume, &mut decibel_value))
+            .and_then(|_| Ok(decibel_value) )
     }
 
     pub fn get_capture_volume(&self, channel: i32) -> Result<i64> {
@@ -281,12 +286,17 @@ impl<'a> Selem<'a> {
     ///
     /// # Example
     /// ```ignore
-    /// let db_value = selem.capture_volume_decibel(SelemChannelId::FrontLeft as i32).unwrap() as f32 / 100.0;
+    /// let db_value = selem.get_capture_volume_decibel(SelemChannelId::FrontLeft as i32).unwrap() as f32 / 100.0;
     /// ```
-    pub fn ask_capture_vol_decibel(&self, channel: i32) -> Result<i64> {
-        let mut decibel_value: i64 = 0;
+    pub fn get_capture_vol_decibel(&self, channel: i32) -> Result<i64> {
         self.get_capture_volume(channel)
-            .and_then(|volume| acheck!(snd_mixer_selem_ask_capture_vol_dB (self.1.handle, volume, &mut decibel_value)))
+            .and_then(|volume| self.ask_capture_vol_decibel(volume))
+    }
+
+    /// Asks alsa to convert capture volume to decibels
+    pub fn ask_capture_vol_decibel(&self, volume: i64) -> Result<i64> {
+        let mut decibel_value: i64 = 0;
+        acheck!(snd_mixer_selem_ask_capture_vol_dB (self.1.handle, volume, &mut decibel_value))
             .and_then(|_| Ok(decibel_value))
     }
 
@@ -365,7 +375,7 @@ fn print_mixer_of_cards() {
                 for channel in 0..SelemChannelId::Last as i32 {
                     if selem.has_capture_channel(channel) { print!("{}:{}/{}dB ", channel,
                         match selem.get_capture_volume(channel) {Ok(v) => format!("{}",v).to_string(), Err(_) => "n/a".to_string()},
-                        match selem.ask_capture_vol_decibel(channel) {Ok(v) => format!("{}",v as f32 /100.0).to_string(), Err(_) => "n/a".to_string()}
+                        match selem.get_capture_vol_decibel(channel) {Ok(v) => format!("{}",v as f32 /100.0).to_string(), Err(_) => "n/a".to_string()}
                     );}
                 }
                 println!("");
@@ -387,7 +397,7 @@ fn print_mixer_of_cards() {
                         if selem.has_playback_channel(channel) { print!("{}:{}/{}dB ",
                             channel,
                             match selem.get_playback_volume(channel) {Ok(v) => format!("{}",v).to_string(), Err(_) => "n/a".to_string()},
-                            match selem.ask_playback_vol_decibel(channel) {Ok(v) => format!("{}",(v as f32) / 100.0).to_string(), Err(_) => "n/a".to_string()}
+                            match selem.get_playback_vol_decibel(channel) {Ok(v) => format!("{}",(v as f32) / 100.0).to_string(), Err(_) => "n/a".to_string()}
                         );}
                     }
                     println!("");
