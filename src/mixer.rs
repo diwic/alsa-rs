@@ -13,28 +13,48 @@ const SELEM_ID_SIZE: usize = 64;
 pub struct Mixer(*mut alsa::snd_mixer_t);
 
 impl Mixer {
-    /// Creates a new iterator for a specific device, for example hw:0
+    /// Opens a mixer and attaches it to a card identified by its name (like hw:0) and loads the
+    /// mixer after registering a Selem.
     pub fn new(name: &str) -> Result<Mixer> {
-        let card = &CString::new(name).unwrap();
         let mut mixer = Mixer(ptr::null_mut());
-        try!(acheck!(snd_mixer_open(&mut mixer.0, 0)));
-        try!(acheck!(snd_mixer_attach(mixer.0, card.as_ptr())));
-        try!(acheck!(snd_mixer_selem_register(mixer.0, ptr::null_mut(), ptr::null_mut())));
-        try!(acheck!(snd_mixer_load(mixer.0)));
+        try!(mixer.open());
+        try!(mixer.attach(name));
+        try!(Selem::register(&mixer));
+        try!(mixer.load());
         Ok(mixer)
     }
 
     /// Creates a Selem by looking for a specific selem by name given a mixer (of a card)
     pub fn find_selem(&self, name: &str) -> Result<Selem> {
         let sid = SelemId::empty();
-        unsafe { alsa::snd_mixer_selem_id_set_index(sid.as_ptr(), 0) };
-        unsafe { alsa::snd_mixer_selem_id_set_name(sid.as_ptr(), CString::new(name).unwrap().as_ptr()) };
+        sid.set_index(0);
+        sid.set_name(name);
         let selem = unsafe { alsa::snd_mixer_find_selem(self.0, sid.as_ptr()) };
 
         if selem == 0 as *mut alsa::snd_mixer_elem_t {
             Err(Error::new(Some("snd_mixer_find_selem".into()), -1 as ::libc::c_int))
         } else {
             Ok(Selem::new(Elem {handle: selem, mixer: self}))
+        }
+    }
+
+    pub fn open(&mut self) -> Result<i32> {
+        acheck!(snd_mixer_open(&mut self.0, 0))
+    }
+
+    pub fn attach(&self, name: &str) -> Result<i32> {
+        let card = &CString::new(name).unwrap();
+        acheck!(snd_mixer_attach(self.0, card.as_ptr()))
+    }
+
+    pub fn load(&self) -> Result<i32> {
+        acheck!(snd_mixer_load(self.0))
+    }
+
+    pub fn iter(&self) -> Iter {
+        Iter {
+            last_handle: ptr::null_mut(),
+            mixer: self
         }
     }
 }
@@ -58,15 +78,6 @@ pub struct Elem<'a>{
 pub struct Iter<'a>{
     last_handle: *mut alsa::snd_mixer_elem_t,
     mixer: &'a Mixer
-}
-
-impl<'a> Iter<'a> {
-    pub fn new(m: &'a Mixer) -> Iter<'a> {
-        Iter {
-            last_handle: ptr::null_mut(),
-            mixer: m
-        }
-    }
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -126,6 +137,15 @@ impl SelemId {
     pub fn get_index(&self) -> u32 {
         unsafe { alsa::snd_mixer_selem_id_get_index(self.as_ptr()) }
     }
+
+    pub fn set_name(&self, name: &str) {
+        unsafe { alsa::snd_mixer_selem_id_set_name(self.as_ptr(), CString::new(name).unwrap().as_ptr()) };
+    }
+
+    pub fn set_index(&self, index: u32) {
+        unsafe { alsa::snd_mixer_selem_id_set_index(self.as_ptr(), index) };
+    }
+
 }
 
 /// Wraps an Elem as a Selem
@@ -136,6 +156,10 @@ impl<'a> Selem<'a> {
     /// Creates a Selem by wrapping `elem`.
     pub fn new(elem: Elem<'a>) -> Selem<'a> {
         Selem(SelemId::get_id(elem), elem)
+    }
+
+    pub fn register(mixer: &Mixer) -> Result<i32> {
+        acheck!(snd_mixer_selem_register(mixer.0, ptr::null_mut(), ptr::null_mut()))
     }
 
     pub fn get_id(&'a self) -> &'a SelemId {
@@ -313,7 +337,7 @@ fn print_mixer_of_cards() {
         println!("Card #{}: {} ({})", card.get_index(), card.get_name().unwrap(), card.get_longname().unwrap());
 
         let mixer = Mixer::new(format!("hw:{}", card.get_index()).as_str()).unwrap();
-        for elem in Iter::new(&mixer) {
+        for elem in mixer.iter() {
 
             let selem = Selem::new(elem);
             println!("\tMixer element {}:{}", selem.get_id().get_index(), selem.get_id().get_name().unwrap());
