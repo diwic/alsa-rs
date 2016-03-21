@@ -2,9 +2,9 @@
 //!
 use std::ffi::CString;
 use std::{ptr, mem};
+use std::ops::Deref;
 
 use alsa;
-use super::card;
 use super::error::*;
 
 const SELEM_ID_SIZE: usize = 64;
@@ -13,16 +13,29 @@ const SELEM_ID_SIZE: usize = 64;
 pub struct Mixer(*mut alsa::snd_mixer_t);
 
 impl Mixer {
-    /// Creates a new iterator for a specific card using the cards index and
-    /// using hw name, i.e. `hw:0`
-    pub fn new(c: &card::Card) -> Result<Mixer> {
-        let card = &CString::new(format!("hw:{}", c.get_index())).unwrap();
-        let mut mixer_handle = ptr::null_mut();
-        try!(acheck!(snd_mixer_open(&mut mixer_handle, 0)));
-        try!(acheck!(snd_mixer_attach(mixer_handle, card.as_ptr())));
-        try!(acheck!(snd_mixer_selem_register(mixer_handle, ptr::null_mut(), ptr::null_mut())));
-        try!(acheck!(snd_mixer_load(mixer_handle)));
-        Ok(Mixer(mixer_handle))
+    /// Creates a new iterator for a specific device, for example hw:0
+    pub fn new(name: &str) -> Result<Mixer> {
+        let card = &CString::new(name).unwrap();
+        let mut mixer = Mixer(ptr::null_mut());
+        try!(acheck!(snd_mixer_open(&mut mixer.0, 0)));
+        try!(acheck!(snd_mixer_attach(mixer.0, card.as_ptr())));
+        try!(acheck!(snd_mixer_selem_register(mixer.0, ptr::null_mut(), ptr::null_mut())));
+        try!(acheck!(snd_mixer_load(mixer.0)));
+        Ok(mixer)
+    }
+
+    /// Creates a Selem by looking for a specific selem by name given a mixer (of a card)
+    pub fn find_selem(&self, name: &str) -> Result<Selem> {
+        let sid = SelemId::empty();
+        unsafe { alsa::snd_mixer_selem_id_set_index(sid.as_ptr(), 0) };
+        unsafe { alsa::snd_mixer_selem_id_set_name(sid.as_ptr(), CString::new(name).unwrap().as_ptr()) };
+        let selem = unsafe { alsa::snd_mixer_find_selem(self.0, sid.as_ptr()) };
+
+        if selem == 0 as *mut alsa::snd_mixer_elem_t {
+            Err(Error::new(Some("snd_mixer_find_selem".into()), -1 as ::libc::c_int))
+        } else {
+            Ok(Selem::new(Elem {handle: selem, mixer: self}))
+        }
     }
 }
 
@@ -33,20 +46,12 @@ impl Drop for Mixer {
     }
 }
 
-/// Wraps [snd_mixer_selem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html)
+/// Wraps [snd_mixer_elem_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___mixer.html)
 #[derive(Copy, Clone)]
 pub struct Elem<'a>{
     handle: *mut alsa::snd_mixer_elem_t,
     mixer: &'a Mixer
 }
-
-impl<'a> Elem<'a> {
-    /// Checks if this element is null by checking if the handle is null
-    pub fn is_null(&self) -> bool {
-        self.handle == 0 as *mut alsa::snd_mixer_elem_t
-    }
-}
-
 
 /// Iterator for all elements of mixer
 #[derive(Copy, Clone)]
@@ -91,7 +96,7 @@ pub struct SelemId([u8; SELEM_ID_SIZE]);
 impl SelemId {
     /// Creates a new SelemId` of hardcoded size SELEM_ID_SIZE.
     /// This size is checked against `snd_mixer_selem_id_sizeof`
-    pub fn new(elem: Elem) -> SelemId {
+    pub fn get_id(elem: Elem) -> SelemId {
         // Create empty selem_id and fill from mixer
         let sid = SelemId::empty();
         unsafe { alsa::snd_mixer_selem_get_id(elem.handle, sid.as_ptr()) };
@@ -109,8 +114,17 @@ impl SelemId {
     /// Convert SelemId into ``*mut *mut snd_mixer_selem_id_t` that the alsa call needs.
     /// See [snd_mixer_selem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html)
     #[inline]
-    pub fn as_ptr(&self) -> *mut alsa::snd_mixer_selem_id_t {
+    fn as_ptr(&self) -> *mut alsa::snd_mixer_selem_id_t {
         self.0.as_ptr() as *const _ as *mut alsa::snd_mixer_selem_id_t
+    }
+
+    pub fn get_name(&self) -> Result<String> {
+        let c = unsafe { alsa::snd_mixer_selem_id_get_name(self.as_ptr()) };
+        from_const("snd_mixer_selem_id_get_name", c).and_then(|s| Ok(s.to_string()))
+    }
+
+    pub fn get_index(&self) -> u32 {
+        unsafe { alsa::snd_mixer_selem_id_get_index(self.as_ptr()) }
     }
 }
 
@@ -121,35 +135,11 @@ pub struct Selem<'a>(SelemId, Elem<'a>);
 impl<'a> Selem<'a> {
     /// Creates a Selem by wrapping `elem`.
     pub fn new(elem: Elem<'a>) -> Selem<'a> {
-        Selem(SelemId::new(elem), elem)
+        Selem(SelemId::get_id(elem), elem)
     }
 
-    /// Creates a Selem by lookung for a specific selem by name given a mixer (of a card)
-    pub fn find_by_name(mixer: &'a Mixer, name: &str) -> Result<Selem<'a>> {
-        let sid = SelemId::empty();
-        unsafe { alsa::snd_mixer_selem_id_set_index(sid.as_ptr(), 0) };
-        unsafe { alsa::snd_mixer_selem_id_set_name(sid.as_ptr(), CString::new(name).unwrap().as_ptr()) };
-        let elem = Elem { handle: unsafe { alsa::snd_mixer_find_selem(mixer.0, sid.as_ptr()) }, mixer: mixer};
-
-        if elem.is_null() {
-            Err(Error::new(Some(stringify!("snd_mixer_find_selem").into()), -1 as ::libc::c_int))
-        } else {
-            Ok(Selem::new(elem))
-        }
-    }
-
-    /// returns the elem of this selem
-    pub fn get_elem(&self) -> Elem<'a> {
-        self.1
-    }
-
-    pub fn get_name(&self) -> Result<String> {
-        let c = unsafe { alsa::snd_mixer_selem_id_get_name(self.0.as_ptr()) };
-        from_const("snd_mixer_selem_id_get_name", c).and_then(|s| Ok(s.to_string()))
-    }
-
-    pub fn get_index(&self) -> u32 {
-        unsafe { alsa::snd_mixer_selem_id_get_index(self.0.as_ptr()) }
+    pub fn get_id(&'a self) -> &'a SelemId {
+        &self.0
     }
 
     pub fn has_capture_volume(&self) -> bool {
@@ -285,6 +275,14 @@ impl<'a> Selem<'a> {
     }
 }
 
+impl<'a> Deref for Selem<'a> {
+    type Target = Elem<'a>;
+
+    /// returns the elem of this selem
+    fn deref(&self) -> &Elem<'a> {
+        &self.1
+    }
+}
 
 #[derive(Copy, Clone)]
 pub enum SelemChannelId {
@@ -299,20 +297,26 @@ pub enum SelemChannelId {
     SideRight   = alsa::SND_MIXER_SCHN_SIDE_RIGHT as isize,
     RearCenter  = alsa::SND_MIXER_SCHN_REAR_CENTER as isize,
     Last        = alsa::SND_MIXER_SCHN_LAST as isize,
-    // Mono        = alsa::SND_MIXER_SCHN_MONO as isize,
+}
+
+impl SelemChannelId {
+    pub fn mono() -> isize {
+        alsa::SND_MIXER_SCHN_MONO as isize
+    }
 }
 
 #[test]
 fn print_mixer_of_cards() {
+    use super::card;
+
     for card in card::Iter::new().map(|c| c.unwrap()) {
         println!("Card #{}: {} ({})", card.get_index(), card.get_name().unwrap(), card.get_longname().unwrap());
 
-        let mixer = Mixer::new(&card).unwrap();
+        let mixer = Mixer::new(format!("hw:{}", card.get_index()).as_str()).unwrap();
         for elem in Iter::new(&mixer) {
 
-            assert!(elem.is_null() == false );
             let selem = Selem::new(elem);
-            println!("\tMixer element {}:{}", selem.get_index(), selem.get_name().unwrap());
+            println!("\tMixer element {}:{}", selem.get_id().get_index(), selem.get_id().get_name().unwrap());
 
             if selem.has_volume() {
                 print!("\t  Volume limits: ");
@@ -371,17 +375,15 @@ fn print_mixer_of_cards() {
 
 #[test]
 fn get_and_set_playback_volume() {
-    let card = card::Card::new(2);
-    let mixer = Mixer::new(&card).unwrap();
-    let selem = Selem::find_by_name(&mixer, "Speaker").unwrap();
-    assert!(!selem.get_elem().is_null());
+    let mixer = Mixer::new("hw:2").unwrap();
+    let selem = mixer.find_selem("Speaker").unwrap();
 
     let range: [i64;2] = selem.get_playback_volume_range();
     let mut channel: i32 = 0;
     for c in 0..SelemChannelId::Last as i32 {
         if selem.has_playback_channel(c) { channel = c; break }
     }
-    println!("Testing on {} with limits {}-{} on channel {}", selem.get_name().unwrap(), range[0], range[1], channel);
+    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), range[0], range[1], channel);
 
     let old: i64 = selem.get_playback_volume(channel).unwrap();
     let new: i64 = range[1] / 2;
@@ -400,17 +402,15 @@ fn get_and_set_playback_volume() {
 
 #[test]
 fn get_and_set_capture_volume() {
-    let card = card::Card::new(2);
-    let mixer = Mixer::new(&card).unwrap();
-    let selem = Selem::find_by_name(&mixer, "Mic").unwrap();
-    assert!(!selem.get_elem().is_null());
+    let mixer = Mixer::new("hw:2").unwrap();
+    let selem = mixer.find_selem("Mic").unwrap();
 
     let range: [i64;2] = selem.get_capture_volume_range();
     let mut channel: i32 = 0;
     for c in 0..SelemChannelId::Last as i32 {
         if selem.has_capture_channel(c) { channel = c; break }
     }
-    println!("Testing on {} with limits {}-{} on channel {}", selem.get_name().unwrap(), range[0], range[1], channel);
+    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), range[0], range[1], channel);
 
     let old: i64 = selem.get_capture_volume(channel).unwrap();
     let new: i64 = range[1] / 2;
