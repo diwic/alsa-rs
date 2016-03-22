@@ -62,6 +62,7 @@ pub mod poll;
 pub use poll::PollDescriptors as PollDescriptors;
 
 pub mod mixer;
+pub use mixer::Mixer as Mixer;
 
 mod io;
 pub use io::Output;
