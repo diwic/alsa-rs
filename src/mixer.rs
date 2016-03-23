@@ -3,7 +3,7 @@
 use std::ffi::{CStr, CString};
 use std::{ptr, mem, fmt};
 use std::ops::Deref;
-use libc::c_long;
+use libc::{c_long};
 
 use alsa;
 use super::error::*;
@@ -96,7 +96,8 @@ impl<'a> Iterator for Iter<'a> {
 
 }
 
-/// Wrapper for `snd_mixer_selem_id_t`, using array of hardcoded length
+/// Wrapper for [snd_mixer_selem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html)
+/// No allocation (uses fixed array)
 // #[derive(Copy, Clone, Debug)]
 pub struct SelemId([u8; SELEM_ID_SIZE]);
 
@@ -117,7 +118,7 @@ impl SelemId {
         SelemId(unsafe { mem::zeroed() })
     }
 
-    /// Convert SelemId into ``*mut *mut snd_mixer_selem_id_t` that the alsa call needs.
+    /// Convert SelemId into ``*mut snd_mixer_selem_id_t` that the alsa call needs.
     /// See [snd_mixer_selem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html)
     #[inline]
     fn as_ptr(&self) -> *mut alsa::snd_mixer_selem_id_t {
@@ -205,7 +206,7 @@ impl<'a> Selem<'a> {
     ///
     /// # Example
     /// ```ignore
-    /// let db_value = selem.capture_decibel_range() as f32 / 100.0;
+    /// let db_value = selem.get_capture_decibel_range() as f32 / 100.0;
     /// ```
     pub fn get_capture_decibel_range(&self) -> [i64; 2] {
         let mut min: c_long = 0;
@@ -226,7 +227,7 @@ impl<'a> Selem<'a> {
     ///
     /// # Example
     /// ```ignore
-    /// let db_value = selem.playback_decibel_range() as f32 / 100.0;
+    /// let db_value = selem.get_playback_decibel_range() as f32 / 100.0;
     /// ```
     pub fn get_playback_decibel_range(&self) -> [i64; 2] {
         let mut min: c_long = 0;
@@ -273,12 +274,12 @@ impl<'a> Selem<'a> {
     pub fn ask_playback_vol_decibel(&self, volume: i64) -> Result<i64> {
         let mut decibel_value: c_long = 0;
         acheck!(snd_mixer_selem_ask_playback_vol_dB(self.handle, volume, &mut decibel_value))
-            .and_then(|_| Ok(decibel_value as i64) )
+            .map(|_| decibel_value as i64)
     }
 
     pub fn get_capture_volume(&self, channel: SelemChannelId) -> Result<i64> {
         let mut value: c_long = 0;
-        acheck!(snd_mixer_selem_get_capture_volume(self.handle, channel as i32, &mut value)).and_then(|_| Ok(value as i64))
+        acheck!(snd_mixer_selem_get_capture_volume(self.handle, channel as i32, &mut value)).map(|_| value as i64)
     }
 
     /// returns volume in decibels*100. To get correct dB value, devide by 100, i.e.
@@ -296,7 +297,7 @@ impl<'a> Selem<'a> {
     pub fn ask_capture_vol_decibel(&self, volume: i64) -> Result<i64> {
         let mut decibel_value: c_long = 0;
         acheck!(snd_mixer_selem_ask_capture_vol_dB (self.handle, volume, &mut decibel_value))
-            .and_then(|_| Ok(decibel_value as i64))
+            .map(|_| decibel_value as i64)
     }
 
     pub fn set_playback_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {
@@ -305,6 +306,45 @@ impl<'a> Selem<'a> {
 
     pub fn set_capture_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {
         acheck!(snd_mixer_selem_set_capture_volume(self.handle, channel as i32, value as c_long)).map(|_| ())
+    }
+
+    pub fn is_enumerated(&self) -> bool {
+        unsafe { alsa::snd_mixer_selem_is_enumerated(self.handle) == 1 }
+    }
+
+    pub fn is_enum_playback(&self) -> bool {
+        unsafe { alsa::snd_mixer_selem_is_enum_playback(self.handle) == 1 }
+    }
+
+    pub fn is_enum_capture(&self) -> bool {
+        unsafe { alsa::snd_mixer_selem_is_enum_capture(self.handle) == 1 }
+    }
+
+    pub fn get_enum_items(&self) -> Result<u32> {
+        acheck!(snd_mixer_selem_get_enum_items(self.handle)).map(|v| v as u32)
+    }
+
+    pub fn get_enum_item_name(&self, idx: u32) -> Result<String> {
+        let mut temp = [0i8; 128];
+        acheck!(snd_mixer_selem_get_enum_item_name(self.handle, idx, temp.len()-1, temp.as_mut_ptr()))
+            .and_then(|_| from_const("snd_mixer_selem_get_enum_item_name", temp.as_ptr()))
+            .map(|v| v.into())
+    }
+
+    /// Enumerates over valid Enum values
+    pub fn iter_enum(&self) -> Result<IterEnum> {
+        Ok(IterEnum(self, 0, try!(self.get_enum_items())))
+    }
+
+    pub fn get_enum_item(&self, channel: SelemChannelId) -> Result<u32> {
+        let mut temp = 0;
+        acheck!(snd_mixer_selem_get_enum_item(self.handle, channel as i32, &mut temp))
+            .map(|_| temp)
+    }
+
+    pub fn set_enum_item(&self, channel: SelemChannelId, idx: u32) -> Result<()> {
+        acheck!(snd_mixer_selem_set_enum_item(self.handle, channel as i32, idx))
+            .map(|_| ())
     }
 }
 
@@ -317,7 +357,18 @@ impl<'a> Deref for Selem<'a> {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+pub struct IterEnum<'a>(&'a Selem<'a>, u32, u32);
+
+impl<'a> Iterator for IterEnum<'a> {
+    type Item = Result<String>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.1 >= self.2 { None }
+        else { self.1 += 1; Some(self.0.get_enum_item_name(self.1-1)) }
+    }
+}
+
+/// Wrapper for [SND_MIXER_SCHN_*](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html) constants
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelemChannelId {
     Unknown     = alsa::SND_MIXER_SCHN_UNKNOWN as isize,
     FrontLeft   = alsa::SND_MIXER_SCHN_FRONT_LEFT as isize,
@@ -338,9 +389,7 @@ static ALL_CHANNELS: [SelemChannelId; 9] =
    SelemChannelId::RearCenter];
 
 impl SelemChannelId {
-    pub fn mono() -> isize {
-        alsa::SND_MIXER_SCHN_MONO as isize
-    }
+    pub fn mono() -> SelemChannelId { SelemChannelId::FrontLeft }
 
     pub fn all() -> &'static [SelemChannelId] { &ALL_CHANNELS[..] }
 }
@@ -361,7 +410,8 @@ fn print_mixer_of_cards() {
         let mixer = Mixer::new(&format!("hw:{}", card.get_index()), false).unwrap();
         for selem in mixer.iter().filter_map(|e| Selem::new(e)) {
 
-            println!("\tMixer element {}:{}:", selem.get_id().get_name().unwrap(), selem.get_id().get_index());
+            let sid = selem.get_id();
+            println!("\tMixer element {},{}:", sid.get_name().unwrap(), sid.get_index());
 
             if selem.has_volume() {
                 print!("\t  Volume limits: ");
@@ -372,6 +422,16 @@ fn print_mixer_of_cards() {
                 if selem.has_playback_volume() {
                     print!("Playback = {} - {}", selem.get_playback_volume_range()[0],selem.get_playback_volume_range()[1]);
                     print!(" / {}dB - {}dB ", selem.get_playback_decibel_range()[0] as f32 / 100.0, selem.get_playback_decibel_range()[1] as f32 / 100.0);
+                }
+                println!("");
+            }
+
+            if selem.is_enumerated() {
+                print!("\t  Valid values: ");
+                for v in selem.iter_enum().unwrap() { print!("{}, ", v.unwrap()) };
+                print!("\n\t  Current values: ");
+                for v in SelemChannelId::all().iter().filter_map(|&v| selem.get_enum_item(v).ok()) {
+                    print!("{}, ", selem.get_enum_item_name(v).unwrap());
                 }
                 println!("");
             }
