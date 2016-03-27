@@ -36,7 +36,7 @@ impl Mixer {
     pub fn open(nonblock: bool) -> Result<Mixer> {
         let mut r = ptr::null_mut();
         let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_CTL_NONBLOCK does not exist in alsa-sys
-        acheck!(snd_mixer_open(&mut r, flags)).map(|_| Mixer(r)) 
+        acheck!(snd_mixer_open(&mut r, flags)).map(|_| Mixer(r))
     }
 
     pub fn attach(&mut self, name: &CStr) -> Result<()> {
@@ -155,7 +155,7 @@ impl<'a> Selem<'a> {
            { Some(Selem(elem)) } else { None }
     }
 
-    /// TODO: This function might change to support regopt and to return the mixer class 
+    /// TODO: This function might change to support regopt and to return the mixer class
     pub fn register(mixer: &mut Mixer) -> Result<()> {
         acheck!(snd_mixer_selem_register(mixer.0, ptr::null_mut(), ptr::null_mut())).map(|_| ())
     }
@@ -273,7 +273,7 @@ impl<'a> Selem<'a> {
     /// Asks alsa to convert playback volume to decibels
     pub fn ask_playback_vol_decibel(&self, volume: i64) -> Result<i64> {
         let mut decibel_value: c_long = 0;
-        acheck!(snd_mixer_selem_ask_playback_vol_dB(self.handle, volume, &mut decibel_value))
+        acheck!(snd_mixer_selem_ask_playback_vol_dB(self.handle, volume as c_long, &mut decibel_value))
             .map(|_| decibel_value as i64)
     }
 
@@ -296,7 +296,7 @@ impl<'a> Selem<'a> {
     /// Asks alsa to convert capture volume to decibels
     pub fn ask_capture_vol_decibel(&self, volume: i64) -> Result<i64> {
         let mut decibel_value: c_long = 0;
-        acheck!(snd_mixer_selem_ask_capture_vol_dB (self.handle, volume, &mut decibel_value))
+        acheck!(snd_mixer_selem_ask_capture_vol_dB (self.handle, volume as c_long, &mut decibel_value))
             .map(|_| decibel_value as i64)
     }
 
@@ -325,7 +325,7 @@ impl<'a> Selem<'a> {
     }
 
     pub fn get_enum_item_name(&self, idx: u32) -> Result<String> {
-        let mut temp = [0i8; 128];
+        let mut temp = [0 as ::libc::c_char; 128];
         acheck!(snd_mixer_selem_get_enum_item_name(self.handle, idx, temp.len()-1, temp.as_mut_ptr()))
             .and_then(|_| from_const("snd_mixer_selem_get_enum_item_name", temp.as_ptr()))
             .map(|v| v.into())
