@@ -52,6 +52,46 @@ pub use super::chmap::{Chmap, ChmapPosition, ChmapType, ChmapsQuery};
 /// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
 
+pub struct Info(*mut alsa::snd_pcm_info_t);
+
+impl Info {
+    pub fn new() -> Result<Info> {
+        let mut p = ptr::null_mut();
+        acheck!(snd_pcm_info_malloc(&mut p)).map(|_| Info(p))
+    }
+
+    pub fn get_card(&self) -> i32 {
+        unsafe { alsa::snd_pcm_info_get_card(self.0) }
+    }
+
+    pub fn get_device(&self) -> u32 {
+        unsafe { alsa::snd_pcm_info_get_device(self.0) }
+    }
+
+    pub fn get_subdevice(&self) -> u32 {
+        unsafe { alsa::snd_pcm_info_get_subdevice(self.0) }
+    }
+
+    pub fn get_id(&self) -> Result<&str> {
+        let c = unsafe { alsa::snd_pcm_info_get_id(self.0) };
+        from_const("snd_pcm_info_get_id", c)
+    }
+
+    pub fn get_name(&self) -> Result<&str> {
+        let c = unsafe { alsa::snd_pcm_info_get_name(self.0) };
+        from_const("snd_pcm_info_get_name", c)
+    }
+
+    pub fn get_subdevice_name(&self) -> Result<&str> {
+        let c = unsafe { alsa::snd_pcm_info_get_subdevice_name(self.0) };
+        from_const("snd_pcm_info_get_subdevice_name", c)
+    }
+}
+
+impl Drop for Info {
+    fn drop(&mut self) { unsafe { alsa::snd_pcm_info_free(self.0) }; }
+}
+
 /// [snd_pcm_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - start here for audio playback and recording
 pub struct PCM(*mut alsa::snd_pcm_t, cell::Cell<bool>);
 
@@ -106,7 +146,7 @@ impl PCM {
     fn verify_format(&self, f: Format) -> Result<()> {
         let ff = try!(self.hw_params_current().and_then(|h| h.get_format()));
         if ff == f { Ok(()) }
-        else { 
+        else {
             let s = format!("Invalid sample format ({:?}, expected {:?})", ff, f);
             Err(Error::new(Some(s.into()), INVALID_FORMAT))
         }
@@ -142,6 +182,11 @@ impl PCM {
     pub fn sw_params_current<'a>(&'a self) -> Result<SwParams<'a>> {
         SwParams::new(&self).and_then(|h|
             acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
+    }
+
+    pub fn info(&self) -> Result<(Info)> {
+        Info::new().and_then(|info|
+            acheck!(snd_pcm_info(self.0, info.0)).map(|_| info ))
     }
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
@@ -597,6 +642,19 @@ impl Status {
     }
 }
 
+#[test]
+fn info_from_default() {
+    use std::ffi::CString;
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
+    let info = pcm.info().unwrap();
+    println!("PCM Info:");
+    println!("\tCard: {}", info.get_card());
+    println!("\tDevice: {}", info.get_device());
+    println!("\tSubdevice: {}", info.get_subdevice());
+    println!("\tId: {}", info.get_id().unwrap());
+    println!("\tName: {}", info.get_name().unwrap());
+    println!("\tSubdevice Name: {}", info.get_subdevice_name().unwrap());
+}
 
 #[test]
 fn record_from_default() {
