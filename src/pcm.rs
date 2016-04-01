@@ -43,7 +43,7 @@ use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ffi::CStr;
-use std::{io, fmt, ptr, mem, cell};
+use std::{io, fmt, ptr, cell};
 use super::error::*;
 use super::{Direction, Output, poll, ValueOr, chmap};
 
@@ -125,7 +125,8 @@ impl PCM {
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
-    pub fn state(&self) -> State { unsafe { mem::transmute(alsa::snd_pcm_state(self.0) as u8) } }
+    pub fn state(&self) -> State { State::from_c_int(
+        unsafe { alsa::snd_pcm_state(self.0) } as c_int, "snd_pcm_status_get_state").unwrap() }
 
     pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
     pub fn frames_to_bytes(&self, i: Frames) -> isize { unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }}
@@ -333,40 +334,42 @@ impl<'a, S: Copy> io::Write for IO<'a, S> {
 }
 
 
-/// [SND_PCM_STATE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum State {
-    Open = alsa::SND_PCM_STATE_OPEN as isize,
-    Setup = alsa::SND_PCM_STATE_SETUP as isize,
-    Prepared = alsa::SND_PCM_STATE_PREPARED as isize,
-    Running = alsa::SND_PCM_STATE_RUNNING as isize,
-    XRun = alsa::SND_PCM_STATE_XRUN as isize,
-    Draining = alsa::SND_PCM_STATE_DRAINING as isize,
-    Paused = alsa::SND_PCM_STATE_PAUSED as isize,
-    Suspended = alsa::SND_PCM_STATE_SUSPENDED as isize,
-    Disconnected = alsa::SND_PCM_STATE_DISCONNECTED as isize,
-}
+alsa_enum!(
+    /// [SND_PCM_STATE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    State, ALL_STATES[9],
 
-/// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Format {
-    Unknown = alsa::SND_PCM_FORMAT_UNKNOWN as isize,
-    S8 = alsa::SND_PCM_FORMAT_S8 as isize,
-    U8 = alsa::SND_PCM_FORMAT_U8 as isize,
-    S16LE = alsa::SND_PCM_FORMAT_S16_LE as isize,
-    S16BE = alsa::SND_PCM_FORMAT_S16_BE as isize,
-    U16LE = alsa::SND_PCM_FORMAT_U16_LE as isize,
-    U16BE = alsa::SND_PCM_FORMAT_U16_BE as isize,
-    S32LE = alsa::SND_PCM_FORMAT_S32_LE as isize,
-    S32BE = alsa::SND_PCM_FORMAT_S32_BE as isize,
-    U32LE = alsa::SND_PCM_FORMAT_U32_LE as isize,
-    U32BE = alsa::SND_PCM_FORMAT_U32_BE as isize,
-    FloatLE = alsa::SND_PCM_FORMAT_FLOAT_LE as isize,
-    FloatBE = alsa::SND_PCM_FORMAT_FLOAT_BE as isize,
-    Float64LE = alsa::SND_PCM_FORMAT_FLOAT64_LE as isize,
-    Float64BE = alsa::SND_PCM_FORMAT_FLOAT64_BE as isize,
+    Open = SND_PCM_STATE_OPEN,
+    Setup = SND_PCM_STATE_SETUP,
+    Prepared = SND_PCM_STATE_PREPARED,
+    Running = SND_PCM_STATE_RUNNING,
+    XRun = SND_PCM_STATE_XRUN,
+    Draining = SND_PCM_STATE_DRAINING,
+    Paused = SND_PCM_STATE_PAUSED,
+    Suspended = SND_PCM_STATE_SUSPENDED,
+    Disconnected = SND_PCM_STATE_DISCONNECTED,
+);
+
+alsa_enum!(
+    /// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    Format, ALL_FORMATS[15],
+
+    Unknown = SND_PCM_FORMAT_UNKNOWN,
+    S8 = SND_PCM_FORMAT_S8,
+    U8 = SND_PCM_FORMAT_U8,
+    S16LE = SND_PCM_FORMAT_S16_LE,
+    S16BE = SND_PCM_FORMAT_S16_BE,
+    U16LE = SND_PCM_FORMAT_U16_LE,
+    U16BE = SND_PCM_FORMAT_U16_BE,
+    S32LE = SND_PCM_FORMAT_S32_LE,
+    S32BE = SND_PCM_FORMAT_S32_BE,
+    U32LE = SND_PCM_FORMAT_U32_LE,
+    U32BE = SND_PCM_FORMAT_U32_BE,
+    FloatLE = SND_PCM_FORMAT_FLOAT_LE,
+    FloatBE = SND_PCM_FORMAT_FLOAT_BE,
+    Float64LE = SND_PCM_FORMAT_FLOAT64_LE,
+    Float64BE = SND_PCM_FORMAT_FLOAT64_BE,
     // TODO: More formats...
-}
+);
 
 impl Format {
     #[cfg(target_endian = "little")] pub fn s16() -> Format { Format::S16LE }
@@ -388,15 +391,16 @@ impl Format {
     #[cfg(target_endian = "big")] pub fn float64() -> Format { Format::Float64BE }
 }
 
-/// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Access {
-    MMapInterleaved = alsa::SND_PCM_ACCESS_MMAP_INTERLEAVED as isize,
-    MMapNonInterleaved = alsa::SND_PCM_ACCESS_MMAP_NONINTERLEAVED as isize,
-    MMapComplex = alsa::SND_PCM_ACCESS_MMAP_COMPLEX as isize,
-    RWInterleaved = alsa::SND_PCM_ACCESS_RW_INTERLEAVED as isize,
-    RWNonInterleaved = alsa::SND_PCM_ACCESS_RW_NONINTERLEAVED as isize,
-}
+alsa_enum!(
+    /// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    Access, ALL_ACCESSES[5],
+
+    MMapInterleaved = SND_PCM_ACCESS_MMAP_INTERLEAVED,
+    MMapNonInterleaved = SND_PCM_ACCESS_MMAP_NONINTERLEAVED,
+    MMapComplex = SND_PCM_ACCESS_MMAP_COMPLEX,
+    RWInterleaved = SND_PCM_ACCESS_RW_INTERLEAVED,
+    RWNonInterleaved = SND_PCM_ACCESS_RW_NONINTERLEAVED,
+);
 
 /// [snd_pcm_hw_params_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___h_w___params.html) wrapper
 pub struct HwParams<'a>(*mut alsa::snd_pcm_hw_params_t, &'a PCM);
@@ -459,7 +463,8 @@ impl<'a> HwParams<'a> {
 
     pub fn get_format(&self) -> Result<Format> {
         let mut v = 0;
-        acheck!(snd_pcm_hw_params_get_format(self.0, &mut v)).map(|_| unsafe { mem::transmute(v as u8) })
+        acheck!(snd_pcm_hw_params_get_format(self.0, &mut v))
+            .and_then(|_| Format::from_c_int(v, "snd_pcm_hw_params_get_format"))
     }
 
     pub fn set_access(&self, v: Access) -> Result<()> {
@@ -468,7 +473,8 @@ impl<'a> HwParams<'a> {
 
     pub fn get_access(&self) -> Result<Access> {
         let mut v = 0;
-        acheck!(snd_pcm_hw_params_get_access(self.0, &mut v)).map(|_| unsafe { mem::transmute(v as u8) })
+        acheck!(snd_pcm_hw_params_get_access(self.0, &mut v))
+            .and_then(|_| Access::from_c_int(v as c_int, "snd_pcm_hw_params_get_access"))
     }
 
     pub fn set_period_size_near(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
@@ -630,7 +636,8 @@ impl Status {
         h
     }
 
-    pub fn get_state(&self) -> State { unsafe { mem::transmute(alsa::snd_pcm_status_get_state(self.ptr()) as u8) }}
+    pub fn get_state(&self) -> State { State::from_c_int(
+        unsafe { alsa::snd_pcm_status_get_state(self.ptr()) } as c_int, "snd_pcm_status_get_state").unwrap() }
 
     pub fn get_avail(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_avail(self.ptr()) as Frames }}
     pub fn get_delay(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_delay(self.ptr()) }}

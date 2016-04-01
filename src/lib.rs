@@ -6,6 +6,34 @@ extern crate libc;
 #[macro_use]
 extern crate bitflags;
 
+macro_rules! alsa_enum {
+ ($(#[$attr:meta])+ $name:ident, $static_name:ident [$count:expr], $( $a:ident = $b:ident),* ,) =>
+{
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+$(#[$attr])*
+pub enum $name {
+$(
+    $a = alsa::$b as isize,
+)*
+}
+
+static $static_name: [$name; $count] =
+  [ $( $name::$a, )* ];
+
+impl $name {
+    /// Returns a slice of all possible values; useful for iteration
+    pub fn all() -> &'static [$name] { &$static_name[..] }
+
+    #[allow(dead_code)]
+    fn from_c_int(c: ::libc::c_int, s: &'static str) -> Result<$name> {
+        Self::all().iter().find(|&&x| c == x as ::libc::c_int).map(|&x| x)
+            .ok_or_else(|| Error::new(Some(s.into()), INVALID_ENUM))
+    }
+}
+
+}
+}
+
 /// Replaces constants ending with PLAYBACK/CAPTURE as well as
 /// INPUT/OUTPUT
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

@@ -9,6 +9,7 @@ use std::ffi::CStr;
 
 const INVALID_STRING: c_int = 1;
 pub const INVALID_FORMAT: c_int = 2;
+pub const INVALID_ENUM: c_int = 3;
 
 /// Most ALSA functions can return a negative error code.
 /// If so, then that error code is wrapped into this `Error` struct.

@@ -367,31 +367,25 @@ impl<'a> Iterator for IterEnum<'a> {
     }
 }
 
-/// Wrapper for [SND_MIXER_SCHN_*](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html) constants
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SelemChannelId {
-    Unknown     = alsa::SND_MIXER_SCHN_UNKNOWN as isize,
-    FrontLeft   = alsa::SND_MIXER_SCHN_FRONT_LEFT as isize,
-    FrontRight  = alsa::SND_MIXER_SCHN_FRONT_RIGHT as isize,
-    RearLeft    = alsa::SND_MIXER_SCHN_REAR_LEFT as isize,
-    RearRight   = alsa::SND_MIXER_SCHN_REAR_RIGHT as isize,
-    FrontCenter = alsa::SND_MIXER_SCHN_FRONT_CENTER as isize,
-    Woofer      = alsa::SND_MIXER_SCHN_WOOFER as isize,
-    SideLeft    = alsa::SND_MIXER_SCHN_SIDE_LEFT as isize,
-    SideRight   = alsa::SND_MIXER_SCHN_SIDE_RIGHT as isize,
-    RearCenter  = alsa::SND_MIXER_SCHN_REAR_CENTER as isize,
-    Last        = alsa::SND_MIXER_SCHN_LAST as isize,
-}
+alsa_enum!(
+    /// Wrapper for [SND_MIXER_SCHN_*](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html) constants
+    SelemChannelId, ALL_SELEM_CHANNEL_ID[11],
 
-static ALL_CHANNELS: [SelemChannelId; 9] =
-  [SelemChannelId::FrontLeft, SelemChannelId::FrontRight, SelemChannelId::RearLeft, SelemChannelId::RearRight,
-   SelemChannelId::FrontCenter, SelemChannelId::Woofer, SelemChannelId::SideLeft, SelemChannelId::SideRight,
-   SelemChannelId::RearCenter];
+    Unknown     = SND_MIXER_SCHN_UNKNOWN,
+    FrontLeft   = SND_MIXER_SCHN_FRONT_LEFT,
+    FrontRight  = SND_MIXER_SCHN_FRONT_RIGHT,
+    RearLeft    = SND_MIXER_SCHN_REAR_LEFT,
+    RearRight   = SND_MIXER_SCHN_REAR_RIGHT,
+    FrontCenter = SND_MIXER_SCHN_FRONT_CENTER,
+    Woofer      = SND_MIXER_SCHN_WOOFER,
+    SideLeft    = SND_MIXER_SCHN_SIDE_LEFT,
+    SideRight   = SND_MIXER_SCHN_SIDE_RIGHT,
+    RearCenter  = SND_MIXER_SCHN_REAR_CENTER,
+    Last        = SND_MIXER_SCHN_LAST,
+);
 
 impl SelemChannelId {
     pub fn mono() -> SelemChannelId { SelemChannelId::FrontLeft }
-
-    pub fn all() -> &'static [SelemChannelId] { &ALL_CHANNELS[..] }
 }
 
 impl fmt::Display for SelemChannelId {

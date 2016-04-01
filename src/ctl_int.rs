@@ -4,7 +4,7 @@ use std::ffi::{CStr, CString};
 use super::error::*;
 use std::{ptr, mem, fmt};
 use super::Card;
-use libc::{c_uint, c_void, size_t, c_long};
+use libc::{c_uint, c_void, size_t, c_long, c_int};
 
 /// We prefer not to allocate for every ElemId, ElemInfo or ElemValue.
 /// But we don't know if these will increase in the future or on other platforms.
@@ -68,29 +68,31 @@ impl CardInfo {
     pub fn get_card(&self) -> Card { Card::new(unsafe { alsa::snd_ctl_card_info_get_card(self.0) })}
 }
 
-/// [SND_CTL_ELEM_IFACE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ElemIface {
-    Card = alsa::SND_CTL_ELEM_IFACE_CARD as isize,
-    Hwdep = alsa::SND_CTL_ELEM_IFACE_HWDEP as isize,
-    Mixer = alsa::SND_CTL_ELEM_IFACE_MIXER as isize,
-    PCM = alsa::SND_CTL_ELEM_IFACE_PCM as isize,
-    Rawmidi = alsa::SND_CTL_ELEM_IFACE_RAWMIDI as isize,
-    Timer = alsa::SND_CTL_ELEM_IFACE_TIMER as isize,
-    Sequencer = alsa::SND_CTL_ELEM_IFACE_SEQUENCER as isize,
-}
+alsa_enum!(
+    /// [SND_CTL_ELEM_IFACE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) constants
+    ElemIface, ALL_ELEMIFACE[7],
 
-/// [SND_CTL_ELEM_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ElemType {
-    None = alsa::SND_CTL_ELEM_TYPE_NONE as isize,
-    Boolean = alsa::SND_CTL_ELEM_TYPE_BOOLEAN as isize,
-    Integer = alsa::SND_CTL_ELEM_TYPE_INTEGER as isize,
-    Enumerated = alsa::SND_CTL_ELEM_TYPE_ENUMERATED as isize,
-    Bytes = alsa::SND_CTL_ELEM_TYPE_BYTES as isize,
-    IEC958 = alsa::SND_CTL_ELEM_TYPE_IEC958 as isize,
-    Integer64 = alsa::SND_CTL_ELEM_TYPE_INTEGER64 as isize,
-}
+    Card = SND_CTL_ELEM_IFACE_CARD,
+    Hwdep = SND_CTL_ELEM_IFACE_HWDEP,
+    Mixer = SND_CTL_ELEM_IFACE_MIXER,
+    PCM = SND_CTL_ELEM_IFACE_PCM,
+    Rawmidi = SND_CTL_ELEM_IFACE_RAWMIDI,
+    Timer = SND_CTL_ELEM_IFACE_TIMER,
+    Sequencer = SND_CTL_ELEM_IFACE_SEQUENCER,
+);
+
+alsa_enum!(
+    /// [SND_CTL_ELEM_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) constants
+    ElemType, ALL_ELEMTYPE[7],
+
+    None = SND_CTL_ELEM_TYPE_NONE,
+    Boolean = SND_CTL_ELEM_TYPE_BOOLEAN,
+    Integer = SND_CTL_ELEM_TYPE_INTEGER,
+    Enumerated = SND_CTL_ELEM_TYPE_ENUMERATED,
+    Bytes = SND_CTL_ELEM_TYPE_BYTES,
+    IEC958 = SND_CTL_ELEM_TYPE_IEC958,
+    Integer64 = SND_CTL_ELEM_TYPE_INTEGER64,
+);
 
 /// [snd_ctl_elem_value_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct ElemValue {
@@ -214,7 +216,8 @@ pub fn elem_info_new() -> Result<ElemInfo> {
 }
 
 impl ElemInfo {
-    pub fn get_type(&self) -> ElemType { unsafe { mem::transmute(alsa::snd_ctl_elem_info_get_type(self.0) as u8) } }
+    pub fn get_type(&self) -> ElemType { ElemType::from_c_int(
+        unsafe { alsa::snd_ctl_elem_info_get_type(self.0) } as c_int, "snd_ctl_elem_info_get_type").unwrap() }
     pub fn get_count(&self) -> u32 { unsafe { alsa::snd_ctl_elem_info_get_count(self.0) as u32 } }
 }
 
@@ -262,7 +265,8 @@ impl ElemId {
     pub fn get_subdevice(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_subdevice(elem_id_ptr(&self)) as u32 }}
     pub fn get_numid(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_numid(elem_id_ptr(&self)) as u32 }}
     pub fn get_index(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_index(elem_id_ptr(&self)) as u32 }}
-    pub fn get_interface(&self) -> ElemIface { unsafe { mem::transmute(alsa::snd_ctl_elem_id_get_interface(elem_id_ptr(&self)) as u8) }}
+    pub fn get_interface(&self) -> ElemIface { ElemIface::from_c_int(
+        unsafe { alsa::snd_ctl_elem_id_get_interface(elem_id_ptr(&self)) } as c_int, "snd_ctl_elem_id_get_interface").unwrap() }
 }
 
 impl fmt::Debug for ElemId {

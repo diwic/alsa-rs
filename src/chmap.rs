@@ -3,53 +3,54 @@ use libc;
 use std::{fmt, mem, ptr, slice};
 use super::error::*;
 
+alsa_enum!(
+    /// [SND_CHMAP_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    ChmapType, ALL_CHMAP_TYPES[4],
 
-/// [SND_CHMAP_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ChmapType {
-    None = alsa::SND_CHMAP_TYPE_NONE as isize,
-    Fixed = alsa::SND_CHMAP_TYPE_FIXED as isize,
-    Var = alsa::SND_CHMAP_TYPE_VAR as isize,
-    Paired = alsa::SND_CHMAP_TYPE_PAIRED as isize,
-}
+    None = SND_CHMAP_TYPE_NONE,
+    Fixed = SND_CHMAP_TYPE_FIXED,
+    Var = SND_CHMAP_TYPE_VAR,
+    Paired = SND_CHMAP_TYPE_PAIRED,
+);
 
-/// [SND_CHMAP_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ChmapPosition {
-    Unknown = alsa::SND_CHMAP_UNKNOWN as isize,
-    NA = alsa::SND_CHMAP_NA as isize,
-    Mono = alsa::SND_CHMAP_MONO as isize,
-    FL = alsa::SND_CHMAP_FL as isize,
-    FR = alsa::SND_CHMAP_FR as isize,
-    RL = alsa::SND_CHMAP_RL as isize,
-    SR = alsa::SND_CHMAP_SR as isize,
-    RC = alsa::SND_CHMAP_RC as isize,
-    FLC = alsa::SND_CHMAP_FLC as isize,
-    FRC = alsa::SND_CHMAP_FRC as isize,
-    RLC = alsa::SND_CHMAP_RLC as isize,
-    RRC = alsa::SND_CHMAP_RRC as isize,
-    FLW = alsa::SND_CHMAP_FLW as isize,
-    FRW = alsa::SND_CHMAP_FRW as isize,
-    FLH = alsa::SND_CHMAP_FLH as isize,
-    FCH = alsa::SND_CHMAP_FCH as isize,
-    FRH = alsa::SND_CHMAP_FRH as isize,
-    TC = alsa::SND_CHMAP_TC as isize,
-    TFL = alsa::SND_CHMAP_TFL as isize,
-    TFR = alsa::SND_CHMAP_TFR as isize,
-    TFC = alsa::SND_CHMAP_TFC as isize,
-    TRL = alsa::SND_CHMAP_TRL as isize,
-    TRR = alsa::SND_CHMAP_TRR as isize,
-    TRC = alsa::SND_CHMAP_TRC as isize,
-    TFLC = alsa::SND_CHMAP_TFLC as isize,
-    TFRC = alsa::SND_CHMAP_TFRC as isize,
-    TSL = alsa::SND_CHMAP_TSL as isize,
-    TSR = alsa::SND_CHMAP_TSR as isize,
-    LLFE = alsa::SND_CHMAP_LLFE as isize,
-    RLFE = alsa::SND_CHMAP_RLFE as isize,
-    BC = alsa::SND_CHMAP_BC as isize,
-    BLC = alsa::SND_CHMAP_BLC as isize,
-    BRC = alsa::SND_CHMAP_BRC as isize,
-}
+alsa_enum!(
+    /// [SND_CHMAP_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    ChmapPosition, ALL_CHMAP_POSITIONS[33],
+
+    Unknown = SND_CHMAP_UNKNOWN,
+    NA = SND_CHMAP_NA,
+    Mono = SND_CHMAP_MONO,
+    FL = SND_CHMAP_FL,
+    FR = SND_CHMAP_FR,
+    RL = SND_CHMAP_RL,
+    SR = SND_CHMAP_SR,
+    RC = SND_CHMAP_RC,
+    FLC = SND_CHMAP_FLC,
+    FRC = SND_CHMAP_FRC,
+    RLC = SND_CHMAP_RLC,
+    RRC = SND_CHMAP_RRC,
+    FLW = SND_CHMAP_FLW,
+    FRW = SND_CHMAP_FRW,
+    FLH = SND_CHMAP_FLH,
+    FCH = SND_CHMAP_FCH,
+    FRH = SND_CHMAP_FRH,
+    TC = SND_CHMAP_TC,
+    TFL = SND_CHMAP_TFL,
+    TFR = SND_CHMAP_TFR,
+    TFC = SND_CHMAP_TFC,
+    TRL = SND_CHMAP_TRL,
+    TRR = SND_CHMAP_TRR,
+    TRC = SND_CHMAP_TRC,
+    TFLC = SND_CHMAP_TFLC,
+    TFRC = SND_CHMAP_TFRC,
+    TSL = SND_CHMAP_TSL,
+    TSR = SND_CHMAP_TSR,
+    LLFE = SND_CHMAP_LLFE,
+    RLFE = SND_CHMAP_RLFE,
+    BC = SND_CHMAP_BC,
+    BLC = SND_CHMAP_BLC,
+    BRC = SND_CHMAP_BRC,
+);
 
 impl fmt::Display for ChmapPosition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -99,7 +100,7 @@ impl<'a> From<&'a [ChmapPosition]> for Chmap {
 
 impl<'a> From<&'a Chmap> for Vec<ChmapPosition> {
     fn from(a: &'a Chmap) -> Vec<ChmapPosition> {
-        a.as_slice().iter().map(|&v| unsafe { mem::transmute(v as u8) }).collect()
+        a.as_slice().iter().map(|&v| ChmapPosition::from_c_int(v as libc::c_int, "").unwrap()).collect()
     }
 }
 
@@ -123,7 +124,7 @@ impl Iterator for ChmapsQuery {
         let p = unsafe { *self.0.offset(self.1) };
         if p == ptr::null_mut() { return None; }
         self.1 += 1;
-        let t = unsafe { mem::transmute((*p)._type as u8) };
+        let t = ChmapType::from_c_int(unsafe { (*p)._type } as libc::c_int, "snd_pcm_query_chmaps").unwrap();
         let m = Chmap(unsafe { &mut (*p).map }, false);
         Some((t, m))
     }
