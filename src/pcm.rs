@@ -184,7 +184,7 @@ impl PCM {
             acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
     }
 
-    pub fn info(&self) -> Result<(Info)> {
+    pub fn info(&self) -> Result<Info> {
         Info::new().and_then(|info|
             acheck!(snd_pcm_info(self.0, info.0)).map(|_| info ))
     }
