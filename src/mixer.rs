@@ -324,6 +324,16 @@ impl<'a> Selem<'a> {
         acheck!(snd_mixer_selem_set_capture_switch_all(self.handle, value)).map(|_| ())
     }
 
+    pub fn get_playback_switch(&self, channel: SelemChannelId) -> Result<i32> {
+        let mut value: i32 = 0;
+        acheck!(snd_mixer_selem_get_playback_switch(self.handle, channel as i32, &mut value)).map(|_| value)
+    }
+
+    pub fn get_capture_switch(&self, channel: SelemChannelId) -> Result<i32> {
+        let mut value: i32 = 0;
+        acheck!(snd_mixer_selem_get_capture_switch(self.handle, channel as i32, &mut value)).map(|_| value)
+    }
+
     pub fn is_enumerated(&self) -> bool {
         unsafe { alsa::snd_mixer_selem_is_enumerated(self.handle) == 1 }
     }
