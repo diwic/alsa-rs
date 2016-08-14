@@ -3,9 +3,10 @@
 use std::ffi::{CStr, CString};
 use std::{ptr, mem, fmt};
 use std::ops::Deref;
-use libc::{c_long};
+use libc::{c_long, c_int};
 
 use alsa;
+use super::ValueOr;
 use super::error::*;
 
 const SELEM_ID_SIZE: usize = 64;
@@ -162,22 +163,6 @@ impl SelemId {
 
 }
 
-pub enum AccuracyDirection {
-    AccurateOrFirstBelow,
-    Accurate,
-    AccurateOrFirstAbove
-}
-
-impl AccuracyDirection {
-    pub fn to_i(&self) -> i32 {
-        match *self {
-            AccuracyDirection::AccurateOrFirstAbove => -1,
-            AccuracyDirection::Accurate => 0,
-            AccuracyDirection::AccurateOrFirstBelow => 1,
-        }
-    }
-}
-
 /// Wraps an Elem as a Selem
 // #[derive(Copy, Clone)]
 pub struct Selem<'a>(Elem<'a>);
@@ -318,8 +303,8 @@ impl<'a> Selem<'a> {
         acheck!(snd_mixer_selem_set_playback_volume(self.handle, channel as i32, value as c_long)).map(|_| ())
     }
 
-    pub fn set_playback_volume_decibel(&self, channel: SelemChannelId, value: i64, dir: AccuracyDirection) -> Result<()> {
-        acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, value as c_long, dir.to_i())).map(|_| ())
+    pub fn set_playback_db(&self, channel: SelemChannelId, value: mb, dir: ValueOr) -> Result<()> {
+        acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
     }
 
     pub fn set_capture_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {

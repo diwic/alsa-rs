@@ -91,7 +91,6 @@ pub use poll::PollDescriptors as PollDescriptors;
 
 pub mod mixer;
 pub use mixer::Mixer as Mixer;
-pub use mixer::AccuracyDirection as AccuracyDirection;
 
 mod io;
 pub use io::Output;
