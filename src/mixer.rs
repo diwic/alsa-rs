@@ -66,17 +66,17 @@ impl Drop for Mixer {
 /// Wrapper for a mB (millibel) value.
 ///
 /// Despite some ALSA functions named "dB", they actually take mB values instead.
-/// This is a wrapper type to help with those calculations.
+/// This is a wrapper type to help with those calculations. Its interior is the
+/// actual mB value.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[allow(non_camel_case_types)]
-pub struct mb(pub i64);
+pub struct MilliBel(pub i64);
 
-impl mb {
+impl MilliBel {
     pub fn to_db(self) -> f32 { (self.0 as f32) / 100.0 }
-    pub fn from_db(db: f32) -> Self { mb((db * 100.0) as i64) }
+    pub fn from_db(db: f32) -> Self { MilliBel((db * 100.0) as i64) }
 }
 
-impl Deref for mb {
+impl Deref for MilliBel {
     type Target = i64;
     fn deref(&self) -> &i64 { &self.0 }
 }
@@ -222,11 +222,11 @@ impl<'a> Selem<'a> {
     }
 
     /// returns (min, max) values.
-    pub fn get_capture_db_range(&self) -> (mb, mb) {
+    pub fn get_capture_db_range(&self) -> (MilliBel, MilliBel) {
         let mut min: c_long = 0;
         let mut max: c_long = 0;
         unsafe { alsa::snd_mixer_selem_get_capture_dB_range(self.handle, &mut min, &mut max) };
-        (mb(min as i64), mb(max as i64))
+        (MilliBel(min as i64), MilliBel(max as i64))
     }
 
     /// returns (min, max) values.
@@ -238,11 +238,11 @@ impl<'a> Selem<'a> {
     }
 
     /// returns (min, max) values.
-    pub fn get_playback_db_range(&self) -> (mb, mb) {
+    pub fn get_playback_db_range(&self) -> (MilliBel, MilliBel) {
         let mut min: c_long = 0;
         let mut max: c_long = 0;
         unsafe { alsa::snd_mixer_selem_get_playback_dB_range(self.handle, &mut min, &mut max) };
-        (mb(min as i64), mb(max as i64))
+        (MilliBel(min as i64), MilliBel(max as i64))
     }
 
     pub fn is_playback_mono(&self) -> bool {
@@ -269,16 +269,16 @@ impl<'a> Selem<'a> {
     }
 
     /// returns volume in millibels.
-    pub fn get_playback_vol_db(&self, channel: SelemChannelId) -> Result<mb> {
+    pub fn get_playback_vol_db(&self, channel: SelemChannelId) -> Result<MilliBel> {
         self.get_playback_volume(channel)
             .and_then(|volume| self.ask_playback_vol_db(volume))
     }
 
     /// Asks alsa to convert playback volume to millibels.
-    pub fn ask_playback_vol_db(&self, volume: i64) -> Result<mb> {
+    pub fn ask_playback_vol_db(&self, volume: i64) -> Result<MilliBel> {
         let mut decibel_value: c_long = 0;
         acheck!(snd_mixer_selem_ask_playback_vol_dB(self.handle, volume as c_long, &mut decibel_value))
-            .map(|_| mb(decibel_value as i64))
+            .map(|_| MilliBel(decibel_value as i64))
     }
 
     pub fn get_capture_volume(&self, channel: SelemChannelId) -> Result<i64> {
@@ -287,23 +287,23 @@ impl<'a> Selem<'a> {
     }
 
     /// returns volume in millibels.
-    pub fn get_capture_vol_db(&self, channel: SelemChannelId) -> Result<mb> {
+    pub fn get_capture_vol_db(&self, channel: SelemChannelId) -> Result<MilliBel> {
         self.get_capture_volume(channel)
             .and_then(|volume| self.ask_capture_vol_db(volume))
     }
 
     /// Asks alsa to convert capture volume to millibels
-    pub fn ask_capture_vol_db(&self, volume: i64) -> Result<mb> {
+    pub fn ask_capture_vol_db(&self, volume: i64) -> Result<MilliBel> {
         let mut decibel_value: c_long = 0;
         acheck!(snd_mixer_selem_ask_capture_vol_dB (self.handle, volume as c_long, &mut decibel_value))
-            .map(|_| mb(decibel_value as i64))
+            .map(|_| MilliBel(decibel_value as i64))
     }
 
     pub fn set_playback_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_volume(self.handle, channel as i32, value as c_long)).map(|_| ())
     }
 
-    pub fn set_playback_db(&self, channel: SelemChannelId, value: mb, dir: ValueOr) -> Result<()> {
+    pub fn set_playback_db(&self, channel: SelemChannelId, value: MilliBel, dir: ValueOr) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
     }
 
