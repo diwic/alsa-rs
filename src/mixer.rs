@@ -3,9 +3,10 @@
 use std::ffi::{CStr, CString};
 use std::{ptr, mem, fmt};
 use std::ops::Deref;
-use libc::{c_long};
+use libc::{c_long, c_int};
 
 use alsa;
+use super::ValueOr;
 use super::error::*;
 
 const SELEM_ID_SIZE: usize = 64;
@@ -300,6 +301,10 @@ impl<'a> Selem<'a> {
 
     pub fn set_playback_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_volume(self.handle, channel as i32, value as c_long)).map(|_| ())
+    }
+
+    pub fn set_playback_db(&self, channel: SelemChannelId, value: mb, dir: ValueOr) -> Result<()> {
+        acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
     }
 
     pub fn set_capture_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {
