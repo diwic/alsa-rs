@@ -3,8 +3,8 @@ use alsa;
 use std::ffi::{CStr, CString};
 use super::error::*;
 use std::{ptr, mem, fmt};
-use super::Card;
-use libc::{c_uint, c_void, size_t, c_long, c_int};
+use {Card, poll};
+use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 
 /// We prefer not to allocate for every ElemId, ElemInfo or ElemValue.
 /// But we don't know if these will increase in the future or on other platforms.
@@ -37,6 +37,22 @@ impl Ctl {
 impl Drop for Ctl {
     fn drop(&mut self) { unsafe { alsa::snd_ctl_close(self.0) }; }
 }
+
+impl poll::PollDescriptors for Ctl {
+    fn count(&self) -> usize {
+        unsafe { alsa::snd_ctl_poll_descriptors_count(self.0) as usize }
+    }
+    fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
+        let z = unsafe { alsa::snd_ctl_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
+        from_code("snd_ctl_poll_descriptors", z).map(|_| z as usize)
+    }
+    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
+        let mut r = 0;
+        let z = unsafe { alsa::snd_ctl_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
+        from_code("snd_ctl_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
+    }
+}
+
 
 pub fn ctl_ptr(a: &Ctl) -> *mut alsa::snd_ctl_t { a.0 }
 

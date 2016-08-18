@@ -3,7 +3,8 @@
 use std::ffi::{CStr, CString};
 use std::{ptr, mem, fmt};
 use std::ops::Deref;
-use libc::{c_long, c_int};
+use libc::{c_long, c_int, c_uint, c_short, pollfd};
+use poll;
 
 use alsa;
 use super::ValueOr;
@@ -62,6 +63,23 @@ impl Drop for Mixer {
         unsafe { alsa::snd_mixer_close(self.0) };
     }
 }
+
+
+impl poll::PollDescriptors for Mixer {
+    fn count(&self) -> usize {
+        unsafe { alsa::snd_mixer_poll_descriptors_count(self.0) as usize }
+    }
+    fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
+        let z = unsafe { alsa::snd_mixer_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
+        from_code("snd_mixer_poll_descriptors", z).map(|_| z as usize)
+    }
+    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
+        let mut r = 0;
+        let z = unsafe { alsa::snd_mixer_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
+        from_code("snd_mixer_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
+    }
+}
+
 
 /// Wrapper for a mB (millibel) value.
 ///
