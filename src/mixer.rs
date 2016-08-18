@@ -235,7 +235,7 @@ impl<'a> Selem<'a> {
         self.has_capture_volume() || self.has_playback_volume()
     }
 
-    /// returns range for capture volume in an array of [min,max] values
+    /// returns range for capture volume as (min, max) values
     pub fn get_capture_volume_range(&self) -> (i64, i64) {
         let mut min: c_long = 0;
         let mut max: c_long = 0;
@@ -327,6 +327,18 @@ impl<'a> Selem<'a> {
 
     pub fn set_playback_db(&self, channel: SelemChannelId, value: MilliBel, dir: ValueOr) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
+    }
+
+    pub fn set_capture_db(&self, channel: SelemChannelId, value: MilliBel, dir: ValueOr) -> Result<()> {
+        acheck!(snd_mixer_selem_set_capture_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
+    }
+
+    pub fn set_playback_db_all(&self, value: MilliBel, dir: ValueOr) -> Result<()> {
+        acheck!(snd_mixer_selem_set_playback_dB_all(self.handle, *value as c_long, dir as c_int)).map(|_| ())
+    }
+
+    pub fn set_capture_db_all(&self, value: MilliBel, dir: ValueOr) -> Result<()> {
+        acheck!(snd_mixer_selem_set_capture_dB_all(self.handle, *value as c_long, dir as c_int)).map(|_| ())
     }
 
     pub fn set_capture_volume(&self, channel: SelemChannelId, value: i64) -> Result<()> {
