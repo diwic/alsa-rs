@@ -347,7 +347,7 @@ alsa_enum!(
 
 alsa_enum!(
     /// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    Format, ALL_FORMATS[15],
+    Format, ALL_FORMATS[45],
 
     Unknown = SND_PCM_FORMAT_UNKNOWN,
     S8 = SND_PCM_FORMAT_S8,
@@ -356,6 +356,10 @@ alsa_enum!(
     S16BE = SND_PCM_FORMAT_S16_BE,
     U16LE = SND_PCM_FORMAT_U16_LE,
     U16BE = SND_PCM_FORMAT_U16_BE,
+    S24LE = SND_PCM_FORMAT_S24_LE,
+    S24BE = SND_PCM_FORMAT_S24_BE,
+    U24LE = SND_PCM_FORMAT_U24_LE,
+    U24BE = SND_PCM_FORMAT_U24_BE,
     S32LE = SND_PCM_FORMAT_S32_LE,
     S32BE = SND_PCM_FORMAT_S32_BE,
     U32LE = SND_PCM_FORMAT_U32_LE,
@@ -364,7 +368,35 @@ alsa_enum!(
     FloatBE = SND_PCM_FORMAT_FLOAT_BE,
     Float64LE = SND_PCM_FORMAT_FLOAT64_LE,
     Float64BE = SND_PCM_FORMAT_FLOAT64_BE,
-    // TODO: More formats...
+    IEC958SubframeLE = SND_PCM_FORMAT_IEC958_SUBFRAME_LE,
+    IEC958SubframeBE = SND_PCM_FORMAT_IEC958_SUBFRAME_BE,
+    MuLaw = SND_PCM_FORMAT_MU_LAW,
+    ALaw = SND_PCM_FORMAT_A_LAW,
+    ImaAdPCM = SND_PCM_FORMAT_IMA_ADPCM,
+    MPEG = SND_PCM_FORMAT_MPEG,
+    GSM = SND_PCM_FORMAT_GSM,
+    Special = SND_PCM_FORMAT_SPECIAL,
+    S243LE = SND_PCM_FORMAT_S24_3LE,
+    S243BE = SND_PCM_FORMAT_S24_3BE,
+    U243LE = SND_PCM_FORMAT_U24_3LE,
+    U243BE = SND_PCM_FORMAT_U24_3BE,
+    S203LE = SND_PCM_FORMAT_S20_3LE,
+    S203BE = SND_PCM_FORMAT_S20_3BE,
+    U203LE = SND_PCM_FORMAT_U20_3LE,
+    U203BE = SND_PCM_FORMAT_U20_3BE,
+    S183LE = SND_PCM_FORMAT_S18_3LE,
+    S183BE = SND_PCM_FORMAT_S18_3BE,
+    U183LE = SND_PCM_FORMAT_U18_3LE,
+    U183BE = SND_PCM_FORMAT_U18_3BE,
+    G72324 = SND_PCM_FORMAT_G723_24,
+    G723241B = SND_PCM_FORMAT_G723_24_1B,
+    G72340 = SND_PCM_FORMAT_G723_40,
+    G723401B = SND_PCM_FORMAT_G723_40_1B,
+    DSDU8 = SND_PCM_FORMAT_DSD_U8,
+    DSDU16LE = SND_PCM_FORMAT_DSD_U16_LE,
+//    DSDU32LE = SND_PCM_FORMAT_DSD_U32_LE,
+//    DSDU16BE = SND_PCM_FORMAT_DSD_U16_BE,
+//    DSDU32BE = SND_PCM_FORMAT_DSD_U32_BE,
 );
 
 impl Format {
@@ -373,6 +405,12 @@ impl Format {
 
     #[cfg(target_endian = "little")] pub fn u16() -> Format { Format::U16LE }
     #[cfg(target_endian = "big")] pub fn u16() -> Format { Format::U16BE }
+
+    #[cfg(target_endian = "little")] pub fn s24() -> Format { Format::S24LE }
+    #[cfg(target_endian = "big")] pub fn s24() -> Format { Format::S24BE }
+
+    #[cfg(target_endian = "little")] pub fn u24() -> Format { Format::U24LE }
+    #[cfg(target_endian = "big")] pub fn u24() -> Format { Format::U24BE }
 
     #[cfg(target_endian = "little")] pub fn s32() -> Format { Format::S32LE }
     #[cfg(target_endian = "big")] pub fn s32() -> Format { Format::S32BE }
@@ -385,6 +423,9 @@ impl Format {
 
     #[cfg(target_endian = "little")] pub fn float64() -> Format { Format::Float64LE }
     #[cfg(target_endian = "big")] pub fn float64() -> Format { Format::Float64BE }
+
+    #[cfg(target_endian = "little")] pub fn iec958_subframe() -> Format { Format::IEC958SubframeLE }
+    #[cfg(target_endian = "big")] pub fn iec958_subframe() -> Format { Format::IEC958SubframeBE }
 }
 
 alsa_enum!(
