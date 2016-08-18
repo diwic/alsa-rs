@@ -30,7 +30,7 @@ use std::ffi::{CStr};
 use super::error::*;
 use std::ptr;
 use super::{ctl_int, poll};
-use libc::{c_short, c_uint, c_ushort, c_int, pollfd};
+use libc::{c_short, c_uint, pollfd};
 
 
 /// [snd_hctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___h_control.html) wrapper
@@ -60,22 +60,17 @@ impl HCtl {
     }
 }
 
-extern "C" {
-    fn snd_hctl_poll_descriptors(hctl: *mut alsa::snd_hctl_t, pfds: *mut pollfd, space: c_uint) -> c_int;
-    fn snd_hctl_poll_descriptors_revents(hctl: *mut alsa::snd_hctl_t, pfds: *mut pollfd, nfds: c_uint, revents: *mut c_ushort) -> c_int;
-}
-
 impl poll::PollDescriptors for HCtl {
     fn count(&self) -> usize {
         unsafe { alsa::snd_hctl_poll_descriptors_count(self.0) as usize }
     }
     fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
-        let z = unsafe { snd_hctl_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
+        let z = unsafe { alsa::snd_hctl_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
         from_code("snd_hctl_poll_descriptors", z).map(|_| z as usize)
     }
     fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
         let mut r = 0;
-        let z = unsafe { snd_hctl_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
+        let z = unsafe { alsa::snd_hctl_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
         from_code("snd_hctl_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
     }
 }
