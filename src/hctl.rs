@@ -30,7 +30,7 @@ use std::ffi::{CStr};
 use super::error::*;
 use std::ptr;
 use super::{ctl_int, poll};
-use libc::{c_short, c_uint, pollfd};
+use libc::{c_short, c_uint, c_int, pollfd};
 
 
 /// [snd_hctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___h_control.html) wrapper
@@ -58,6 +58,9 @@ impl HCtl {
         let p = unsafe { alsa::snd_hctl_find_elem(self.0, ctl_int::elem_id_ptr(&id)) };
         if p == ptr::null_mut() { None } else { Some(Elem(&self, p)) }
     }
+
+    pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
+        acheck!(snd_hctl_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 }
 
 impl poll::PollDescriptors for HCtl {

@@ -32,6 +32,9 @@ impl Ctl {
 
     pub fn card_info(&self) -> Result<CardInfo> { CardInfo::new().and_then(|c|
         acheck!(snd_ctl_card_info(self.0, c.0)).map(|_| c)) }
+
+    pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
+        acheck!(snd_ctl_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 }
 
 impl Drop for Ctl {
