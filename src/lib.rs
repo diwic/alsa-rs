@@ -61,6 +61,14 @@ pub enum ValueOr {
     Greater = 1,
 }
 
+/// Rounding mode (used in some mixer related calls)
+pub enum Round {
+    /// Round down (towards negative infinity)
+    Floor = 0,
+    /// Rount up (towards positive infinity)
+    Ceil = 1,
+}
+
 mod error;
 pub use error::{Error, Result};
 

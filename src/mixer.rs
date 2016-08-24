@@ -1,13 +1,12 @@
 //! Mixer API - Simple Mixer API for mixer control
 //!
 use std::ffi::{CStr, CString};
-use std::{ptr, mem, fmt};
-use std::ops::Deref;
+use std::{ptr, mem, fmt, ops};
 use libc::{c_long, c_int, c_uint, c_short, pollfd};
 use poll;
 
 use alsa;
-use super::ValueOr;
+use super::Round;
 use super::error::*;
 
 const SELEM_ID_SIZE: usize = 64;
@@ -98,9 +97,19 @@ impl MilliBel {
     pub fn from_db(db: f32) -> Self { MilliBel((db * 100.0) as i64) }
 }
 
-impl Deref for MilliBel {
+impl ops::Deref for MilliBel {
     type Target = i64;
     fn deref(&self) -> &i64 { &self.0 }
+}
+
+impl ops::Add for MilliBel {
+    type Output = MilliBel;
+    fn add(self, rhs: Self) -> Self { MilliBel(self.0 + rhs.0) }
+}
+
+impl ops::Sub for MilliBel {
+    type Output = MilliBel;
+    fn sub(self, rhs: Self) -> Self { MilliBel(self.0 - rhs.0) }
 }
 
 /// Wraps [snd_mixer_elem_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___mixer.html)
@@ -325,19 +334,19 @@ impl<'a> Selem<'a> {
         acheck!(snd_mixer_selem_set_playback_volume(self.handle, channel as i32, value as c_long)).map(|_| ())
     }
 
-    pub fn set_playback_db(&self, channel: SelemChannelId, value: MilliBel, dir: ValueOr) -> Result<()> {
+    pub fn set_playback_db(&self, channel: SelemChannelId, value: MilliBel, dir: Round) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
     }
 
-    pub fn set_capture_db(&self, channel: SelemChannelId, value: MilliBel, dir: ValueOr) -> Result<()> {
+    pub fn set_capture_db(&self, channel: SelemChannelId, value: MilliBel, dir: Round) -> Result<()> {
         acheck!(snd_mixer_selem_set_capture_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
     }
 
-    pub fn set_playback_db_all(&self, value: MilliBel, dir: ValueOr) -> Result<()> {
+    pub fn set_playback_db_all(&self, value: MilliBel, dir: Round) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_dB_all(self.handle, *value as c_long, dir as c_int)).map(|_| ())
     }
 
-    pub fn set_capture_db_all(&self, value: MilliBel, dir: ValueOr) -> Result<()> {
+    pub fn set_capture_db_all(&self, value: MilliBel, dir: Round) -> Result<()> {
         acheck!(snd_mixer_selem_set_capture_dB_all(self.handle, *value as c_long, dir as c_int)).map(|_| ())
     }
 
@@ -411,7 +420,7 @@ impl<'a> Selem<'a> {
     }
 }
 
-impl<'a> Deref for Selem<'a> {
+impl<'a> ops::Deref for Selem<'a> {
     type Target = Elem<'a>;
 
     /// returns the elem of this selem
