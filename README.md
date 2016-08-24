@@ -1,6 +1,30 @@
 Thin but safe wrappers for [ALSA](http://http://alsa-project.org).
 
-WIP at this point, but basic playback/recording should work, and so should raw midi and get/set mixer values.
+Expect the following to work:
+
+ * Audio Playback
+
+ * Audio Recording
+
+ * Mixer controls
+
+ * HCtl API (for jack detection)
+
+ * Raw midi
+
+ * Enumerations of all of the above
+
+ * Poll and/or wait for all of the above
+
+The following is not yet implemented (mostly because nobody asked for them) :
+
+ * Midi sequencer API
+
+ * Separate timer API (snd_timer_*)
+
+ * Config API (snd_config_*)
+
+ * Plug-in API
 
 Quickstart guide / API design:
 
@@ -18,3 +42,4 @@ Quickstart guide / API design:
  * Enumeration of cards, devices etc is done through structs implementing `Iterator`.
 
  * Many structs implement `Polldescriptors`, to combine with poll or mio. (Or just use `wait` if you don't need that functionality.)
+
