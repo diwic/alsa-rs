@@ -1,5 +1,17 @@
+//! Thin but safe wrappers for [ALSA](http://http://alsa-project.org).
+//!
+//! [Github repo](https://github.com/diwic/alsa-rs)
+//!
+//! [Crates.io](https://crates.io/crates/alsa)
+//! 
 //! This ALSA API wrapper/binding is WIP - the ALSA API is huge, and new
-//! functions and structs might be added as requested. Enjoy!
+//! functions and structs might be added as requested.
+//!
+//! Most functions map 1-to-1 to alsa-lib functions, e g, `ctl::CardInfo::get_id()` is a wrapper around
+//! `snd_ctl_card_info_get_id` and the [alsa-lib documentation](http://www.alsa-project.org/alsa-doc/alsa-lib/)
+//! can be consulted for additional information. 
+//!
+//! Enjoy!
 
 extern crate alsa_sys as alsa;
 extern crate libc;
@@ -62,6 +74,7 @@ pub enum ValueOr {
 }
 
 /// Rounding mode (used in some mixer related calls)
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Round {
     /// Round down (towards negative infinity)
     Floor = 0,
