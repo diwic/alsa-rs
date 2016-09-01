@@ -5,6 +5,8 @@ use std::{slice, ptr, fmt};
 /// [snd_output_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___output.html) wrapper
 pub struct Output(*mut alsa::snd_output_t);
 
+unsafe impl Send for Output {}
+
 impl Drop for Output {
     fn drop(&mut self) { unsafe { alsa::snd_output_close(self.0) }; }
 }

@@ -17,6 +17,8 @@ const ELEM_ID_SIZE: usize = 64;
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct Ctl(*mut alsa::snd_ctl_t);
 
+unsafe impl Send for Ctl {}
+
 impl Ctl {
     /// Open does not support async mode (it's not very Rustic anyway)
     pub fn open(c: &CStr, nonblock: bool) -> Result<Ctl> {

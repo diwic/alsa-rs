@@ -104,6 +104,8 @@ impl<'a> Iterator for Iter<'a> {
 /// [snd_rawmidi_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 pub struct Rawmidi(*mut alsa::snd_rawmidi_t);
 
+unsafe impl Send for Rawmidi {}
+
 impl Drop for Rawmidi {
     fn drop(&mut self) { unsafe { alsa::snd_rawmidi_close(self.0) }; }
 }

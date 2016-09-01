@@ -15,6 +15,8 @@ const SELEM_ID_SIZE: usize = 64;
 #[derive(Debug)]
 pub struct Mixer(*mut alsa::snd_mixer_t);
 
+unsafe impl Send for Mixer {}
+
 impl Mixer {
     /// Opens a mixer and attaches it to a card identified by its name (like hw:0) and loads the
     /// mixer after registering a Selem.

@@ -36,6 +36,8 @@ use libc::{c_short, c_uint, c_int, pollfd};
 /// [snd_hctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___h_control.html) wrapper
 pub struct HCtl(*mut alsa::snd_hctl_t);
 
+unsafe impl Send for HCtl {}
+
 impl Drop for HCtl {
     fn drop(&mut self) { unsafe { alsa::snd_hctl_close(self.0) }; }
 }

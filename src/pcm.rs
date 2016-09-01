@@ -95,6 +95,8 @@ impl Drop for Info {
 /// [snd_pcm_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - start here for audio playback and recording
 pub struct PCM(*mut alsa::snd_pcm_t, cell::Cell<bool>);
 
+unsafe impl Send for PCM {}
+
 impl PCM {
     fn check_has_io(&self) {
         if self.1.get() { panic!("No hw_params call or additional IO objects allowed") }
