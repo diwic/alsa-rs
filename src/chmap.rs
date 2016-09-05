@@ -71,10 +71,10 @@ impl Drop for Chmap {
 impl Chmap {
     fn set_channels(&mut self, c: libc::c_uint) { unsafe { (*self.0) .channels = c }}
     fn as_slice_mut(&mut self) -> &mut [libc::c_uint] {
-        unsafe { slice::from_raw_parts_mut(&mut (*self.0).pos[0], (*self.0).channels as usize) }
+        unsafe { slice::from_raw_parts_mut((*self.0).pos.as_mut_ptr(), (*self.0).channels as usize) }
     }
     fn as_slice(&self) -> &[libc::c_uint] {
-        unsafe { slice::from_raw_parts(&mut (*self.0).pos[0], (*self.0).channels as usize) }
+        unsafe { slice::from_raw_parts((*self.0).pos.as_ptr(), (*self.0).channels as usize) }
     }
 }
 
