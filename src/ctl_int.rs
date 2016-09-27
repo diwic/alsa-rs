@@ -2,6 +2,8 @@
 use alsa;
 use std::ffi::{CStr, CString};
 use super::error::*;
+use super::mixer::MilliBel;
+use super::Round;
 use std::{ptr, mem, fmt, cmp};
 use {Card, poll};
 use std::cell::UnsafeCell;
@@ -38,6 +40,25 @@ impl Ctl {
 
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_ctl_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
+
+    pub fn get_db_range(&self, id: &ElemId) -> Result<(MilliBel, MilliBel)> {
+        let mut min: c_long = 0;
+        let mut max: c_long = 0;
+        acheck!(snd_ctl_get_dB_range(self.0, elem_id_ptr(id), &mut min, &mut max))
+            .map(|_| (MilliBel(min as i64), MilliBel(max as i64)))
+    }
+
+    pub fn convert_to_db(&self, id: &ElemId, volume: i64) -> Result<MilliBel> {
+        let mut m: c_long = 0;
+        acheck!(snd_ctl_convert_to_dB(self.0, elem_id_ptr(id), volume, &mut m))
+            .map(|_| (MilliBel(m as i64)))
+    }
+
+    pub fn convert_from_db(&self, id: &ElemId, mb: MilliBel, dir: Round) -> Result<i64> {
+        let mut m: c_long = 0;
+        acheck!(snd_ctl_convert_from_dB(self.0, elem_id_ptr(id), mb.0, &mut m, dir as c_int))
+            .map(|_| m as i64)
+    }
 }
 
 impl Drop for Ctl {
@@ -305,6 +326,14 @@ impl ElemId {
     pub fn set_interface(&mut self, v: ElemIface) { unsafe { alsa::snd_ctl_elem_id_set_interface(elem_id_ptr(&self), v as u32) }}
     pub fn set_name(&mut self, v: &CStr) { unsafe { alsa::snd_ctl_elem_id_set_name(elem_id_ptr(&self), v.as_ptr()) }}
 
+    /// Creates a new ElemId. 
+    ///
+    /// To ensure safety (i e make sure we never have an invalid interface enum), we need to supply it to the "new" function.  
+    pub fn new(iface: ElemIface) -> Self {
+        let mut r = elem_id_new().unwrap();
+        r.set_interface(iface);
+        r
+    }
 }
 
 impl cmp::Eq for ElemId {}

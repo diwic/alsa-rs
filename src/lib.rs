@@ -78,7 +78,7 @@ pub enum ValueOr {
 pub enum Round {
     /// Round down (towards negative infinity)
     Floor = 0,
-    /// Rount up (towards positive infinity)
+    /// Round up (towards positive infinity)
     Ceil = 1,
 }
 
