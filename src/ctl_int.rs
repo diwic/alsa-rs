@@ -4,6 +4,7 @@ use std::ffi::{CStr, CString};
 use super::error::*;
 use std::{ptr, mem, fmt};
 use {Card, poll};
+use std::cell::UnsafeCell;
 use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 
 /// We prefer not to allocate for every ElemId, ElemInfo or ElemValue.
@@ -247,15 +248,17 @@ impl ElemInfo {
 //
 
 /// [snd_ctl_elem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
-pub struct ElemId([u8; ELEM_ID_SIZE]);
+pub struct ElemId(UnsafeCell<[u8; ELEM_ID_SIZE]>);
 
 pub fn elem_id_new() -> Result<ElemId> {
     assert!(unsafe { alsa::snd_ctl_elem_id_sizeof() } as usize <= ELEM_ID_SIZE);
-    Ok(ElemId(unsafe { mem::zeroed() }))
+    Ok(ElemId(UnsafeCell::new(unsafe { mem::zeroed() })))
 }
 
 #[inline]
-pub fn elem_id_ptr(a: &ElemId) -> *mut alsa::snd_ctl_elem_id_t { a.0.as_ptr() as *const _ as *mut alsa::snd_ctl_elem_id_t }
+pub fn elem_id_ptr(a: &ElemId) -> *mut alsa::snd_ctl_elem_id_t { a.0.get() as *mut _ as *mut alsa::snd_ctl_elem_id_t }
+
+unsafe impl Send for ElemId {}
 
 //
 // Allocating version of ElemId
@@ -288,6 +291,14 @@ impl ElemId {
     pub fn get_index(&self) -> u32 { unsafe { alsa::snd_ctl_elem_id_get_index(elem_id_ptr(&self)) as u32 }}
     pub fn get_interface(&self) -> ElemIface { ElemIface::from_c_int(
         unsafe { alsa::snd_ctl_elem_id_get_interface(elem_id_ptr(&self)) } as c_int, "snd_ctl_elem_id_get_interface").unwrap() }
+
+    pub fn set_device(&mut self, v: u32) { unsafe { alsa::snd_ctl_elem_id_set_device(elem_id_ptr(&self), v) }}
+    pub fn set_subdevice(&mut self, v: u32) { unsafe { alsa::snd_ctl_elem_id_set_subdevice(elem_id_ptr(&self), v) }}
+    pub fn set_numid(&mut self, v: u32) { unsafe { alsa::snd_ctl_elem_id_set_numid(elem_id_ptr(&self), v) }}
+    pub fn set_index(&mut self, v: u32) { unsafe { alsa::snd_ctl_elem_id_set_index(elem_id_ptr(&self), v) }}
+    pub fn set_interface(&mut self, v: ElemIface) { unsafe { alsa::snd_ctl_elem_id_set_interface(elem_id_ptr(&self), v as u32) }}
+    pub fn set_name(&mut self, v: &CStr) { unsafe { alsa::snd_ctl_elem_id_set_name(elem_id_ptr(&self), v.as_ptr()) }}
+
 }
 
 impl fmt::Debug for ElemId {
