@@ -2,7 +2,7 @@
 use alsa;
 use std::ffi::{CStr, CString};
 use super::error::*;
-use std::{ptr, mem, fmt};
+use std::{ptr, mem, fmt, cmp};
 use {Card, poll};
 use std::cell::UnsafeCell;
 use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
@@ -260,6 +260,12 @@ pub fn elem_id_ptr(a: &ElemId) -> *mut alsa::snd_ctl_elem_id_t { a.0.get() as *m
 
 unsafe impl Send for ElemId {}
 
+impl Clone for ElemId {
+    fn clone(&self) -> Self {
+        ElemId(UnsafeCell::new(unsafe { *self.0.get() }))
+    }
+}
+
 //
 // Allocating version of ElemId
 //
@@ -299,6 +305,16 @@ impl ElemId {
     pub fn set_interface(&mut self, v: ElemIface) { unsafe { alsa::snd_ctl_elem_id_set_interface(elem_id_ptr(&self), v as u32) }}
     pub fn set_name(&mut self, v: &CStr) { unsafe { alsa::snd_ctl_elem_id_set_name(elem_id_ptr(&self), v.as_ptr()) }}
 
+}
+
+impl cmp::Eq for ElemId {}
+
+impl cmp::PartialEq for ElemId {
+    fn eq(&self, a: &ElemId) -> bool {
+        self.get_numid() == a.get_numid() && self.get_interface() == a.get_interface() &&
+        self.get_index() == a.get_index() && self.get_device() == a.get_device() &&
+        self.get_subdevice() == a.get_subdevice() && self.get_name().ok() == a.get_name().ok() 
+    }
 }
 
 impl fmt::Debug for ElemId {
