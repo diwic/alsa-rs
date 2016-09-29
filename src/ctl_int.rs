@@ -50,13 +50,13 @@ impl Ctl {
 
     pub fn convert_to_db(&self, id: &ElemId, volume: i64) -> Result<MilliBel> {
         let mut m: c_long = 0;
-        acheck!(snd_ctl_convert_to_dB(self.0, elem_id_ptr(id), volume, &mut m))
+        acheck!(snd_ctl_convert_to_dB(self.0, elem_id_ptr(id), volume as c_long, &mut m))
             .map(|_| (MilliBel(m as i64)))
     }
 
     pub fn convert_from_db(&self, id: &ElemId, mb: MilliBel, dir: Round) -> Result<i64> {
         let mut m: c_long = 0;
-        acheck!(snd_ctl_convert_from_dB(self.0, elem_id_ptr(id), mb.0, &mut m, dir as c_int))
+        acheck!(snd_ctl_convert_from_dB(self.0, elem_id_ptr(id), mb.0 as c_long, &mut m, dir as c_int))
             .map(|_| m as i64)
     }
 }
@@ -224,6 +224,24 @@ impl ElemValue {
         // Note: the alsa-lib function definition is broken. First, the pointer is declared as mut even 
         // though it's const, and second, there is a "value" missing between "elem" and "set_bytes".
         else { unsafe { alsa::snd_ctl_elem_set_bytes(self.ptr, val.as_ptr() as *mut c_void, val.len() as size_t) }; Some(()) }
+    }
+
+    /// Creates a new ElemValue.
+    pub fn new(t: ElemType) -> Result<ElemValue> {
+        // See max length in include/uapi/sound/asound.h in linux kernel for these values
+        let count = match t {
+            ElemType::None => 1,
+            ElemType::Boolean => 128,
+            ElemType::Integer => 128,
+            ElemType::Enumerated => 128,
+            ElemType::Bytes => 512,
+            ElemType::IEC958 => 1,
+            ElemType::Integer64 => 64,
+        };
+        // if count > maxcount { return Err(Error::new(Some("ElemValue::new - count too large".into()), 1)) }
+        let ev = try!(elem_value_new(t, count));
+        unsafe { alsa::snd_ctl_elem_value_clear(elem_value_ptr(&ev)) };
+        Ok(ev)
     }
 
 }
