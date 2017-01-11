@@ -703,6 +703,14 @@ fn info_from_default() {
 }
 
 #[test]
+fn drop() {
+    use std::ffi::CString;
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
+    // Verify that this does not cause a naming conflict (issue #14)
+    let _ = pcm.drop();
+}
+
+#[test]
 fn record_from_default() {
     use std::ffi::CString;
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
