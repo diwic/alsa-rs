@@ -336,6 +336,10 @@ impl<'a> Selem<'a> {
         acheck!(snd_mixer_selem_set_playback_volume(self.handle, channel as i32, value as c_long)).map(|_| ())
     }
 
+    pub fn set_playback_volume_all(&self, value: i64) -> Result<()> {
+        acheck!(snd_mixer_selem_set_playback_volume_all(self.handle, value as c_long)).map(|_| ())
+    }
+
     pub fn set_playback_db(&self, channel: SelemChannelId, value: MilliBel, dir: Round) -> Result<()> {
         acheck!(snd_mixer_selem_set_playback_dB(self.handle, channel as i32, *value as c_long, dir as c_int)).map(|_| ())
     }
