@@ -113,6 +113,9 @@ pub use poll::PollDescriptors as PollDescriptors;
 pub mod mixer;
 pub use mixer::Mixer as Mixer;
 
+pub mod seq;
+pub use seq::Seq as Seq;
+
 mod io;
 pub use io::Output;
 
