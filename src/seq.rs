@@ -48,9 +48,26 @@ impl Seq {
         acheck!(snd_seq_drain_output(self.0)).map(|q| q as i32)
     }
 
-    pub fn get_any_client_info(&self, cnum: i32) -> Result<ClientInfo> {
+    pub fn get_any_client_info(&self, client: i32) -> Result<ClientInfo> {
         let c = try!(ClientInfo::new());
-        acheck!(snd_seq_get_any_client_info(self.0, cnum, c.0)).map(|_| c)
+        acheck!(snd_seq_get_any_client_info(self.0, client, c.0)).map(|_| c)
+    }
+
+    pub fn get_any_port_info(&self, client: i32, port: i32) -> Result<PortInfo> {
+        let c = try!(PortInfo::new());
+        acheck!(snd_seq_get_any_port_info(self.0, client, port, c.0)).map(|_| c)
+    }
+
+    pub fn create_port(&self, port: &mut PortInfo) -> Result<()> {
+        acheck!(snd_seq_create_port(self.0, port.0)).map(|_| ())
+    }
+
+    pub fn set_port_info(&self, port: i32, info: &mut PortInfo) -> Result<()> {
+        acheck!(snd_seq_set_port_info(self.0, port, info.0)).map(|_| ())
+    }
+
+    pub fn delete_port(&self, port: i32) -> Result<()> {
+        acheck!(snd_seq_delete_port(self.0, port as c_int)).map(|_| ())
     }
 
 }
@@ -63,7 +80,7 @@ fn polldir(o: Option<Direction>) -> c_short {
     }.bits()
 }
 
-impl poll::PollDescriptors for (Seq, Option<Direction>) {
+impl<'a> poll::PollDescriptors for (&'a Seq, Option<Direction>) {
 
     fn count(&self) -> usize {
         unsafe { alsa::snd_seq_poll_descriptors_count((self.0).0, polldir(self.1)) as usize }
@@ -156,6 +173,12 @@ impl PortInfo {
         acheck!(snd_seq_port_info_malloc(&mut p)).map(|_| PortInfo(p))
     }
 
+    pub fn empty() -> Result<Self> {
+        let z = try!(Self::new());
+        unsafe { ptr::write_bytes(z.0 as *mut u8, 0, alsa::snd_seq_port_info_sizeof()) };
+        Ok(z)
+    }
+
     pub fn get_client(&self) -> i32 {
         unsafe { alsa::snd_seq_port_info_get_client(self.0) as i32 }
     }
@@ -179,6 +202,44 @@ impl PortInfo {
         from_const("snd_seq_port_info_get_name", c)
     }
 
+    pub fn set_name(&mut self, name: &CStr) {
+        // Note: get_name returns an interior reference, so this one must take &mut self
+        unsafe { alsa::snd_seq_port_info_set_name(self.0, name.as_ptr()) };
+    }
+
+    pub fn get_capability(&self) -> PortCaps {
+        PortCaps::from_bits_truncate(unsafe { alsa::snd_seq_port_info_get_capability(self.0) as u32 })
+    }
+
+    pub fn get_type(&self) -> PortType {
+        PortType::from_bits_truncate(unsafe { alsa::snd_seq_port_info_get_type(self.0) as u32 })
+    }
+
+    pub fn set_capability(&self, c: PortCaps) {
+        unsafe { alsa::snd_seq_port_info_set_capability(self.0, c.bits() as c_uint) }
+    }
+
+    pub fn set_type(&self, c: PortType) {
+        unsafe { alsa::snd_seq_port_info_set_type(self.0, c.bits() as c_uint) }
+    }
+
+    pub fn get_midi_channels(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_midi_channels(self.0) as i32 } }
+    pub fn get_midi_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_midi_voices(self.0) as i32 } }
+    pub fn get_synth_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_synth_voices(self.0) as i32 } }
+    pub fn get_read_use(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_read_use(self.0) as i32 } }
+    pub fn get_write_use(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_write_use(self.0) as i32 } }
+    pub fn get_port_specified(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_port_specified(self.0) as i32 } }
+    pub fn get_timestamping(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamping(self.0) as i32 } }
+    pub fn get_timestamp_real(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamp_real(self.0) as i32 } }
+    pub fn get_timestamp_queue(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamp_queue(self.0) as i32 } }
+
+    pub fn set_midi_channels(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_midi_channels(self.0, value as c_int) } }
+    pub fn set_midi_voices(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_midi_voices(self.0, value as c_int) } }
+    pub fn set_synth_voices(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_synth_voices(self.0, value as c_int) } }
+    pub fn set_port_specified(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_port_specified(self.0, value as c_int) } }
+    pub fn set_timestamping(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamping(self.0, value as c_int) } }
+    pub fn set_timestamp_real(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamp_real(self.0, value as c_int) } }
+    pub fn set_timestamp_queue(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamp_queue(self.0, value as c_int) } }
 }
 
 impl fmt::Debug for PortInfo {
@@ -205,6 +266,39 @@ impl<'a> Iterator for PortIter<'a> {
         if r < 0 { self.2 = -1; return None };
         self.2 = z.get_port();
         Some(z)
+    }
+}
+
+bitflags! {
+    pub flags PortCaps: u32 {
+        const READ = 1<<0,
+        const WRITE = 1<<1,
+        const SYNC_READ = 1<<2,
+        const SYNC_WRITE = 1<<3,
+        const DUPLEX = 1<<4,
+        const SUBS_READ = 1<<5,
+        const SUBS_WRITE = 1<<6,
+        const NO_EXPORT = 1<<7,
+   }
+}
+
+bitflags! {
+    pub flags PortType: u32 {
+        const SPECIFIC = (1<<0),
+        const MIDI_GENERIC = (1<<1),
+        const MIDI_GM = (1<<2),
+        const MIDI_GS = (1<<3),
+        const MIDI_XG = (1<<4),
+        const MIDI_MT32 = (1<<5),
+        const MIDI_GM2 = (1<<6),
+        const SYNTH = (1<<10),
+        const DIRECT_SAMPLE = (1<<11),
+        const SAMPLE = (1<<12),
+        const HARDWARE = (1<<16),
+        const SOFTWARE = (1<<17),
+        const SYNTHESIZER = (1<<18),
+        const PORT = (1<<19),
+        const APPLICATION = (1<<20),
     }
 }
 
