@@ -53,12 +53,12 @@ impl Seq {
         acheck!(snd_seq_get_any_client_info(self.0, client, c.0)).map(|_| c)
     }
 
-    pub fn get_any_port_info(&self, client: i32, port: i32) -> Result<PortInfo> {
+    pub fn get_any_port_info(&self, a: Addr) -> Result<PortInfo> {
         let c = try!(PortInfo::new());
-        acheck!(snd_seq_get_any_port_info(self.0, client, port, c.0)).map(|_| c)
+        acheck!(snd_seq_get_any_port_info(self.0, a.client as c_int, a.port as c_int, c.0)).map(|_| c)
     }
 
-    pub fn create_port(&self, port: &mut PortInfo) -> Result<()> {
+    pub fn create_port(&self, port: &PortInfo) -> Result<()> {
         acheck!(snd_seq_create_port(self.0, port.0)).map(|_| ())
     }
 
@@ -70,7 +70,7 @@ impl Seq {
         acheck!(snd_seq_delete_port(self.0, port as c_int)).map(|_| ())
     }
 
-    pub fn subscribe_port(&self, info: &mut PortSubscribe) -> Result<()> {
+    pub fn subscribe_port(&self, info: &PortSubscribe) -> Result<()> {
         acheck!(snd_seq_subscribe_port(self.0, info.0)).map(|_| ())
     }
 
@@ -379,10 +379,25 @@ impl PortSubscribe {
 fn print_seqs() {
     use std::ffi::CString;
     let s = super::Seq::open(&CString::new("default").unwrap(), None, false).unwrap();
-    s.set_client_name(&CString::new("rust_alsa_API").unwrap()).unwrap();
+    s.set_client_name(&CString::new("rust_test_print_seqs").unwrap()).unwrap();
     let clients: Vec<_> = ClientIter::new(&s).collect();
     for a in &clients {
         let ports: Vec<_> = PortIter::new(&s, a.get_client()).collect();
     println!("{:?}: {:?}", a, ports);
     }
+}
+
+#[test]
+fn seq_subscribe() {
+    use std::ffi::CString;
+    let s = super::Seq::open(&CString::new("default").unwrap(), None, false).unwrap();
+    s.set_client_name(&CString::new("rust_test_seq_subscribe").unwrap()).unwrap();
+    let timer_info = s.get_any_port_info(Addr { client: 0, port: 0 }).unwrap();
+    assert_eq!(timer_info.get_name().unwrap(), "Timer");
+    let info = PortInfo::empty().unwrap();
+    let _port = s.create_port(&info);
+    let subs = PortSubscribe::empty().unwrap();
+    subs.set_sender(Addr { client: 0, port: 0 });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: info.get_port() });
+    s.subscribe_port(&subs).unwrap();
 }
