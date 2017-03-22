@@ -1,6 +1,6 @@
 //! MIDI sequencer I/O and enumeration
 
-use libc::{c_uint, c_int, c_short, pollfd};
+use libc::{c_uint, c_int, c_short, c_uchar, pollfd};
 use super::error::*;
 use alsa;
 use super::{Direction, poll};
@@ -68,6 +68,17 @@ impl Seq {
 
     pub fn delete_port(&self, port: i32) -> Result<()> {
         acheck!(snd_seq_delete_port(self.0, port as c_int)).map(|_| ())
+    }
+
+    pub fn subscribe_port(&self, info: &mut PortSubscribe) -> Result<()> {
+        acheck!(snd_seq_subscribe_port(self.0, info.0)).map(|_| ())
+    }
+
+    pub fn unsubscribe_port(&self, sender: Addr, dest: Addr) -> Result<()> {
+        let z = try!(PortSubscribe::new());
+        z.set_sender(sender);
+        z.set_dest(dest);
+        acheck!(snd_seq_unsubscribe_port(self.0, z.0)).map(|_| ())
     }
 
 }
@@ -228,17 +239,17 @@ impl PortInfo {
     pub fn get_synth_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_synth_voices(self.0) as i32 } }
     pub fn get_read_use(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_read_use(self.0) as i32 } }
     pub fn get_write_use(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_write_use(self.0) as i32 } }
-    pub fn get_port_specified(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_port_specified(self.0) as i32 } }
-    pub fn get_timestamping(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamping(self.0) as i32 } }
-    pub fn get_timestamp_real(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamp_real(self.0) as i32 } }
+    pub fn get_port_specified(&self) -> bool { unsafe { alsa::snd_seq_port_info_get_port_specified(self.0) == 1 } }
+    pub fn get_timestamping(&self) -> bool { unsafe { alsa::snd_seq_port_info_get_timestamping(self.0) == 1 } }
+    pub fn get_timestamp_real(&self) -> bool { unsafe { alsa::snd_seq_port_info_get_timestamp_real(self.0) == 1 } }
     pub fn get_timestamp_queue(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamp_queue(self.0) as i32 } }
 
     pub fn set_midi_channels(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_midi_channels(self.0, value as c_int) } }
     pub fn set_midi_voices(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_midi_voices(self.0, value as c_int) } }
     pub fn set_synth_voices(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_synth_voices(self.0, value as c_int) } }
-    pub fn set_port_specified(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_port_specified(self.0, value as c_int) } }
-    pub fn set_timestamping(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamping(self.0, value as c_int) } }
-    pub fn set_timestamp_real(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamp_real(self.0, value as c_int) } }
+    pub fn set_port_specified(&self, value: bool) { unsafe { alsa::snd_seq_port_info_set_port_specified(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_timestamping(&self, value: bool) { unsafe { alsa::snd_seq_port_info_set_timestamping(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_timestamp_real(&self, value: bool) { unsafe { alsa::snd_seq_port_info_set_timestamp_real(self.0, if value { 1 } else { 0 } ) } }
     pub fn set_timestamp_queue(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamp_queue(self.0, value as c_int) } }
 }
 
@@ -300,6 +311,67 @@ bitflags! {
         const PORT = (1<<19),
         const APPLICATION = (1<<20),
     }
+}
+
+
+/// [snd_seq_addr_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__addr__t.html) wrapper
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Addr {
+   pub client: i32,
+   pub port: i32,
+}
+
+/// [snd_seq_port_subscribe_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
+pub struct PortSubscribe(*mut alsa::snd_seq_port_subscribe_t);
+
+unsafe impl Send for PortSubscribe {}
+
+impl Drop for PortSubscribe {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_port_subscribe_free(self.0) }; }
+}
+
+impl PortSubscribe {
+    fn new() -> Result<Self> {
+        let mut p = ptr::null_mut();
+        acheck!(snd_seq_port_subscribe_malloc(&mut p)).map(|_| PortSubscribe(p))
+    }
+
+    pub fn empty() -> Result<Self> {
+        let z = try!(Self::new());
+        unsafe { ptr::write_bytes(z.0 as *mut u8, 0, alsa::snd_seq_port_subscribe_sizeof()) };
+        Ok(z)
+    }
+
+    pub fn get_sender(&self) -> Addr { unsafe {
+        let z = alsa::snd_seq_port_subscribe_get_sender(self.0);
+        Addr { client: (*z).client as i32, port: (*z).port as i32 }
+    } }
+
+    pub fn get_dest(&self) -> Addr { unsafe {
+        let z = alsa::snd_seq_port_subscribe_get_dest(self.0);
+        Addr { client: (*z).client as i32, port: (*z).port as i32 }
+    } }
+
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_port_subscribe_get_queue(self.0) as i32 } }
+    pub fn get_exclusive(&self) -> bool { unsafe { alsa::snd_seq_port_subscribe_get_exclusive(self.0) == 1 } }
+    pub fn get_time_update(&self) -> bool { unsafe { alsa::snd_seq_port_subscribe_get_time_update(self.0) == 1 } }
+    pub fn get_time_real(&self) -> bool { unsafe { alsa::snd_seq_port_subscribe_get_time_real(self.0) == 1 } }
+
+    pub fn set_sender(&self, value: Addr) {
+        let z = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar };
+        unsafe { alsa::snd_seq_port_subscribe_set_sender(self.0, &z) };
+    }
+
+    pub fn set_dest(&self, value: Addr) {
+        let z = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar };
+        unsafe { alsa::snd_seq_port_subscribe_set_dest(self.0, &z) };
+    }
+
+    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_port_subscribe_set_queue(self.0, value as c_int) } }
+    pub fn set_exclusive(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_exclusive(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_time_update(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_update(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_time_real(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_real(self.0, if value { 1 } else { 0 } ) } }
+
 }
 
 
