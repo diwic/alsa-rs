@@ -4,7 +4,7 @@ use libc::{c_uint, c_int, c_short, c_uchar, pollfd};
 use super::error::*;
 use alsa;
 use super::{Direction, poll};
-use std::{ptr, fmt};
+use std::{ptr, fmt, mem};
 use std::ffi::CStr;
 
 // Some constants that are not in alsa-sys
@@ -373,6 +373,196 @@ impl PortSubscribe {
     pub fn set_time_real(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_real(self.0, if value { 1 } else { 0 } ) } }
 
 }
+
+pub struct Event(alsa::snd_seq_event_t, EventType);
+
+impl Event {
+    pub fn new<D: EventData>(t: EventType, data: &D) -> Self {
+        let mut z: Event = unsafe { mem::zeroed() };
+        z.1 = t;
+        (z.0)._type = t as c_uchar;
+        debug_assert!(D::has_data(t));
+        data.set_data(&mut z);
+        z
+    }
+
+    #[inline]
+    pub fn get_type(&self) -> EventType { self.1 }
+
+    pub fn get_data<D: EventData>(&self) -> Option<D> { if D::has_data(self.1) { Some(D::get_data(self)) } else { None } }
+}
+
+pub trait EventData {
+    fn has_data(e: EventType) -> bool;
+    fn set_data(&self, ev: &mut Event);
+    fn get_data(ev: &Event) -> Self;
+}
+
+impl EventData for () {
+    fn has_data(e: EventType) -> bool { !EvNote::has_data(e) && !EvCtrl::has_data(e) && !Addr::has_data(e) }
+    fn set_data(&self, _: &mut Event) {}
+    fn get_data(_: &Event) -> Self {}
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+pub struct EvNote {
+    pub channel: u8,
+    pub note: u8,
+    pub velocity: u8,
+    pub off_velocity: u8,
+    pub duration: u32,
+}
+
+impl EventData for EvNote {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::Note => true,
+             EventType::Noteon => true,
+             EventType::Noteoff => true,
+             EventType::Keypress => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self {
+         let z: &alsa::snd_seq_ev_note_t = unsafe { &*(&ev.0.data as *const alsa::Union_Unnamed10 as *const _) };
+         EvNote { channel: z.channel as u8, note: z.note as u8, velocity: z.velocity as u8, off_velocity: z.off_velocity as u8, duration: z.duration as u32 }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z: &mut alsa::snd_seq_ev_note_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
+         z.channel = self.channel as c_uchar;
+         z.note = self.note as c_uchar;
+         z.velocity = self.velocity as c_uchar;
+         z.off_velocity = self.off_velocity as c_uchar;
+         z.duration = self.duration as c_uint;
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+pub struct EvCtrl {
+    pub channel: u8,
+    pub param: u32,
+    pub value: i32,
+}
+
+impl EventData for EvCtrl {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::Controller => true,
+             EventType::Pgmchange => true,
+             EventType::Chanpress => true,
+             EventType::Pitchbend => true,
+             EventType::Control14 => true,
+             EventType::Nonregparam => true,
+             EventType::Regparam => true,
+             EventType::Songpos => true,
+             EventType::Songsel => true,
+             EventType::Qframe => true,
+             EventType::Timesign => true,
+             EventType::Keysign => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self {
+         let z: &alsa::snd_seq_ev_ctrl_t = unsafe { &*(&ev.0.data as *const alsa::Union_Unnamed10 as *const _) };
+         EvCtrl { channel: z.channel as u8, param: z.param as u32, value: z.value as i32 }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z: &mut alsa::snd_seq_ev_ctrl_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
+         z.channel = self.channel as c_uchar;
+         z.param = self.param as c_uint;
+         z.value = self.value as c_int;
+    }
+}
+
+impl EventData for Addr {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::ClientStart => true,
+             EventType::ClientExit => true,
+             EventType::ClientChange => true,
+             EventType::PortStart => true,
+             EventType::PortExit => true,
+             EventType::PortChange => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self {
+         let z: &alsa::snd_seq_addr_t = unsafe { &*(&ev.0.data as *const alsa::Union_Unnamed10 as *const _) };
+         Addr { client: z.client as i32, port: z.port as i32 }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z: &mut alsa::snd_seq_addr_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
+         z.client = self.client as c_uchar;
+         z.port = self.port as c_uchar;
+    }
+}
+
+
+alsa_enum!(
+    /// [SND_SEQ_EVENT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_events.html) constants
+
+    EventType, ALL_EVENT_TYPES[59],
+
+    Bounce = SND_SEQ_EVENT_BOUNCE,
+    Chanpress = SND_SEQ_EVENT_CHANPRESS,
+    ClientChange = SND_SEQ_EVENT_CLIENT_CHANGE,
+    ClientExit = SND_SEQ_EVENT_CLIENT_EXIT,
+    ClientStart = SND_SEQ_EVENT_CLIENT_START,
+    Clock = SND_SEQ_EVENT_CLOCK,
+    Continue = SND_SEQ_EVENT_CONTINUE,
+    Control14 = SND_SEQ_EVENT_CONTROL14,
+    Controller = SND_SEQ_EVENT_CONTROLLER,
+    Echo = SND_SEQ_EVENT_ECHO,
+    Keypress = SND_SEQ_EVENT_KEYPRESS, 	
+    Keysign = SND_SEQ_EVENT_KEYSIGN,	
+    None = SND_SEQ_EVENT_NONE,	
+    Nonregparam = SND_SEQ_EVENT_NONREGPARAM,
+    Note = SND_SEQ_EVENT_NOTE,
+    Noteoff = SND_SEQ_EVENT_NOTEOFF,
+    Noteon = SND_SEQ_EVENT_NOTEON,	
+    Oss = SND_SEQ_EVENT_OSS,
+    Pgmchange = SND_SEQ_EVENT_PGMCHANGE,
+    Pitchbend = SND_SEQ_EVENT_PITCHBEND, 	
+    PortChange = SND_SEQ_EVENT_PORT_CHANGE,
+    PortExit = SND_SEQ_EVENT_PORT_EXIT,	
+    PortStart = SND_SEQ_EVENT_PORT_START,
+    Subscribed = SND_SEQ_EVENT_PORT_SUBSCRIBED,
+    Unsubscribed = SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
+    Qframe = SND_SEQ_EVENT_QFRAME,
+    QueueSkew = SND_SEQ_EVENT_QUEUE_SKEW,
+    Regparam = SND_SEQ_EVENT_REGPARAM,	
+    Reset = SND_SEQ_EVENT_RESET,	
+    Result = SND_SEQ_EVENT_RESULT,
+    Sensing = SND_SEQ_EVENT_SENSING,
+    SetposTick = SND_SEQ_EVENT_SETPOS_TICK,
+    SetposTime = SND_SEQ_EVENT_SETPOS_TIME, 	
+    Songpos = SND_SEQ_EVENT_SONGPOS,
+    Songsel = SND_SEQ_EVENT_SONGSEL, 	
+    Start = SND_SEQ_EVENT_START,	
+    Stop = SND_SEQ_EVENT_STOP,	
+    SyncPos = SND_SEQ_EVENT_SYNC_POS,
+    Sysex = SND_SEQ_EVENT_SYSEX,	
+    System = SND_SEQ_EVENT_SYSTEM,
+    Tempo = SND_SEQ_EVENT_TEMPO,	
+    Tick = SND_SEQ_EVENT_TICK,	
+    Timesign = SND_SEQ_EVENT_TIMESIGN,
+    TuneRequest = SND_SEQ_EVENT_TUNE_REQUEST,
+    Usr0 = SND_SEQ_EVENT_USR0,
+    Usr1 = SND_SEQ_EVENT_USR1, 	
+    Usr2 = SND_SEQ_EVENT_USR2, 	
+    Usr3 = SND_SEQ_EVENT_USR3, 	
+    Usr4 = SND_SEQ_EVENT_USR4, 	
+    Usr5 = SND_SEQ_EVENT_USR5, 	
+    Usr6 = SND_SEQ_EVENT_USR6, 	
+    Usr7 = SND_SEQ_EVENT_USR7, 	
+    Usr8 = SND_SEQ_EVENT_USR8, 	
+    Usr9 = SND_SEQ_EVENT_USR9, 	
+    UsrVar0 = SND_SEQ_EVENT_USR_VAR0,
+    UsrVar1 = SND_SEQ_EVENT_USR_VAR1,
+    UsrVar2 = SND_SEQ_EVENT_USR_VAR2, 	
+    UsrVar3 = SND_SEQ_EVENT_USR_VAR3, 	
+    UsrVar4 = SND_SEQ_EVENT_USR_VAR4,
+);
 
 
 #[test]
