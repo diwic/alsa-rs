@@ -110,6 +110,14 @@ impl Seq {
         acheck!(snd_seq_event_input_pending(self.0, if fetch_sequencer {1} else {0})).map(|q| q as u32)
     }
 
+    pub fn get_queue_tempo(&self, q: i32) -> Result<QueueTempo> {
+        let value = try!(QueueTempo::new());
+        acheck!(snd_seq_get_queue_tempo(self.0, q as c_int, value.0)).map(|_| value)
+    }
+
+    pub fn set_queue_tempo(&self, q: i32, value: &QueueTempo) -> Result<()> {
+        acheck!(snd_seq_set_queue_tempo(self.0, q as c_int, value.0)).map(|_| ())
+    }
 }
 
 fn polldir(o: Option<Direction>) -> c_short {
@@ -405,6 +413,8 @@ impl PortSubscribe {
 
 pub struct Event(alsa::snd_seq_event_t, EventType, Option<Vec<u8>>);
 
+unsafe impl Send for Event {}
+
 impl Event {
     pub fn new<D: EventData>(t: EventType, data: &D) -> Self {
         let mut z = Event(unsafe { mem::uninitialized() }, EventType::None, None);
@@ -677,6 +687,40 @@ alsa_enum!(
 );
 
 
+pub struct QueueTempo(*mut alsa::snd_seq_queue_tempo_t);
+
+unsafe impl Send for QueueTempo {}
+
+impl Drop for QueueTempo {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_queue_tempo_free(self.0) } }
+}
+
+impl QueueTempo {
+    fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_queue_tempo_malloc(&mut q)).map(|_| QueueTempo(q))
+    }
+
+    pub fn empty() -> Result<Self> {
+        let q = try!(QueueTempo::new());
+        unsafe { ptr::write_bytes(q.0 as *mut u8, 0, alsa::snd_seq_queue_tempo_sizeof()) };
+        Ok(q)
+    }
+
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_queue_tempo_get_queue(self.0) as i32 } }
+    pub fn get_tempo(&self) -> u32 { unsafe { alsa::snd_seq_queue_tempo_get_tempo(self.0) as u32 } }
+    pub fn get_ppq(&self) -> i32 { unsafe { alsa::snd_seq_queue_tempo_get_ppq(self.0) as i32 } }
+    pub fn get_skew(&self) -> u32 { unsafe { alsa::snd_seq_queue_tempo_get_skew(self.0) as u32 } }
+    pub fn get_skew_base(&self) -> u32 { unsafe { alsa::snd_seq_queue_tempo_get_skew_base(self.0) as u32 } }
+
+//    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_queue(self.0, value as c_int) } }
+    pub fn set_tempo(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_tempo(self.0, value as c_uint) } }
+    pub fn set_ppq(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_ppq(self.0, value as c_int) } }
+    pub fn set_skew(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew(self.0, value as c_uint) } }
+    pub fn set_skew_base(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew_base(self.0, value as c_uint) } }
+   
+}
+
 #[test]
 fn print_seqs() {
     use std::ffi::CString;
@@ -685,7 +729,7 @@ fn print_seqs() {
     let clients: Vec<_> = ClientIter::new(&s).collect();
     for a in &clients {
         let ports: Vec<_> = PortIter::new(&s, a.get_client()).collect();
-    println!("{:?}: {:?}", a, ports);
+        println!("{:?}: {:?}", a, ports);
     }
 }
 
