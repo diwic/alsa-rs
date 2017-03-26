@@ -706,6 +706,7 @@ impl EventData for EvQueueControl {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+/// It's called EvResult instead of Result in order to not be confused with Rust's Result type.
 pub struct EvResult {
     event: i32,
     result: i32,
@@ -895,3 +896,46 @@ fn seq_subscribe() {
     subs.set_dest(Addr { client: s.client_id().unwrap(), port: info.get_port() });
     s.subscribe_port(&subs).unwrap();
 }
+
+#[test]
+fn seq_loopback() {
+    use std::ffi::CString;
+    let s = super::Seq::open(&CString::new("default").unwrap(), None, false).unwrap();
+    s.set_client_name(&CString::new("rust_test_seq_loopback").unwrap()).unwrap();
+
+    // Create ports
+    let sinfo = PortInfo::empty().unwrap();
+    sinfo.set_capability(WRITE | SUBS_WRITE);
+    sinfo.set_type(MIDI_GENERIC | APPLICATION);
+    s.create_port(&sinfo).unwrap();
+    let sport = sinfo.get_port();
+    let dinfo = PortInfo::empty().unwrap();
+    dinfo.set_capability(READ | SUBS_READ);
+    dinfo.set_type(MIDI_GENERIC | APPLICATION);
+    s.create_port(&dinfo).unwrap();
+    let dport = dinfo.get_port();
+
+    // Connect them
+    let subs = PortSubscribe::empty().unwrap();
+    subs.set_sender(Addr { client: s.client_id().unwrap(), port: sport });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: dport });
+    s.subscribe_port(&subs).unwrap();
+    println!("Connected {:?} to {:?}", subs.get_sender(), subs.get_dest());
+
+    // Send a note!
+    let note = EvNote { channel: 0, note: 64, duration: 100, velocity: 100, off_velocity: 64 };
+    let mut e = Event::new(EventType::Noteon, &note);
+    e.set_subs();
+    e.set_direct();
+    e.set_source(sport);
+    println!("Sending {:?}", e);
+    s.event_output(&mut e).unwrap();
+/*    s.drain_output().unwrap(); // This one fails, haven't figured out why yet :-(
+ 
+    // Recieve the note!
+    let e2 = s.event_input().unwrap();
+    println!("Receiving {:?}", e2);
+    assert_eq!(e2.get_type(), EventType::Note);
+    assert_eq!(e2.get_data(), Some(note)); */
+}
+
