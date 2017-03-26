@@ -1,6 +1,6 @@
 //! MIDI sequencer I/O and enumeration
 
-use libc::{c_uint, c_int, c_short, c_uchar, c_void, pollfd};
+use libc::{c_uint, c_int, c_short, c_uchar, c_void, c_long, size_t, pollfd};
 use super::error::*;
 use alsa;
 use super::{Direction, poll};
@@ -425,6 +425,18 @@ impl Event {
         z
     }
 
+    // Extracts EventType and Data into Event's own buffer. This requires the event data to
+    // be valid, hence the unsafety.
+    unsafe fn extract(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event> {
+        let t = try!(EventType::from_c_int((*z)._type as c_int, func));
+        let v = if Vec::<u8>::has_data(t) {
+            let zz = (*z).data.ext();
+            Some(slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize).to_vec())
+        } else { None };
+        Ok(Event(ptr::read(z), t, v))
+    }
+
+
     #[inline]
     pub fn get_type(&self) -> EventType { self.1 }
 
@@ -718,7 +730,42 @@ impl QueueTempo {
     pub fn set_ppq(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_ppq(self.0, value as c_int) } }
     pub fn set_skew(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew(self.0, value as c_uint) } }
     pub fn set_skew_base(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew_base(self.0, value as c_uint) } }
-   
+}
+
+/// [snd_midi_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___m_i_d_i___event.html) Wrapper
+///
+/// Sequencer event <-> MIDI byte stream coder
+pub struct MidiEvent(*mut alsa::snd_midi_event_t);
+
+impl Drop for MidiEvent {
+    fn drop(&mut self) { unsafe { alsa::snd_midi_event_free(self.0) } }
+}
+
+impl MidiEvent {
+    pub fn new(bufsize: u32) -> Result<MidiEvent> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_midi_event_new(bufsize as size_t, &mut q)).map(|_| MidiEvent(q))
+    }
+
+    pub fn resize_buffer(&self, bufsize: u32) -> Result<()> { acheck!(snd_midi_event_resize_buffer(self.0, bufsize as size_t)).map(|_| ()) }
+
+    /// Note: this corresponds to snd_midi_event_no_status, but on and off are switched.
+    ///
+    /// Alsa-lib is a bit confusing here. Anyhow, set "enable" to true to enable running status.
+    pub fn enable_running_status(&self, enable: bool) { unsafe { alsa::snd_midi_event_no_status(self.0, if enable {0} else {1}) } }
+
+    pub fn decode(&self, buf: &mut [u8], ev: &Event) -> Result<usize> {
+        acheck!(snd_midi_event_decode(self.0, buf.as_mut_ptr() as *mut c_uchar, buf.len() as c_long, &ev.0)).map(|r| r as usize)
+    }
+
+    pub fn encode(&self, buf: &[u8]) -> Result<(usize, Option<Event>)> {
+        let mut ev = unsafe { mem::zeroed() };
+        let r = try!(acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev)));
+        let e = if ev._type == alsa::SND_SEQ_EVENT_NONE as u8 { None }
+        else { Some(try!( unsafe { Event::extract(&mut ev, "snd_midi_event_encode") } )) };
+        Ok((r as usize, e))
+    }
+
 }
 
 #[test]
