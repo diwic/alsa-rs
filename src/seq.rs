@@ -118,6 +118,12 @@ impl Seq {
     pub fn set_queue_tempo(&self, q: i32, value: &QueueTempo) -> Result<()> {
         acheck!(snd_seq_set_queue_tempo(self.0, q as c_int, value.0)).map(|_| ())
     }
+
+    pub fn free_queue(&self, q: i32) -> Result<()> { acheck!(snd_seq_free_queue(self.0, q)).map(|_| ()) }
+    pub fn alloc_queue(&self) -> Result<i32> { acheck!(snd_seq_alloc_queue(self.0)).map(|q| q as i32) }
+    pub fn alloc_named_queue(&self, n: &CStr) -> Result<i32> {
+        acheck!(snd_seq_alloc_named_queue(self.0, n.as_ptr())).map(|q| q as i32)
+    }
 }
 
 fn polldir(o: Option<Direction>) -> c_short {
@@ -352,7 +358,7 @@ bitflags! {
 
 
 /// [snd_seq_addr_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__addr__t.html) wrapper
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct Addr {
    pub client: i32,
    pub port: i32,
@@ -631,6 +637,71 @@ impl EventData for Addr {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+pub struct Connect {
+    pub sender: Addr,
+    pub dest: Addr,
+}
+
+impl EventData for Connect {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::PortSubscribed => true,
+             EventType::PortUnsubscribed => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self {
+         let mut d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &*d.connect() };
+         Connect {
+             sender: Addr { client: z.sender.client as i32, port: z.sender.port as i32 },
+             dest: Addr { client: z.dest.client as i32, port: z.dest.port as i32 }
+         }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z = unsafe { &mut *ev.0.data.connect() };
+         z.sender.client = self.sender.client as c_uchar;
+         z.sender.port = self.sender.port as c_uchar;
+         z.dest.client = self.dest.client as c_uchar;
+         z.dest.port = self.dest.port as c_uchar;
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+/// Note: This struct is incomplete and will likely be replaced by more specific structs in the future
+pub struct EvQueueControl {
+    queue: i32
+}
+
+impl EventData for EvQueueControl {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::Start => true,
+             EventType::Continue => true,
+             EventType::Stop => true,
+             EventType::SetposTick => true,
+             EventType::SetposTime => true,
+             EventType::Tempo => true,
+             EventType::Clock => true,
+             EventType::Tick => true,
+             EventType::QueueSkew => true,
+             EventType::SyncPos => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self {
+         let mut d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &*d.queue() };
+         EvQueueControl { queue: z.queue as i32 }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z = unsafe { &mut *ev.0.data.queue() };
+         z.queue = self.queue as c_uchar;
+    }
+}
+
+
 
 alsa_enum!(
     /// [SND_SEQ_EVENT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_events.html) constants
@@ -660,8 +731,8 @@ alsa_enum!(
     PortChange = SND_SEQ_EVENT_PORT_CHANGE,
     PortExit = SND_SEQ_EVENT_PORT_EXIT,	
     PortStart = SND_SEQ_EVENT_PORT_START,
-    Subscribed = SND_SEQ_EVENT_PORT_SUBSCRIBED,
-    Unsubscribed = SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
+    PortSubscribed = SND_SEQ_EVENT_PORT_SUBSCRIBED,
+    PortUnsubscribed = SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
     Qframe = SND_SEQ_EVENT_QFRAME,
     QueueSkew = SND_SEQ_EVENT_QUEUE_SKEW,
     Regparam = SND_SEQ_EVENT_REGPARAM,	
