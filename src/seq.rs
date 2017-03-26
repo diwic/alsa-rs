@@ -504,11 +504,15 @@ impl fmt::Debug for Event {
         if let Some(z) = self.get_data::<EvNote>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvCtrl>() { x.field(&z); }
         if let Some(z) = self.get_data::<Addr>() { x.field(&z); }
+        if let Some(z) = self.get_data::<Connect>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvResult>() { x.field(&z); }
         if let Some(z) = self.get_data::<Vec<u8>>() { x.field(&z); }
         x.finish()
     }
 }
 
+/// Low level methods to set/get data on an Event. Don't use these directly, use generic methods on Event instead.
 pub trait EventData {
     fn has_data(e: EventType) -> bool;
     fn set_data(&self, ev: &mut Event);
@@ -698,6 +702,32 @@ impl EventData for EvQueueControl {
     fn set_data(&self, ev: &mut Event) {
          let z = unsafe { &mut *ev.0.data.queue() };
          z.queue = self.queue as c_uchar;
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+pub struct EvResult {
+    event: i32,
+    result: i32,
+}
+
+impl EventData for EvResult {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::System => true,
+             EventType::Result => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self {
+         let mut d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &*d.result() };
+         EvResult { event: z.event as i32, result: z.result as i32 }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z = unsafe { &mut *ev.0.data.result() };
+         z.event = self.event as c_int;
+         z.result = self.result as c_int;
     }
 }
 
