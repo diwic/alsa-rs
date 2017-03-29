@@ -423,7 +423,7 @@ unsafe impl Send for Event {}
 
 impl Event {
     pub fn new<D: EventData>(t: EventType, data: &D) -> Self {
-        let mut z = Event(unsafe { mem::uninitialized() }, EventType::None, None);
+        let mut z = Event(unsafe { mem::zeroed() }, EventType::None, None);
         z.1 = t;
         (z.0)._type = t as c_uchar;
         debug_assert!(D::has_data(t));
@@ -905,12 +905,12 @@ fn seq_loopback() {
 
     // Create ports
     let sinfo = PortInfo::empty().unwrap();
-    sinfo.set_capability(WRITE | SUBS_WRITE);
+    sinfo.set_capability(READ | SUBS_READ);
     sinfo.set_type(MIDI_GENERIC | APPLICATION);
     s.create_port(&sinfo).unwrap();
     let sport = sinfo.get_port();
     let dinfo = PortInfo::empty().unwrap();
-    dinfo.set_capability(READ | SUBS_READ);
+    dinfo.set_capability(WRITE | SUBS_WRITE);
     dinfo.set_type(MIDI_GENERIC | APPLICATION);
     s.create_port(&dinfo).unwrap();
     let dport = dinfo.get_port();
@@ -930,12 +930,12 @@ fn seq_loopback() {
     e.set_source(sport);
     println!("Sending {:?}", e);
     s.event_output(&mut e).unwrap();
-/*    s.drain_output().unwrap(); // This one fails, haven't figured out why yet :-(
+    s.drain_output().unwrap();
  
     // Recieve the note!
     let e2 = s.event_input().unwrap();
     println!("Receiving {:?}", e2);
-    assert_eq!(e2.get_type(), EventType::Note);
-    assert_eq!(e2.get_data(), Some(note)); */
+    assert_eq!(e2.get_type(), EventType::Noteon);
+    assert_eq!(e2.get_data(), Some(note));
 }
 
