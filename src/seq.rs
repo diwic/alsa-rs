@@ -92,7 +92,7 @@ impl Seq {
         acheck!(snd_seq_create_port(self.0, port.0)).map(|_| ())
     }
 
-    pub fn create_simple_port(&self, name: &CStr, caps: PortCaps, t: PortType) -> Result<i32> {
+    pub fn create_simple_port(&self, name: &CStr, caps: PortCap, t: PortType) -> Result<i32> {
         acheck!(snd_seq_create_simple_port(self.0, name.as_ptr(), caps.bits() as c_uint, t.bits() as c_uint)).map(|q| q as i32)
     }
 
@@ -279,15 +279,15 @@ impl PortInfo {
         unsafe { alsa::snd_seq_port_info_set_name(self.0, name.as_ptr()) };
     }
 
-    pub fn get_capability(&self) -> PortCaps {
-        PortCaps::from_bits_truncate(unsafe { alsa::snd_seq_port_info_get_capability(self.0) as u32 })
+    pub fn get_capability(&self) -> PortCap {
+        PortCap::from_bits_truncate(unsafe { alsa::snd_seq_port_info_get_capability(self.0) as u32 })
     }
 
     pub fn get_type(&self) -> PortType {
         PortType::from_bits_truncate(unsafe { alsa::snd_seq_port_info_get_type(self.0) as u32 })
     }
 
-    pub fn set_capability(&self, c: PortCaps) {
+    pub fn set_capability(&self, c: PortCap) {
         unsafe { alsa::snd_seq_port_info_set_capability(self.0, c.bits() as c_uint) }
     }
 
@@ -342,7 +342,8 @@ impl<'a> Iterator for PortIter<'a> {
 }
 
 bitflags! {
-    pub flags PortCaps: u32 {
+    /// [SND_SEQ_PORT_CAP_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants 
+    pub flags PortCap: u32 {
         const READ = 1<<0,
         const WRITE = 1<<1,
         const SYNC_READ = 1<<2,
@@ -355,6 +356,7 @@ bitflags! {
 }
 
 bitflags! {
+    /// [SND_SEQ_PORT_TYPE_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants 
     pub flags PortType: u32 {
         const SPECIFIC = (1<<0),
         const MIDI_GENERIC = (1<<1),
@@ -441,6 +443,10 @@ impl PortSubscribe {
 
 }
 
+/// [snd_seq_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__event__t.html) wrapper
+///
+/// Fields of the event is not directly exposed. Instead call `Event::new` to set data (which can be, e g, an EvNote).
+/// Use `get_type` and `get_data` to retreive data.
 pub struct Event(alsa::snd_seq_event_t, EventType, Option<Vec<u8>>);
 
 unsafe impl Send for Event {}
@@ -539,6 +545,7 @@ impl fmt::Debug for Event {
         if let Some(z) = self.get_data::<EvQueueControl<()>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvQueueControl<i32>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvQueueControl<u32>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<time::Duration>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvResult>() { x.field(&z); }
         if let Some(z) = self.get_data::<Vec<u8>>() { x.field(&z); }
         x.finish()
@@ -553,7 +560,10 @@ pub trait EventData {
 }
 
 impl EventData for () {
-    fn has_data(e: EventType) -> bool { !EvNote::has_data(e) && !EvCtrl::has_data(e) && !Addr::has_data(e) && !Vec::<u8>::has_data(e)}
+    fn has_data(e: EventType) -> bool { !EvNote::has_data(e) && !EvCtrl::has_data(e) && !Addr::has_data(e) && 
+        !Connect::has_data(e) && !EvResult::has_data(e) && 
+        !EvQueueControl::<()>::has_data(e) && !EvQueueControl::<i32>::has_data(e) && !EvQueueControl::<u32>::has_data(e) &&
+        !EvQueueControl::<time::Duration>::has_data(e) && !Vec::<u8>::has_data(e) }
     fn set_data(&self, _: &mut Event) {}
     fn get_data(_: &Event) -> Self {}
 }
@@ -675,6 +685,7 @@ impl EventData for Addr {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+/// [snd_seq_connect_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__connect__t.html) wrapper
 pub struct Connect {
     pub sender: Addr,
     pub dest: Addr,
@@ -706,7 +717,11 @@ impl EventData for Connect {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
-/// Note: What types of T are required for the different EvQueueControl messages is not documented in alsa-lib. Improvement patches welcome.
+/// [snd_seq_ev_queue_control_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__ev__queue__control__t.html) wrapper
+///
+/// Note: This struct is generic, but what types of T are required for the different EvQueueControl messages is
+/// not very well documented in alsa-lib. Right now, Tempo is i32, Tick, SetposTick and SyncPos are u32, SetposTime is time::Duration,
+/// and the rest is (). If I guessed wrong, let me know.
 pub struct EvQueueControl<T> {
     queue: i32,
     value: T,
@@ -718,12 +733,8 @@ impl EventData for EvQueueControl<()> {
              EventType::Start => true,
              EventType::Continue => true,
              EventType::Stop => true,
-             EventType::SetposTick => true,
-             EventType::SetposTime => true,
              EventType::Clock => true,
-             EventType::Tick => true,
              EventType::QueueSkew => true,
-             EventType::SyncPos => true,
              _ => false,
          }
     }
@@ -761,6 +772,8 @@ impl EventData for EvQueueControl<u32> {
     fn has_data(e: EventType) -> bool {
          match e {
              EventType::SyncPos => true,
+             EventType::Tick => true,
+             EventType::SetposTick => true,
              _ => false,
          }
     }
@@ -776,9 +789,32 @@ impl EventData for EvQueueControl<u32> {
     } }
 }
 
+impl EventData for EvQueueControl<time::Duration> {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::SetposTime => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut *d.queue();
+         let t = &mut *(*z.param.time()).time();
+         EvQueueControl { queue: z.queue as i32, value: time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32) }
+    } }
+    fn set_data(&self, ev: &mut Event) { unsafe {
+         let z = &mut *ev.0.data.queue();
+         z.queue = self.queue as c_uchar;
+         let t = &mut *(*z.param.time()).time();
+         t.tv_sec = self.value.as_secs() as c_uint;
+         t.tv_nsec = self.value.subsec_nanos() as c_uint;
+    } }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
-/// It's called EvResult instead of Result in order to not be confused with Rust's Result type.
+/// [snd_seq_result_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__result__t.html) wrapper
+///
+/// It's called EvResult instead of Result, in order to not be confused with Rust's Result type.
 pub struct EvResult {
     event: i32,
     result: i32,
@@ -872,7 +908,7 @@ alsa_enum!(
     UsrVar4 = SND_SEQ_EVENT_USR_VAR4,
 );
 
-
+/// [snd_seq_queue_tempo_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_queue.html) wrapper
 pub struct QueueTempo(*mut alsa::snd_seq_queue_tempo_t);
 
 unsafe impl Send for QueueTempo {}
