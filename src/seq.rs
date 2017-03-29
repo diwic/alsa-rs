@@ -12,6 +12,7 @@ const SND_SEQ_OPEN_OUTPUT: i32 = 1;
 const SND_SEQ_OPEN_INPUT: i32 = 2;
 const SND_SEQ_OPEN_DUPLEX: i32 = SND_SEQ_OPEN_OUTPUT | SND_SEQ_OPEN_INPUT;
 const SND_SEQ_NONBLOCK: i32 = 0x0001;
+const SND_SEQ_ADDRESS_BROADCAST: u8 = 255;
 const SND_SEQ_ADDRESS_SUBSCRIBERS: u8 = 254;
 const SND_SEQ_ADDRESS_UNKNOWN: u8 = 253;
 const SND_SEQ_QUEUE_DIRECT: u8 = 253;
@@ -21,6 +22,9 @@ const SND_SEQ_TIME_MODE_REL: u8 = (1<<1);
 const SND_SEQ_TIME_STAMP_REAL: u8 = (1<<0);
 const SND_SEQ_TIME_STAMP_TICK: u8 = (0<<0);
 const SND_SEQ_TIME_MODE_ABS: u8 = (0<<1);
+const SND_SEQ_CLIENT_SYSTEM: u8 = 0;
+const SND_SEQ_PORT_SYSTEM_TIMER: u8 = 0;
+const SND_SEQ_PORT_SYSTEM_ANNOUNCE: u8 = 1;
 
 /// [snd_seq_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___sequencer.html) wrapper
 pub struct Seq(*mut alsa::snd_seq_t);
@@ -360,8 +364,14 @@ bitflags! {
 /// [snd_seq_addr_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__addr__t.html) wrapper
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct Addr {
-   pub client: i32,
-   pub port: i32,
+    pub client: i32,
+    pub port: i32,
+}
+
+impl Addr {
+    pub fn system_timer() -> Addr { Addr { client: SND_SEQ_CLIENT_SYSTEM as i32, port: SND_SEQ_PORT_SYSTEM_TIMER as i32 } }
+    pub fn system_announce() -> Addr { Addr { client: SND_SEQ_CLIENT_SYSTEM as i32, port: SND_SEQ_PORT_SYSTEM_ANNOUNCE as i32 } }
+    pub fn broadcast() -> Addr { Addr { client: SND_SEQ_ADDRESS_BROADCAST as i32, port: SND_SEQ_ADDRESS_BROADCAST as i32 } }
 }
 
 /// [snd_seq_port_subscribe_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
@@ -505,7 +515,9 @@ impl fmt::Debug for Event {
         if let Some(z) = self.get_data::<EvCtrl>() { x.field(&z); }
         if let Some(z) = self.get_data::<Addr>() { x.field(&z); }
         if let Some(z) = self.get_data::<Connect>() { x.field(&z); }
-        if let Some(z) = self.get_data::<EvQueueControl>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<()>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<i32>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<u32>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvResult>() { x.field(&z); }
         if let Some(z) = self.get_data::<Vec<u8>>() { x.field(&z); }
         x.finish()
@@ -673,12 +685,13 @@ impl EventData for Connect {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
-/// Note: This struct is incomplete and will likely be replaced by more specific structs in the future
-pub struct EvQueueControl {
-    queue: i32
+/// Note: What types of T are required for the different EvQueueControl messages is not documented in alsa-lib. Improvement patches welcome.
+pub struct EvQueueControl<T> {
+    queue: i32,
+    value: T,
 }
 
-impl EventData for EvQueueControl {
+impl EventData for EvQueueControl<()> {
     fn has_data(e: EventType) -> bool {
          match e {
              EventType::Start => true,
@@ -686,7 +699,6 @@ impl EventData for EvQueueControl {
              EventType::Stop => true,
              EventType::SetposTick => true,
              EventType::SetposTime => true,
-             EventType::Tempo => true,
              EventType::Clock => true,
              EventType::Tick => true,
              EventType::QueueSkew => true,
@@ -697,13 +709,52 @@ impl EventData for EvQueueControl {
     fn get_data(ev: &Event) -> Self {
          let mut d = unsafe { ptr::read(&ev.0.data) };
          let z = unsafe { &*d.queue() };
-         EvQueueControl { queue: z.queue as i32 }
+         EvQueueControl { queue: z.queue as i32, value: () }
     }
     fn set_data(&self, ev: &mut Event) {
          let z = unsafe { &mut *ev.0.data.queue() };
          z.queue = self.queue as c_uchar;
     }
 }
+
+impl EventData for EvQueueControl<i32> {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::Tempo => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut *d.queue();
+         EvQueueControl { queue: z.queue as i32, value: *z.param.value() as i32 }
+    } }
+    fn set_data(&self, ev: &mut Event) { unsafe {
+         let z = &mut *ev.0.data.queue();
+         z.queue = self.queue as c_uchar;
+         *z.param.value() = self.value as c_int;
+    } }
+}
+
+impl EventData for EvQueueControl<u32> {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::SyncPos => true,
+             _ => false,
+         }
+    }
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut *d.queue();
+         EvQueueControl { queue: z.queue as i32, value: *z.param.position() as u32 }
+    } }
+    fn set_data(&self, ev: &mut Event) { unsafe {
+         let z = &mut *ev.0.data.queue();
+         z.queue = self.queue as c_uchar;
+         *z.param.position() = self.value as c_uint;
+    } }
+}
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 /// It's called EvResult instead of Result in order to not be confused with Rust's Result type.
