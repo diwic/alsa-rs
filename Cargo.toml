@@ -1,6 +1,6 @@
 [package]
 name = "alsa"
-version = "0.1.6"
+version = "0.1.7"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Thin but safe wrappers for ALSA (Linux sound API)"
