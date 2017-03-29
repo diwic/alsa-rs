@@ -122,14 +122,7 @@ impl Seq {
     pub fn event_input(&self) -> Result<Event> {
         let mut z = ptr::null_mut();
         try!(acheck!(snd_seq_event_input(self.0, &mut z)));
-        unsafe {
-            let t = try!(EventType::from_c_int((*z)._type as c_int, "snd_seq_event_input"));
-            let v = if Vec::<u8>::has_data(t) {
-                let zz: &mut alsa::snd_seq_ev_ext_t = &mut *(&mut (*z).data as *mut alsa::Union_Unnamed10 as *mut _);
-                Some(slice::from_raw_parts(zz.ptr as *mut u8, zz.len as usize).to_vec())
-            } else { None };
-            Ok(Event(ptr::read(z), t, v))
-        }
+        unsafe { Event::extract(&mut *z, "snd_seq_event_input") }
     }
     pub fn event_input_pending(&self, fetch_sequencer: bool) -> Result<u32> {
         acheck!(snd_seq_event_input_pending(self.0, if fetch_sequencer {1} else {0})).map(|q| q as u32)

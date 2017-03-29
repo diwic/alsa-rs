@@ -16,13 +16,13 @@ Expect the following to work:
 
  * Raw midi
 
+ * Midi sequencer API (most of it)
+
  * Enumerations of all of the above
 
  * Poll and/or wait for all of the above
 
 The following is not yet implemented (mostly because nobody asked for them) :
-
- * Midi sequencer API
 
  * Separate timer API (snd_timer_*)
 
