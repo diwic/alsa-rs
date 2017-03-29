@@ -25,6 +25,7 @@ const SND_SEQ_TIME_MODE_ABS: u8 = (0<<1);
 const SND_SEQ_CLIENT_SYSTEM: u8 = 0;
 const SND_SEQ_PORT_SYSTEM_TIMER: u8 = 0;
 const SND_SEQ_PORT_SYSTEM_ANNOUNCE: u8 = 1;
+const SND_SEQ_PRIORITY_HIGH: u8 = 1<<4;
 
 /// [snd_seq_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___sequencer.html) wrapper
 pub struct Seq(*mut alsa::snd_seq_t);
@@ -53,6 +54,22 @@ impl Seq {
         acheck!(snd_seq_set_client_name(self.0, name.as_ptr())).map(|_| ())
     }
 
+    pub fn set_client_event_filter(&self, event_type: i32) -> Result<()> {
+        acheck!(snd_seq_set_client_event_filter(self.0, event_type as c_int)).map(|_| ())
+    }
+
+    pub fn set_client_pool_output(&self, size: u32) -> Result<()> {
+        acheck!(snd_seq_set_client_pool_output(self.0, size as size_t)).map(|_| ())
+    }
+
+    pub fn set_client_pool_input(&self, size: u32) -> Result<()> {
+        acheck!(snd_seq_set_client_pool_input(self.0, size as size_t)).map(|_| ())
+    }
+
+    pub fn set_client_pool_output_room(&self, size: u32) -> Result<()> {
+        acheck!(snd_seq_set_client_pool_output_room(self.0, size as size_t)).map(|_| ())
+    }
+
     pub fn client_id(&self) -> Result<i32> {
         acheck!(snd_seq_client_id(self.0)).map(|q| q as i32)
     }
@@ -73,6 +90,10 @@ impl Seq {
 
     pub fn create_port(&self, port: &PortInfo) -> Result<()> {
         acheck!(snd_seq_create_port(self.0, port.0)).map(|_| ())
+    }
+
+    pub fn create_simple_port(&self, name: &CStr, caps: PortCaps, t: PortType) -> Result<i32> {
+        acheck!(snd_seq_create_simple_port(self.0, name.as_ptr(), caps.bits() as c_uint, t.bits() as c_uint)).map(|q| q as i32)
     }
 
     pub fn set_port_info(&self, port: i32, info: &mut PortInfo) -> Result<()> {
@@ -500,6 +521,13 @@ impl Event {
             let t = unsafe { &(*d.tick()) };
             Some(*t)
         } else { None }
+    }
+
+    pub fn get_priority(&self) -> bool { (self.0.flags & SND_SEQ_PRIORITY_HIGH) != 0 }
+
+    pub fn set_priority(&mut self, is_high_prio: bool) {
+        if is_high_prio { self.0.flags |= SND_SEQ_PRIORITY_HIGH; }
+        else { self.0.flags &= !SND_SEQ_PRIORITY_HIGH; }
     }
 }
 
