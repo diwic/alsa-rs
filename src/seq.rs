@@ -120,11 +120,22 @@ impl Seq {
     pub fn event_output_buffer(&self, e: &mut Event) -> Result<u32> { acheck!(snd_seq_event_output_buffer(self.0, &mut e.0)).map(|q| q as u32) }
     pub fn event_output_direct(&self, e: &mut Event) -> Result<u32> { acheck!(snd_seq_event_output_direct(self.0, &mut e.0)).map(|q| q as u32) }
 
-    pub fn event_input(&self) -> Result<Event> {
+    /// Note: this function is a non-allocating version of event_input.
+    ///
+    /// In case of sysex or other custom data length message, the supplied callback will be called with the buffer.
+    /// The return value of the callback is only relevant if you intend to call get_data::<Vec<u8>>() on the returned Event.
+    pub fn event_input_cb<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(&self, f: F) -> Result<Event> {
         let mut z = ptr::null_mut();
         try!(acheck!(snd_seq_event_input(self.0, &mut z)));
-        unsafe { Event::extract(&mut *z, "snd_seq_event_input") }
+        unsafe { Event::extract(&mut *z, "snd_seq_event_input", f) }
     }
+
+    /// Note: this function will allocate in case of sysex or other custom data length messages.
+    /// If this is undesired, you can use event_input_cb instead.
+    pub fn event_input(&self) -> Result<Event> {
+        self.event_input_cb(|_,buf| Some(buf.to_vec()))
+    }
+
     pub fn event_input_pending(&self, fetch_sequencer: bool) -> Result<u32> {
         acheck!(snd_seq_event_input_pending(self.0, if fetch_sequencer {1} else {0})).map(|q| q as u32)
     }
@@ -466,11 +477,12 @@ impl Event {
 
     // Extracts EventType and Data into Event's own buffer. This requires the event data to
     // be valid, hence the unsafety.
-    unsafe fn extract(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event> {
+    unsafe fn extract<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(z: &mut alsa::snd_seq_event_t, func: &'static str, f: F) -> Result<Event> {
         let t = try!(EventType::from_c_int((*z)._type as c_int, func));
         let v = if Vec::<u8>::has_data(t) {
             let zz = (*z).data.ext();
-            Some(slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize).to_vec())
+            let ss = slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize);
+            f(t, ss)
         } else { None };
         Ok(Event(ptr::read(z), t, v))
     }
@@ -972,12 +984,23 @@ impl MidiEvent {
         acheck!(snd_midi_event_decode(self.0, buf.as_mut_ptr() as *mut c_uchar, buf.len() as c_long, &ev.0)).map(|r| r as usize)
     }
 
-    pub fn encode(&self, buf: &[u8]) -> Result<(usize, Option<Event>)> {
+    /// In case of success, returns a tuple of (bytes consumed from buf, found Event).
+    ///
+    /// Unlike encode, this function does not copy sysex data into the Event. Instead a callback is supplied with the sysex data.
+    /// The return value of the callback is only relevant if you intend to call get_data::<Vec<u8>>() on the returned Event.
+    pub fn encode_cb<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(&self, buf: &[u8], f: F) -> Result<(usize, Option<Event>)> {
         let mut ev = unsafe { mem::zeroed() };
         let r = try!(acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev)));
         let e = if ev._type == alsa::SND_SEQ_EVENT_NONE as u8 { None }
-        else { Some(try!( unsafe { Event::extract(&mut ev, "snd_midi_event_encode") } )) };
+        else { Some(try!( unsafe { Event::extract(&mut ev, "snd_midi_event_encode", f) } )) };
         Ok((r as usize, e))
+    }
+
+    /// In case of success, returns a tuple of (bytes consumed from buf, found Event).
+    ///
+    /// This function copies sysex data into the Event. If this is not wanted, use encode_cb.
+    pub fn encode(&self, buf: &[u8]) -> Result<(usize, Option<Event>)> {
+        self.encode_cb(buf, |_,s| Some(s.to_vec()))
     }
 
 }
