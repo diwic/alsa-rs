@@ -37,8 +37,9 @@ impl Drop for Seq {
 }
 
 impl Seq {
-    /// Hint: name should almost always be "default".
-    pub fn open(name: &CStr, dir: Option<Direction>, nonblock: bool) -> Result<Seq> {
+    /// If name is None, "default" will be used.
+    pub fn open(name: Option<&CStr>, dir: Option<Direction>, nonblock: bool) -> Result<Seq> {
+        let n2 = name.unwrap_or(unsafe { CStr::from_bytes_with_nul_unchecked(b"default\0") });
         let mut h = ptr::null_mut();
         let mode = if nonblock { SND_SEQ_NONBLOCK } else { 0 };
         let streams = match dir {
@@ -46,7 +47,7 @@ impl Seq {
             Some(Direction::Playback) => SND_SEQ_OPEN_OUTPUT,
             Some(Direction::Capture) => SND_SEQ_OPEN_INPUT,
         };
-        acheck!(snd_seq_open(&mut h, name.as_ptr(), streams, mode))
+        acheck!(snd_seq_open(&mut h, n2.as_ptr(), streams, mode))
             .map(|_| Seq(h))
     }
 
@@ -981,7 +982,7 @@ impl MidiEvent {
 #[test]
 fn print_seqs() {
     use std::ffi::CString;
-    let s = super::Seq::open(&CString::new("default").unwrap(), None, false).unwrap();
+    let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_print_seqs").unwrap()).unwrap();
     let clients: Vec<_> = ClientIter::new(&s).collect();
     for a in &clients {
@@ -993,7 +994,7 @@ fn print_seqs() {
 #[test]
 fn seq_subscribe() {
     use std::ffi::CString;
-    let s = super::Seq::open(&CString::new("default").unwrap(), None, false).unwrap();
+    let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_subscribe").unwrap()).unwrap();
     let timer_info = s.get_any_port_info(Addr { client: 0, port: 0 }).unwrap();
     assert_eq!(timer_info.get_name().unwrap(), "Timer");
@@ -1008,7 +1009,7 @@ fn seq_subscribe() {
 #[test]
 fn seq_loopback() {
     use std::ffi::CString;
-    let s = super::Seq::open(&CString::new("default").unwrap(), None, false).unwrap();
+    let s = super::Seq::open(Some(&CString::new("default").unwrap()), None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_loopback").unwrap()).unwrap();
 
     // Create ports
