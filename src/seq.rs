@@ -246,6 +246,7 @@ impl PortInfo {
         acheck!(snd_seq_port_info_malloc(&mut p)).map(|_| PortInfo(p))
     }
 
+    /// Creates a new PortInfo with all fields set to zero.
     pub fn empty() -> Result<Self> {
         let z = try!(Self::new());
         unsafe { ptr::write_bytes(z.0 as *mut u8, 0, alsa::snd_seq_port_info_sizeof()) };
@@ -406,6 +407,7 @@ impl PortSubscribe {
         acheck!(snd_seq_port_subscribe_malloc(&mut p)).map(|_| PortSubscribe(p))
     }
 
+    /// Creates a new PortSubscribe with all fields set to zero.
     pub fn empty() -> Result<Self> {
         let z = try!(Self::new());
         unsafe { ptr::write_bytes(z.0 as *mut u8, 0, alsa::snd_seq_port_subscribe_sizeof()) };
@@ -924,6 +926,7 @@ impl QueueTempo {
         acheck!(snd_seq_queue_tempo_malloc(&mut q)).map(|_| QueueTempo(q))
     }
 
+    /// Creates a new QueueTempo with all fields set to zero.
     pub fn empty() -> Result<Self> {
         let q = try!(QueueTempo::new());
         unsafe { ptr::write_bytes(q.0 as *mut u8, 0, alsa::snd_seq_queue_tempo_sizeof()) };
