@@ -27,6 +27,13 @@ const SND_SEQ_PORT_SYSTEM_TIMER: u8 = 0;
 const SND_SEQ_PORT_SYSTEM_ANNOUNCE: u8 = 1;
 const SND_SEQ_PRIORITY_HIGH: u8 = 1<<4;
 
+// Workaround for improper alignment of snd_seq_ev_ext_t in alsa-sys
+#[repr(packed)]
+struct EvExtPacked {
+    len: c_uint,
+    ptr: *mut c_void,
+}
+
 /// [snd_seq_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___sequencer.html) wrapper
 pub struct Seq(*mut alsa::snd_seq_t);
 
@@ -480,7 +487,7 @@ impl Event {
     unsafe fn extract<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(z: &mut alsa::snd_seq_event_t, func: &'static str, f: F) -> Result<Event> {
         let t = try!(EventType::from_c_int((*z)._type as c_int, func));
         let v = if Vec::<u8>::has_data(t) {
-            let zz = (*z).data.ext();
+            let zz: &mut EvExtPacked = &mut *(&mut (*z).data as *mut alsa::Union_Unnamed10 as *mut _);
             let ss = slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize);
             f(t, ss)
         } else { None };
@@ -598,9 +605,10 @@ impl EventData for Vec<u8> {
     }
     fn set_data(&self, e: &mut Event) {
         e.2 = Some(self.clone());
-        let z: &mut alsa::snd_seq_ev_ext_t = unsafe { &mut *(&mut e.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
-        z.len = e.2.as_ref().unwrap().len() as c_uint;
-        z.ptr = e.2.as_mut().unwrap().as_mut_ptr() as *mut c_void;
+        let ww = e.2.as_mut().unwrap();
+        let z: &mut EvExtPacked = unsafe { &mut *(&mut e.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
+        z.len = ww.len() as c_uint;
+        z.ptr = ww.as_mut_ptr() as *mut c_void;
     }
     fn get_data(e: &Event) -> Self { e.2.as_ref().unwrap_or(&Vec::new()).clone() }
 }
@@ -1074,3 +1082,12 @@ fn seq_loopback() {
     assert_eq!(e2.get_data(), Some(note));
 }
 
+#[test]
+fn seq_encode_sysex() {
+    let me = MidiEvent::new(16).unwrap();
+    let sysex = &[0xf0, 1, 2, 3, 4, 5, 6, 7, 0xf7];
+    let (s, ev) = me.encode(sysex).unwrap();
+    assert_eq!(s, 9);
+    let v: Vec<u8> = ev.unwrap().get_data().unwrap();
+    assert_eq!(&*v, sysex);
+}
