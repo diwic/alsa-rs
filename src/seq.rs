@@ -506,6 +506,14 @@ impl Event {
     }
 
     pub fn set_source(&mut self, p: i32) { self.0.source.port = p as u8 }
+    pub fn set_dest(&mut self, d: Addr) { self.0.dest.client = d.client as c_uchar; self.0.dest.port = d.port as c_uchar; }
+    pub fn set_tag(&mut self, t: u8) { self.0.tag = t as c_uchar;  }
+    pub fn set_queue(&mut self, q: i32) { self.0.queue = q as c_uchar;  }
+
+    pub fn get_source(&self) -> Addr { Addr { client: self.0.source.client as i32, port: self.0.source.port as i32 } }
+    pub fn get_dest(&self) -> Addr { Addr { client: self.0.dest.client as i32, port: self.0.dest.port as i32 } }
+    pub fn get_tag(&self) -> u8 { self.0.tag as u8  }
+    pub fn get_queue(&self) -> i32 { self.0.queue as i32 }
 
     pub fn schedule_real(&mut self, queue: i32, relative: bool, rtime: time::Duration) {
         self.0.flags &= !(SND_SEQ_TIME_STAMP_MASK | SND_SEQ_TIME_MODE_MASK);
