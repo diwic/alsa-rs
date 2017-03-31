@@ -123,9 +123,20 @@ impl Seq {
         acheck!(snd_seq_unsubscribe_port(self.0, z.0)).map(|_| ())
     }
 
-    pub fn event_output(&self, e: &mut Event) -> Result<u32> { acheck!(snd_seq_event_output(self.0, &mut e.0)).map(|q| q as u32) }
-    pub fn event_output_buffer(&self, e: &mut Event) -> Result<u32> { acheck!(snd_seq_event_output_buffer(self.0, &mut e.0)).map(|q| q as u32) }
-    pub fn event_output_direct(&self, e: &mut Event) -> Result<u32> { acheck!(snd_seq_event_output_direct(self.0, &mut e.0)).map(|q| q as u32) }
+    pub fn event_output(&self, e: &mut Event) -> Result<u32> {
+        e.ensure_buf();
+        acheck!(snd_seq_event_output(self.0, &mut e.0)).map(|q| q as u32)
+    }
+    
+    pub fn event_output_buffer(&self, e: &mut Event) -> Result<u32> {
+        e.ensure_buf();
+        acheck!(snd_seq_event_output_buffer(self.0, &mut e.0)).map(|q| q as u32)
+    }
+
+    pub fn event_output_direct(&self, e: &mut Event) -> Result<u32> {
+        e.ensure_buf();
+        acheck!(snd_seq_event_output_direct(self.0, &mut e.0)).map(|q| q as u32)
+    }
 
     /// Note: this function is a non-allocating version of event_input.
     ///
@@ -494,6 +505,14 @@ impl Event {
         Ok(Event(ptr::read(z), t, v))
     }
 
+    fn ensure_buf(&mut self) {
+        if !Vec::<u8>::has_data(self.1) { return; }
+        if self.2.is_none() { self.2 = Some(Vec::new()) };
+        let ww = self.2.as_mut().unwrap();
+        let z: &mut EvExtPacked = unsafe { &mut *(&mut self.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
+        z.len = ww.len() as c_uint;
+        z.ptr = ww.as_mut_ptr() as *mut c_void;
+    }
 
     #[inline]
     pub fn get_type(&self) -> EventType { self.1 }
@@ -613,10 +632,6 @@ impl EventData for Vec<u8> {
     }
     fn set_data(&self, e: &mut Event) {
         e.2 = Some(self.clone());
-        let ww = e.2.as_mut().unwrap();
-        let z: &mut EvExtPacked = unsafe { &mut *(&mut e.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
-        z.len = ww.len() as c_uint;
-        z.ptr = ww.as_mut_ptr() as *mut c_void;
     }
     fn get_data(e: &Event) -> Self { e.2.as_ref().unwrap_or(&Vec::new()).clone() }
 }
@@ -996,7 +1011,8 @@ impl MidiEvent {
     /// Alsa-lib is a bit confusing here. Anyhow, set "enable" to true to enable running status.
     pub fn enable_running_status(&self, enable: bool) { unsafe { alsa::snd_midi_event_no_status(self.0, if enable {0} else {1}) } }
 
-    pub fn decode(&self, buf: &mut [u8], ev: &Event) -> Result<usize> {
+    pub fn decode(&self, buf: &mut [u8], ev: &mut Event) -> Result<usize> {
+        ev.ensure_buf();
         acheck!(snd_midi_event_decode(self.0, buf.as_mut_ptr() as *mut c_uchar, buf.len() as c_long, &ev.0)).map(|r| r as usize)
     }
 
