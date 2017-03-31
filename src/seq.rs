@@ -769,8 +769,8 @@ impl EventData for Connect {
 /// not very well documented in alsa-lib. Right now, Tempo is i32, Tick, SetposTick and SyncPos are u32, SetposTime is time::Duration,
 /// and the rest is (). If I guessed wrong, let me know.
 pub struct EvQueueControl<T> {
-    queue: i32,
-    value: T,
+    pub queue: i32,
+    pub value: T,
 }
 
 impl EventData for EvQueueControl<()> {
@@ -862,8 +862,8 @@ impl EventData for EvQueueControl<time::Duration> {
 ///
 /// It's called EvResult instead of Result, in order to not be confused with Rust's Result type.
 pub struct EvResult {
-    event: i32,
-    result: i32,
+    pub event: i32,
+    pub result: i32,
 }
 
 impl EventData for EvResult {
