@@ -4,7 +4,7 @@ use libc::{c_uint, c_int, c_short, c_uchar, c_void, c_long, size_t, pollfd};
 use super::error::*;
 use alsa;
 use super::{Direction, poll};
-use std::{ptr, fmt, mem, slice, time};
+use std::{ptr, fmt, mem, slice, time, cell};
 use std::ffi::CStr;
 use std::borrow::Cow;
 
@@ -40,7 +40,11 @@ struct EvExtPacked {
 }
 
 /// [snd_seq_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___sequencer.html) wrapper
-pub struct Seq(*mut alsa::snd_seq_t);
+///
+/// To access the functions ``event_input`, `event_input_pending` and `set_input_buffer_size`,
+/// you first have to obtain an instance of `Input` by calling `input()`. Only one instance of
+/// `Input` may exist at any time for a given `Seq`.
+pub struct Seq(*mut alsa::snd_seq_t, cell::Cell<bool>);
 
 unsafe impl Send for Seq {}
 
@@ -49,6 +53,10 @@ impl Drop for Seq {
 }
 
 impl Seq {
+    fn check_has_input(&self) {
+        if self.1.get() { panic!("No additional Input object allowed")}
+    }
+
     /// If name is None, "default" will be used.
     pub fn open(name: Option<&CStr>, dir: Option<Direction>, nonblock: bool) -> Result<Seq> {
         let n2 = name.unwrap_or(unsafe { CStr::from_bytes_with_nul_unchecked(b"default\0") });
@@ -60,7 +68,7 @@ impl Seq {
             Some(Direction::Capture) => SND_SEQ_OPEN_INPUT,
         };
         acheck!(snd_seq_open(&mut h, n2.as_ptr(), streams, mode))
-            .map(|_| Seq(h))
+            .map(|_| Seq(h, cell::Cell::new(false)))
     }
 
     pub fn set_client_name(&self, name: &CStr) -> Result<()> {
@@ -143,27 +151,6 @@ impl Seq {
         acheck!(snd_seq_event_output_direct(self.0, &mut e.0)).map(|q| q as u32)
     }
 
-    /// Note: this function is a non-allocating version of event_input.
-    ///
-    /// In case of sysex or other custom data length message, the supplied callback will be called with the buffer.
-    /// The return value of the callback is only relevant if you intend to call get_data::<Vec<u8>>() on the returned Event
-    /// or the event is passed back unchanged to ALSA for output.
-    pub fn event_input_cb<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(&self, f: F) -> Result<Event<'static>> {
-        let mut z = ptr::null_mut();
-        try!(acheck!(snd_seq_event_input(self.0, &mut z)));
-        unsafe { Event::extract(&mut *z, "snd_seq_event_input", f) }
-    }
-
-    /// Note: this function will allocate in case of sysex or other custom data length messages.
-    /// If this is undesired, you can use `event_input_cb` instead.
-    pub fn event_input(&self) -> Result<Event<'static>> {
-        self.event_input_cb(|_,buf| Some(buf.to_vec()))
-    }
-
-    pub fn event_input_pending(&self, fetch_sequencer: bool) -> Result<u32> {
-        acheck!(snd_seq_event_input_pending(self.0, if fetch_sequencer {1} else {0})).map(|q| q as u32)
-    }
-
     pub fn get_queue_tempo(&self, q: i32) -> Result<QueueTempo> {
         let value = try!(QueueTempo::new());
         acheck!(snd_seq_get_queue_tempo(self.0, q as c_int, value.0)).map(|_| value)
@@ -177,6 +164,42 @@ impl Seq {
     pub fn alloc_queue(&self) -> Result<i32> { acheck!(snd_seq_alloc_queue(self.0)).map(|q| q as i32) }
     pub fn alloc_named_queue(&self, n: &CStr) -> Result<i32> {
         acheck!(snd_seq_alloc_named_queue(self.0, n.as_ptr())).map(|q| q as i32)
+    }
+
+    pub fn input<'a>(&'a self) -> Input<'a> {
+        Input::new(self)
+    }
+}
+
+pub struct Input<'a>(&'a Seq);
+
+impl<'a> Drop for Input<'a> {
+    fn drop(&mut self) { (self.0).1.set(false) }
+}
+
+impl<'a> Input<'a> {
+    fn new(s: &'a Seq) -> Input<'a> {
+        s.check_has_input();
+        s.1.set(true);
+        Input(s)
+    }
+
+    pub fn event_input<'b>(&'b mut self) -> Result<Event<'b>> {
+        // The returned event might reference the input buffer of the `Seq`.
+        // Therefore we mutably borrow the `Input` structure, preventing any
+        // other function call that might change the input buffer while the
+        // event is alive.
+        let mut z = ptr::null_mut();
+        try!(acheck!(snd_seq_event_input((self.0).0, &mut z)));
+        unsafe { Event::extract (&mut *z, "snd_seq_event_input") }
+    }
+
+    pub fn event_input_pending(&self, fetch_sequencer: bool) -> Result<u32> {
+        acheck!(snd_seq_event_input_pending((self.0).0, if fetch_sequencer {1} else {0})).map(|q| q as u32)
+    }
+
+    pub fn set_input_buffer_size(&self, size: u32)  -> Result<()> {
+        acheck!(snd_seq_set_input_buffer_size((self.0).0, size as size_t)).map(|_| ())
     }
 }
 
@@ -539,22 +562,19 @@ impl<'a> Event<'a> {
         Event::get_length_flag(t) != SND_SEQ_EVENT_LENGTH_FIXED
     }
 
-    // Extracts EventType and Data into Event's own buffer. This requires the event data to
-    // be valid, hence the unsafety.
-    unsafe fn extract<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(z: &mut alsa::snd_seq_event_t, func: &'static str, f: F) -> Result<Event<'static>> {
+    /// Extracts event type and data. Produces a result with an arbitrary lifetime, hence the unsafety.
+    unsafe fn extract<'any>(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event<'any>> {
         let t = try!(EventType::from_c_int((*z)._type as c_int, func));
-        let v = if Event::has_ext_data(t) {
+        let ext_data = if Event::has_ext_data(t) {
             assert!((*z).flags & SND_SEQ_EVENT_LENGTH_MASK != SND_SEQ_EVENT_LENGTH_FIXED);
-            let zz: &mut EvExtPacked = &mut *(&mut (*z).data as *mut alsa::Union_Unnamed10 as *mut _);
-            let ss = slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize);
-            match f(t, ss) {
-                Some(owned) => Some(Cow::Owned(owned)),
-                None => None
-            }
+            Some(Cow::Borrowed({
+                let zz: &EvExtPacked = &*(&(*z).data as *const alsa::Union_Unnamed10 as *const _);
+                slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
+            }))
         } else {
             None
         };
-        Ok(Event(ptr::read(z), t, v))
+        Ok(Event(ptr::read(z), t, ext_data))
     }
 
     /// Ensures that the ev.ext union element points to the correct resize_buffer for events
@@ -1081,16 +1101,7 @@ impl MidiEvent {
         let e = if ev._type == alsa::SND_SEQ_EVENT_NONE as u8 {
                 None
             } else {
-                let t = try!(EventType::from_c_int(ev._type as c_int, "snd_midi_event_encode"));
-                let extra_data = if (ev.flags & (SND_SEQ_EVENT_LENGTH_VARIABLE | SND_SEQ_EVENT_LENGTH_VARUSR)) != 0 {
-                    Some(Cow::Borrowed(unsafe {
-                        let zz: &EvExtPacked = &*(&ev.data as *const alsa::Union_Unnamed10 as *const _);
-                        slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
-                    }))
-                } else {
-                    None
-                };
-                Some(Event(unsafe { ptr::read(&mut ev) }, t, extra_data))
+                Some(try!(unsafe { Event::extract(&mut ev, "snd_midi_event_encode") }))
             };
         Ok((r as usize, e))
     }
@@ -1159,7 +1170,8 @@ fn seq_loopback() {
     s.drain_output().unwrap();
  
     // Receive the note!
-    let e2 = s.event_input().unwrap();
+    let mut input = s.input();
+    let e2 = input.event_input().unwrap();
     println!("Receiving {:?}", e2);
     assert_eq!(e2.get_type(), EventType::Noteon);
     assert_eq!(e2.get_data(), Some(note));
@@ -1184,4 +1196,15 @@ fn seq_decode_sysex() {
     let mut buffer = vec![0; sysex.len()];
     assert_eq!(me.decode(&mut buffer[..], &mut ev).unwrap(), sysex.len());
     assert_eq!(buffer, sysex);
+}
+
+#[test]
+#[should_panic]
+fn seq_get_input_twice() {
+    use std::ffi::CString;
+    let s = super::Seq::open(None, None, false).unwrap();
+    s.set_client_name(&CString::new("rust_test_seq_get_input_twice").unwrap()).unwrap();
+    let input1 = s.input();
+    let input2 = s.input(); // this should panic
+    let _ = (input1, input2);
 }
