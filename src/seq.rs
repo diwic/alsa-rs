@@ -6,6 +6,7 @@ use alsa;
 use super::{Direction, poll};
 use std::{ptr, fmt, mem, slice, time};
 use std::ffi::CStr;
+use std::borrow::Cow;
 
 // Some constants that are not in alsa-sys
 const SND_SEQ_OPEN_OUTPUT: i32 = 1;
@@ -26,6 +27,10 @@ const SND_SEQ_CLIENT_SYSTEM: u8 = 0;
 const SND_SEQ_PORT_SYSTEM_TIMER: u8 = 0;
 const SND_SEQ_PORT_SYSTEM_ANNOUNCE: u8 = 1;
 const SND_SEQ_PRIORITY_HIGH: u8 = 1<<4;
+const SND_SEQ_EVENT_LENGTH_FIXED: u8 = (0<<2);
+const SND_SEQ_EVENT_LENGTH_MASK: u8 = (3<<2);
+const SND_SEQ_EVENT_LENGTH_VARIABLE: u8 = (1<<2);
+const SND_SEQ_EVENT_LENGTH_VARUSR: u8 = (2<<2);
 
 // Workaround for improper alignment of snd_seq_ev_ext_t in alsa-sys
 #[repr(packed)]
@@ -141,16 +146,17 @@ impl Seq {
     /// Note: this function is a non-allocating version of event_input.
     ///
     /// In case of sysex or other custom data length message, the supplied callback will be called with the buffer.
-    /// The return value of the callback is only relevant if you intend to call get_data::<Vec<u8>>() on the returned Event.
-    pub fn event_input_cb<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(&self, f: F) -> Result<Event> {
+    /// The return value of the callback is only relevant if you intend to call get_data::<Vec<u8>>() on the returned Event
+    /// or the event is passed back unchanged to ALSA for output.
+    pub fn event_input_cb<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(&self, f: F) -> Result<Event<'static>> {
         let mut z = ptr::null_mut();
         try!(acheck!(snd_seq_event_input(self.0, &mut z)));
         unsafe { Event::extract(&mut *z, "snd_seq_event_input", f) }
     }
 
     /// Note: this function will allocate in case of sysex or other custom data length messages.
-    /// If this is undesired, you can use event_input_cb instead.
-    pub fn event_input(&self) -> Result<Event> {
+    /// If this is undesired, you can use `event_input_cb` instead.
+    pub fn event_input(&self) -> Result<Event<'static>> {
         self.event_input_cb(|_,buf| Some(buf.to_vec()))
     }
 
@@ -479,45 +485,113 @@ impl PortSubscribe {
 ///
 /// Fields of the event is not directly exposed. Instead call `Event::new` to set data (which can be, e g, an EvNote).
 /// Use `get_type` and `get_data` to retreive data.
-pub struct Event(alsa::snd_seq_event_t, EventType, Option<Vec<u8>>);
+///
+/// The lifetime parameter refers to the lifetime of an associated external buffer that might be used for
+/// variable-length messages (e.g. SysEx).
+pub struct Event<'a>(alsa::snd_seq_event_t, EventType, Option<Cow<'a, [u8]>>);
 
-unsafe impl Send for Event {}
+unsafe impl<'a> Send for Event<'a> {}
 
-impl Event {
-    pub fn new<D: EventData>(t: EventType, data: &D) -> Self {
+impl<'a> Event<'a> {
+    /// Creates a new event. For events that carry variable-length data (e.g. Sysex), `new_ext` has to be used instead.
+    pub fn new<D: EventData>(t: EventType, data: &D) -> Event<'static> {
+        assert!(!Event::has_ext_data(t), "event type must not carry variable-length data");
         let mut z = Event(unsafe { mem::zeroed() }, EventType::None, None);
         z.1 = t;
         (z.0)._type = t as c_uchar;
+        (z.0).flags |= Event::get_length_flag(t);
         debug_assert!(D::has_data(t));
         data.set_data(&mut z);
         z
     }
 
+    /// Creates a new event carrying variable-length data. This is required for event types `Sysex`, `Bounce`, and the `UsrVar` types.
+    pub fn new_ext<D: Into<Cow<'a, [u8]>>>(t: EventType, data: D) -> Event<'a> {
+        assert!(Event::has_ext_data(t), "event type must carry variable-length data");
+        let mut z = Event(unsafe { mem::zeroed() }, EventType::None, Some(data.into()));
+        z.1 = t;
+        (z.0)._type = t as c_uchar;
+        (z.0).flags |= Event::get_length_flag(t);
+        z
+    }
+
+    /// Consumes this event and returns an (otherwise unchanged) event where the externally referenced
+    /// buffer for variable length messages (e.g. SysEx) has been copied into the event.
+    /// The returned event has an arbitrary lifetime that is decoupled from the original buffer.
+    pub fn into_owned(self) -> Event<'static> {
+        Event(self.0, self.1, self.2.map(|cow| Cow::Owned(cow.into_owned())))
+    }
+
+    fn get_length_flag(t: EventType) -> u8 {
+        match t {
+            EventType::Sysex => SND_SEQ_EVENT_LENGTH_VARIABLE,
+            EventType::Bounce => SND_SEQ_EVENT_LENGTH_VARIABLE, // not clear whether this should be VARIABLE or VARUSR
+            EventType::UsrVar0 => SND_SEQ_EVENT_LENGTH_VARUSR,
+            EventType::UsrVar1 => SND_SEQ_EVENT_LENGTH_VARUSR,
+            EventType::UsrVar2 => SND_SEQ_EVENT_LENGTH_VARUSR,
+            EventType::UsrVar3 => SND_SEQ_EVENT_LENGTH_VARUSR,
+            EventType::UsrVar4 => SND_SEQ_EVENT_LENGTH_VARUSR,
+            _ => SND_SEQ_EVENT_LENGTH_FIXED
+        }
+    }
+
+    fn has_ext_data(t: EventType) -> bool {
+        Event::get_length_flag(t) != SND_SEQ_EVENT_LENGTH_FIXED
+    }
+
     // Extracts EventType and Data into Event's own buffer. This requires the event data to
     // be valid, hence the unsafety.
-    unsafe fn extract<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(z: &mut alsa::snd_seq_event_t, func: &'static str, f: F) -> Result<Event> {
+    unsafe fn extract<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(z: &mut alsa::snd_seq_event_t, func: &'static str, f: F) -> Result<Event<'static>> {
         let t = try!(EventType::from_c_int((*z)._type as c_int, func));
-        let v = if Vec::<u8>::has_data(t) {
+        let v = if Event::has_ext_data(t) {
+            assert!((*z).flags & SND_SEQ_EVENT_LENGTH_MASK != SND_SEQ_EVENT_LENGTH_FIXED);
             let zz: &mut EvExtPacked = &mut *(&mut (*z).data as *mut alsa::Union_Unnamed10 as *mut _);
             let ss = slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize);
-            f(t, ss)
-        } else { None };
+            match f(t, ss) {
+                Some(owned) => Some(Cow::Owned(owned)),
+                None => None
+            }
+        } else {
+            None
+        };
         Ok(Event(ptr::read(z), t, v))
     }
 
+    /// Ensures that the ev.ext union element points to the correct resize_buffer for events
+    /// with variable length content
     fn ensure_buf(&mut self) {
-        if !Vec::<u8>::has_data(self.1) { return; }
-        if self.2.is_none() { self.2 = Some(Vec::new()) };
-        let ww = self.2.as_mut().unwrap();
+        if !Event::has_ext_data(self.1) { return; }
+        let slice: &[u8] = match self.2 {
+            Some(Cow::Owned(ref mut vec)) => &vec[..],
+            Some(Cow::Borrowed(buf)) => buf,
+            // The following case is always a logic error in the program, thus panicking is okay.
+            None => panic!("event type requires variable-length data, but none was provided")
+        };
         let z: &mut EvExtPacked = unsafe { &mut *(&mut self.0.data as *mut alsa::Union_Unnamed10 as *mut _) };
-        z.len = ww.len() as c_uint;
-        z.ptr = ww.as_mut_ptr() as *mut c_void;
+        z.len = slice.len() as c_uint;
+        z.ptr = slice.as_ptr() as *mut c_void;
     }
 
     #[inline]
     pub fn get_type(&self) -> EventType { self.1 }
 
+    /// Extract the event data from an event.
+    /// Use `get_ext` instead for events carrying variable-length data.
     pub fn get_data<D: EventData>(&self) -> Option<D> { if D::has_data(self.1) { Some(D::get_data(self)) } else { None } }
+
+    /// Extract the variable-length data carried by events of type `Sysex`, `Bounce`, or the `UsrVar` types.
+    pub fn get_ext<'b>(&'b self) -> Option<&'b [u8]> {
+        if Event::has_ext_data(self.1) {
+            match self.2 {
+                Some(Cow::Owned(ref vec)) => Some(&vec[..]),
+                Some(Cow::Borrowed(buf)) => Some(buf),
+                // The following case is always a logic error in the program, thus panicking is okay.
+                None => panic!("event type requires variable-length data, but none was found")
+            }
+        } else {
+            None
+        }
+    }
 
     pub fn set_subs(&mut self) {
         self.0.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS;
@@ -579,11 +653,11 @@ impl Event {
     }
 }
 
-impl Clone for Event {
+impl<'a> Clone for Event<'a> {
     fn clone(&self) -> Self { Event(unsafe { ptr::read(&self.0) }, self.1, self.2.clone()) }
 }
 
-impl fmt::Debug for Event {
+impl<'a> fmt::Debug for Event<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut x = f.debug_tuple("Event");
         x.field(&self.1);
@@ -596,7 +670,7 @@ impl fmt::Debug for Event {
         if let Some(z) = self.get_data::<EvQueueControl<u32>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvQueueControl<time::Duration>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvResult>() { x.field(&z); }
-        if let Some(z) = self.get_data::<Vec<u8>>() { x.field(&z); }
+        if let Some(z) = self.get_ext() { x.field(&z); }
         x.finish()
     }
 }
@@ -612,30 +686,10 @@ impl EventData for () {
     fn has_data(e: EventType) -> bool { !EvNote::has_data(e) && !EvCtrl::has_data(e) && !Addr::has_data(e) && 
         !Connect::has_data(e) && !EvResult::has_data(e) && 
         !EvQueueControl::<()>::has_data(e) && !EvQueueControl::<i32>::has_data(e) && !EvQueueControl::<u32>::has_data(e) &&
-        !EvQueueControl::<time::Duration>::has_data(e) && !Vec::<u8>::has_data(e) }
+        !EvQueueControl::<time::Duration>::has_data(e) && !Event::has_ext_data(e) }
     fn set_data(&self, _: &mut Event) {}
     fn get_data(_: &Event) -> Self {}
 }
-
-impl EventData for Vec<u8> {
-    fn has_data(e: EventType) -> bool {
-        match e {
-            EventType::Sysex => true,
-            EventType::Bounce => true,
-            EventType::UsrVar0 => true,
-            EventType::UsrVar1 => true,
-            EventType::UsrVar2 => true,
-            EventType::UsrVar3 => true,
-            EventType::UsrVar4 => true,
-             _ => false,
-        }
-    }
-    fn set_data(&self, e: &mut Event) {
-        e.2 = Some(self.clone());
-    }
-    fn get_data(e: &Event) -> Self { e.2.as_ref().unwrap_or(&Vec::new()).clone() }
-}
-
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 pub struct EvNote {
@@ -1017,24 +1071,29 @@ impl MidiEvent {
     }
 
     /// In case of success, returns a tuple of (bytes consumed from buf, found Event).
-    ///
-    /// Unlike encode, this function does not copy sysex data into the Event. Instead a callback is supplied with the sysex data.
-    /// The return value of the callback is only relevant if you intend to call get_data::<Vec<u8>>() on the returned Event.
-    pub fn encode_cb<F: FnOnce(EventType, &[u8]) -> Option<Vec<u8>>>(&self, buf: &[u8], f: F) -> Result<(usize, Option<Event>)> {
+    pub fn encode<'a>(&'a mut self, buf: &[u8]) -> Result<(usize, Option<Event<'a>>)> {
+        // The ALSA documentation clearly states that the event will be valid as long as the Encoder
+        // is not messed with (because the data pointer for sysex events may point into the Encoder's
+        // buffer). We make this safe by taking self by unique reference and coupling it to 
+        // the event's lifetime.
         let mut ev = unsafe { mem::zeroed() };
         let r = try!(acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev)));
-        let e = if ev._type == alsa::SND_SEQ_EVENT_NONE as u8 { None }
-        else { Some(try!( unsafe { Event::extract(&mut ev, "snd_midi_event_encode", f) } )) };
+        let e = if ev._type == alsa::SND_SEQ_EVENT_NONE as u8 {
+                None
+            } else {
+                let t = try!(EventType::from_c_int(ev._type as c_int, "snd_midi_event_encode"));
+                let extra_data = if (ev.flags & (SND_SEQ_EVENT_LENGTH_VARIABLE | SND_SEQ_EVENT_LENGTH_VARUSR)) != 0 {
+                    Some(Cow::Borrowed(unsafe {
+                        let zz: &EvExtPacked = &*(&ev.data as *const alsa::Union_Unnamed10 as *const _);
+                        slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
+                    }))
+                } else {
+                    None
+                };
+                Some(Event(unsafe { ptr::read(&mut ev) }, t, extra_data))
+            };
         Ok((r as usize, e))
     }
-
-    /// In case of success, returns a tuple of (bytes consumed from buf, found Event).
-    ///
-    /// This function copies sysex data into the Event. If this is not wanted, use encode_cb.
-    pub fn encode(&self, buf: &[u8]) -> Result<(usize, Option<Event>)> {
-        self.encode_cb(buf, |_,s| Some(s.to_vec()))
-    }
-
 }
 
 #[test]
@@ -1099,7 +1158,7 @@ fn seq_loopback() {
     s.event_output(&mut e).unwrap();
     s.drain_output().unwrap();
  
-    // Recieve the note!
+    // Receive the note!
     let e2 = s.event_input().unwrap();
     println!("Receiving {:?}", e2);
     assert_eq!(e2.get_type(), EventType::Noteon);
@@ -1108,10 +1167,21 @@ fn seq_loopback() {
 
 #[test]
 fn seq_encode_sysex() {
-    let me = MidiEvent::new(16).unwrap();
+    let mut me = MidiEvent::new(16).unwrap();
     let sysex = &[0xf0, 1, 2, 3, 4, 5, 6, 7, 0xf7];
     let (s, ev) = me.encode(sysex).unwrap();
     assert_eq!(s, 9);
-    let v: Vec<u8> = ev.unwrap().get_data().unwrap();
+    let ev = ev.unwrap();
+    let v = ev.get_ext().unwrap();
     assert_eq!(&*v, sysex);
+}
+
+#[test]
+fn seq_decode_sysex() {
+    let sysex = [0xf0, 1, 2, 3, 4, 5, 6, 7, 0xf7];
+    let mut ev = Event::new_ext(EventType::Sysex, &sysex[..]);
+    let me = MidiEvent::new(0).unwrap();
+    let mut buffer = vec![0; sysex.len()];
+    assert_eq!(me.decode(&mut buffer[..], &mut ev).unwrap(), sysex.len());
+    assert_eq!(buffer, sysex);
 }
