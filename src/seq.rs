@@ -700,6 +700,7 @@ impl<'a> fmt::Debug for Event<'a> {
         if let Some(z) = self.get_data::<EvQueueControl<u32>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvQueueControl<time::Duration>>() { x.field(&z); }
         if let Some(z) = self.get_data::<EvResult>() { x.field(&z); }
+        if let Some(z) = self.get_data::<[u8; 12]>() { x.field(&z); }
         if let Some(z) = self.get_ext() { x.field(&z); }
         x.finish()
     }
@@ -713,13 +714,48 @@ pub trait EventData {
 }
 
 impl EventData for () {
-    fn has_data(e: EventType) -> bool { !EvNote::has_data(e) && !EvCtrl::has_data(e) && !Addr::has_data(e) && 
-        !Connect::has_data(e) && !EvResult::has_data(e) && 
-        !EvQueueControl::<()>::has_data(e) && !EvQueueControl::<i32>::has_data(e) && !EvQueueControl::<u32>::has_data(e) &&
-        !EvQueueControl::<time::Duration>::has_data(e) && !Event::has_ext_data(e) }
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::TuneRequest => true,
+             EventType::Reset => true,
+             EventType::Sensing => true,
+             EventType::None => true,
+             _ => false,
+         }
+    }
     fn set_data(&self, _: &mut Event) {}
     fn get_data(_: &Event) -> Self {}
 }
+
+impl EventData for [u8; 12] {
+    fn has_data(e: EventType) -> bool {
+         match e {
+             EventType::Echo => true,
+             EventType::Oss => true,
+             EventType::Usr0 => true,
+             EventType::Usr1 => true,
+             EventType::Usr2 => true,
+             EventType::Usr3 => true,
+             EventType::Usr4 => true,
+             EventType::Usr5 => true,
+             EventType::Usr6 => true,
+             EventType::Usr7 => true,
+             EventType::Usr8 => true,
+             EventType::Usr9 => true,
+             _ => false,
+         }
+    }
+    fn set_data(&self, ev: &mut Event) {
+         let z = unsafe { &mut *ev.0.data.raw8() };
+         z.d = *self;
+    }
+    fn get_data(ev: &Event) -> Self {
+         let mut d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &*d.raw8() };
+         z.d
+    }
+}
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 pub struct EvNote {
@@ -1217,4 +1253,25 @@ fn seq_get_input_twice() {
     let input1 = s.input();
     let input2 = s.input(); // this should panic
     let _ = (input1, input2);
+}
+
+#[test]
+fn seq_has_data() {
+    for v in EventType::all() {
+        let v = *v;
+        let mut i = 0;
+        if <() as EventData>::has_data(v) { i += 1; }
+        if <[u8; 12] as EventData>::has_data(v) { i += 1; }
+        if Event::has_ext_data(v) { i += 1; }
+        if EvNote::has_data(v) { i += 1; }
+        if EvCtrl::has_data(v) { i += 1; }
+        if Addr::has_data(v) { i += 1; }
+        if Connect::has_data(v) { i += 1; }
+        if EvResult::has_data(v) { i += 1; }
+        if EvQueueControl::<()>::has_data(v) { i += 1; }
+        if EvQueueControl::<u32>::has_data(v) { i += 1; }
+        if EvQueueControl::<i32>::has_data(v) { i += 1; }
+        if EvQueueControl::<time::Duration>::has_data(v) { i += 1; }
+        if i != 1 { panic!("{:?}: {} has_data", v, i) }
+    }
 }
