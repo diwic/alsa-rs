@@ -166,11 +166,20 @@ impl Seq {
         acheck!(snd_seq_alloc_named_queue(self.0, n.as_ptr())).map(|q| q as i32)
     }
 
+    /// Call this function to obtain an instance of `Input` to access the functions `event_input`,
+    /// `event_input_pending` and `set_input_buffer_size`. See the documentation of `Input` for details.
     pub fn input<'a>(&'a self) -> Input<'a> {
         Input::new(self)
     }
 }
 
+/// Struct for receiving input events from a sequencer. The methods offered by this
+/// object may modify the internal input buffer of the sequencer, which must not happen
+/// while an `Event` is alive that has been obtained from a call to `event_input` (which
+/// takes `Input` by mutable reference for this reason). This is because the event might
+/// directly reference the sequencer's input buffer for variable-length messages (e.g. Sysex).
+///
+/// Note: Only one `Input` object is allowed in scope at a time.
 pub struct Input<'a>(&'a Seq);
 
 impl<'a> Drop for Input<'a> {
