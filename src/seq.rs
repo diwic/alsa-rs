@@ -138,6 +138,12 @@ impl Seq {
         acheck!(snd_seq_unsubscribe_port(self.0, z.0)).map(|_| ())
     }
 
+    pub fn control_queue(&self, q: i32, t: EventType, value: i32, e: Option<&mut Event>) -> Result<()> {
+        assert!(EvQueueControl::<()>::has_data(t) || EvQueueControl::<i32>::has_data(t) || EvQueueControl::<u32>::has_data(t));
+        let p = e.map(|e| &mut e.0 as *mut _).unwrap_or(ptr::null_mut());
+        acheck!(snd_seq_control_queue(self.0, q as c_int, t as c_int, value as c_int, p)).map(|_| ())
+    }
+
     pub fn event_output(&self, e: &mut Event) -> Result<u32> {
         e.ensure_buf();
         acheck!(snd_seq_event_output(self.0, &mut e.0)).map(|q| q as u32)
