@@ -57,7 +57,9 @@ impl Seq {
         if self.1.get() { panic!("No additional Input object allowed")}
     }
 
-    /// If name is None, "default" will be used.
+    /// Opens the sequencer.
+    ///
+    /// If name is None, "default" will be used. That's almost always what you usually want to use anyway.
     pub fn open(name: Option<&CStr>, dir: Option<Direction>, nonblock: bool) -> Result<Seq> {
         let n2 = name.unwrap_or(unsafe { CStr::from_bytes_with_nul_unchecked(b"default\0") });
         let mut h = ptr::null_mut();
@@ -528,8 +530,7 @@ impl<'a> Event<'a> {
     /// Creates a new event. For events that carry variable-length data (e.g. Sysex), `new_ext` has to be used instead.
     pub fn new<D: EventData>(t: EventType, data: &D) -> Event<'static> {
         assert!(!Event::has_ext_data(t), "event type must not carry variable-length data");
-        let mut z = Event(unsafe { mem::zeroed() }, EventType::None, None);
-        z.1 = t;
+        let mut z = Event(unsafe { mem::zeroed() }, t, None);
         (z.0)._type = t as c_uchar;
         (z.0).flags |= Event::get_length_flag(t);
         debug_assert!(D::has_data(t));
@@ -540,8 +541,7 @@ impl<'a> Event<'a> {
     /// Creates a new event carrying variable-length data. This is required for event types `Sysex`, `Bounce`, and the `UsrVar` types.
     pub fn new_ext<D: Into<Cow<'a, [u8]>>>(t: EventType, data: D) -> Event<'a> {
         assert!(Event::has_ext_data(t), "event type must carry variable-length data");
-        let mut z = Event(unsafe { mem::zeroed() }, EventType::None, Some(data.into()));
-        z.1 = t;
+        let mut z = Event(unsafe { mem::zeroed() }, t, Some(data.into()));
         (z.0)._type = t as c_uchar;
         (z.0).flags |= Event::get_length_flag(t);
         z
@@ -549,7 +549,7 @@ impl<'a> Event<'a> {
 
     /// Consumes this event and returns an (otherwise unchanged) event where the externally referenced
     /// buffer for variable length messages (e.g. SysEx) has been copied into the event.
-    /// The returned event has an arbitrary lifetime that is decoupled from the original buffer.
+    /// The returned event has a static lifetime, i e, it's decoupled from the original buffer.
     pub fn into_owned(self) -> Event<'static> {
         Event(self.0, self.1, self.2.map(|cow| Cow::Owned(cow.into_owned())))
     }
@@ -674,6 +674,7 @@ impl<'a> Event<'a> {
         } else { None }
     }
 
+    /// Returns true if the message is high priority.
     pub fn get_priority(&self) -> bool { (self.0.flags & SND_SEQ_PRIORITY_HIGH) != 0 }
 
     pub fn set_priority(&mut self, is_high_prio: bool) {
