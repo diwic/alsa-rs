@@ -174,6 +174,10 @@ impl Seq {
         acheck!(snd_seq_alloc_named_queue(self.0, n.as_ptr())).map(|q| q as i32)
     }
 
+    pub fn sync_output_queue(&self) -> Result<()> {
+        acheck!(snd_seq_sync_output_queue(self.0)).map(|_| ())
+    }
+
     /// Call this function to obtain an instance of `Input` to access the functions `event_input`,
     /// `event_input_pending` and `set_input_buffer_size`. See the documentation of `Input` for details.
     pub fn input<'a>(&'a self) -> Input<'a> {
