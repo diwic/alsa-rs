@@ -59,6 +59,18 @@ impl Ctl {
         acheck!(snd_ctl_convert_from_dB(self.0, elem_id_ptr(id), mb.0 as c_long, &mut m, dir as c_int))
             .map(|_| m as i64)
     }
+
+    /// Note: According to alsa-lib documentation, you're also supposed to have functionality for
+    /// returning whether or not you are subscribed. This does not work in practice, so I'm not
+    /// including that here. 
+    pub fn subscribe_events(&self, subscribe: bool) -> Result<()> {
+        acheck!(snd_ctl_subscribe_events(self.0, if subscribe { 1 } else { 0 })).map(|_| ())
+    }
+
+    pub fn read(&self) -> Result<Option<Event>> {
+        let e = try!(event_new());
+        acheck!(snd_ctl_read(self.0, e.0)).map(|r| if r == 1 { Some(e) } else { None })
+    }
 }
 
 impl Drop for Ctl {
@@ -377,6 +389,28 @@ impl fmt::Debug for ElemId {
         write!(f, ")")
     }
 }
+
+/// [snd_ctl_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+pub struct Event(*mut alsa::snd_ctl_event_t);
+
+impl Drop for Event {
+    fn drop(&mut self) { unsafe { alsa::snd_ctl_event_free(self.0) }; }
+}
+
+pub fn event_new() -> Result<Event> {
+    let mut p = ptr::null_mut();
+    acheck!(snd_ctl_event_malloc(&mut p)).map(|_| Event(p))
+}
+
+impl Event {
+    pub fn get_mask(&self) -> u32 { unsafe { alsa::snd_ctl_event_elem_get_mask(self.0) as u32 }}
+    pub fn get_id(&self) -> ElemId { 
+        let r = elem_id_new().unwrap();
+        unsafe { alsa::snd_ctl_event_elem_get_id(self.0, elem_id_ptr(&r)) };
+        r
+    }
+}
+
 
 #[test]
 fn print_sizeof() {
