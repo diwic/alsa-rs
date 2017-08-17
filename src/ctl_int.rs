@@ -403,7 +403,7 @@ pub fn event_new() -> Result<Event> {
 }
 
 impl Event {
-    pub fn get_mask(&self) -> u32 { unsafe { alsa::snd_ctl_event_elem_get_mask(self.0) as u32 }}
+    pub fn get_mask(&self) -> EventMask { EventMask(unsafe { alsa::snd_ctl_event_elem_get_mask(self.0) as u32 })}
     pub fn get_id(&self) -> ElemId { 
         let r = elem_id_new().unwrap();
         unsafe { alsa::snd_ctl_event_elem_get_id(self.0, elem_id_ptr(&r)) };
@@ -411,6 +411,18 @@ impl Event {
     }
 }
 
+
+/// [SND_CTL_EVENT_MASK_XXX](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) bitmask
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct EventMask(pub u32);
+
+impl EventMask {
+   pub fn remove(&self) -> bool { return self.0 & 0xffffffff == 0xffffffff }
+   pub fn value(&self) -> bool { return (!self.remove()) && (self.0 & (1 << 0) != 0); }
+   pub fn info(&self) -> bool { return (!self.remove()) && (self.0 & (1 << 1) != 0); }
+   pub fn add(&self) -> bool { return (!self.remove()) && (self.0 & (1 << 2) != 0); }
+   pub fn tlv(&self) -> bool { return (!self.remove()) && (self.0 & (1 << 3) != 0); }
+}
 
 #[test]
 fn print_sizeof() {
