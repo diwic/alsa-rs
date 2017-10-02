@@ -121,3 +121,10 @@ pub use io::Output;
 
 // Reexported inside PCM module
 mod chmap;
+
+mod pcm_bypass;
+
+/// Experimental stuff. Will probably move to other modules in case it gets stable and useful
+pub mod experimental {
+    pub use pcm_bypass::PcmStatus;
+}
