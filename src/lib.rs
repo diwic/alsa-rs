@@ -17,6 +17,8 @@ extern crate alsa_sys as alsa;
 extern crate libc;
 #[macro_use]
 extern crate bitflags;
+#[macro_use]
+extern crate nix;
 
 macro_rules! alsa_enum {
  ($(#[$attr:meta])+ $name:ident, $static_name:ident [$count:expr], $( $a:ident = $b:ident),* ,) =>
@@ -122,9 +124,11 @@ pub use io::Output;
 // Reexported inside PCM module
 mod chmap;
 
-mod pcm_bypass;
+mod pcm_direct;
 
-/// Experimental stuff. Will probably move to other modules in case it gets stable and useful
-pub mod experimental {
-    pub use pcm_bypass::PcmStatus;
+/// Functions that bypass alsa-lib and talk directly to the kernel.
+pub mod direct {
+    pub mod pcm {
+        pub use pcm_direct::{Status, Control, SampleData};
+    }
 }
