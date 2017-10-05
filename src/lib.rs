@@ -129,6 +129,6 @@ mod pcm_direct;
 /// Functions that bypass alsa-lib and talk directly to the kernel.
 pub mod direct {
     pub mod pcm {
-        pub use pcm_direct::{Status, Control, SampleData};
+        pub use pcm_direct::{Status, Control, MmapCapture, MmapPlayback};
     }
 }

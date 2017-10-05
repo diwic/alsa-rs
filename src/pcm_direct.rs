@@ -1,10 +1,11 @@
 //! Experimental stuff
 
 use libc;
-use std::{mem, ptr, fmt};
+use std::{mem, ptr, fmt, cmp};
 use error::{Error, Result};
 use std::os::unix::io::RawFd;
-use {pcm, PollDescriptors};
+use {pcm, PollDescriptors, Direction};
+use pcm::Frames;
 
 // Some definitions from the kernel headers
 
@@ -104,7 +105,7 @@ impl Status {
     /// Calling most functions on the PCM will update it, so will usually a period interrupt.
     /// No guarantees given.
     ///
-    /// This value wraps at buffer boundary.
+    /// This value wraps at "boundary" (a large value you can read from SwParams).
     pub fn hw_ptr(&self) -> pcm::Frames {
         unsafe {
             ptr::read_volatile(&(*self.0.ptr).hw_ptr) as pcm::Frames
@@ -150,7 +151,7 @@ impl Control {
 
     /// Read number of frames application has read or written
     ///
-    /// This value wraps at buffer boundary.
+    /// This value wraps at "boundary" (a large value you can read from SwParams).
     pub fn appl_ptr(&self) -> pcm::Frames {
         unsafe {
             ptr::read_volatile(&(*self.0.ptr).appl_ptr) as pcm::Frames
@@ -183,18 +184,18 @@ impl Control {
     }
 }
 
-struct DriverMemory<T> {
-   ptr: *mut T, 
+struct DriverMemory<S> {
+   ptr: *mut S, 
    size: libc::size_t,
 }
 
-impl<T> fmt::Debug for DriverMemory<T> {
+impl<S> fmt::Debug for DriverMemory<S> {
    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "DriverMemory({:?})", self.ptr) }
 }
 
-impl<T> DriverMemory<T> {
+impl<S> DriverMemory<S> {
     fn new(fd: RawFd, count: usize, offs: libc::off_t, writable: bool) -> Result<Self> {
-        let mut total = count * mem::size_of::<T>();
+        let mut total = count * mem::size_of::<S>();
         let ps = pagesize();
         assert!(total > 0);
         if total % ps != 0 { total += ps - total % ps };
@@ -203,27 +204,27 @@ impl<T> DriverMemory<T> {
         if p == ptr::null_mut() || p == libc::MAP_FAILED {
             return Err(Error::new(Some("driver memory mmap".into()), -1))
         }
-        Ok(DriverMemory { ptr: p as *mut T, size: total })
+        Ok(DriverMemory { ptr: p as *mut S, size: total })
     }
 }
 
-unsafe impl<T> Send for DriverMemory<T> {}
-unsafe impl<T> Sync for DriverMemory<T> {}
+unsafe impl<S> Send for DriverMemory<S> {}
+unsafe impl<S> Sync for DriverMemory<S> {}
 
-impl<T> Drop for DriverMemory<T> {
+impl<S> Drop for DriverMemory<S> {
     fn drop(&mut self) {
         unsafe {{ libc::munmap(self.ptr as *mut libc::c_void, self.size); } }
     }
 }
 
 #[derive(Debug)]
-pub struct SampleData<T> { 
-   mem: DriverMemory<T>,
-   frames: pcm::Frames,
-   channels: u32,
+pub struct SampleData<S> { 
+    mem: DriverMemory<S>,
+    frames: pcm::Frames,
+    channels: u32,
 }
 
-impl<T> SampleData<T> {
+impl<S> SampleData<S> {
     pub fn new(p: &pcm::PCM) -> Result<Self> {
         let params = p.hw_params_current()?;
         let bufsize = params.get_buffer_size()?;
@@ -238,8 +239,8 @@ impl<T> SampleData<T> {
             sndrv_pcm_ioctl_channel_info(fd, &mut info).map_err(|_| Error::new(Some("SNDRV_PCM_IOCTL_CHANNEL_INFO".into()), -1))?;
             info
         };
-        println!("{:?}", info);
-        if (info.step != channels * mem::size_of::<T>() as u32 * 8) || (info.first != 0) {
+        // println!("{:?}", info);
+        if (info.step != channels * mem::size_of::<S>() as u32 * 8) || (info.first != 0) {
             return Err(Error::new(Some("MMAP data size mismatch".into()), -1))
         }
         Ok(SampleData {
@@ -250,9 +251,142 @@ impl<T> SampleData<T> {
     }
 }
 
+#[derive(Debug)]
+struct MmapIO<S> {
+    data: SampleData<S>,
+    c: Control,
+    ss: Status,
+    bound: Frames,
+}
+
+impl<S> MmapIO<S> {
+    fn new(p: &pcm::PCM, d: Direction) -> Result<Self> {
+        if p.info()?.get_stream() != d {
+            return Err(Error::new(Some("Wrong direction".into()), -1));
+        }
+        let boundary = p.sw_params_current()?.get_boundary()?;
+        Ok(MmapIO {
+            data: SampleData::new(p)?,
+            c: Control::new(p)?,
+            ss: Status::new(p)?,
+            bound: boundary,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct MmapCapture<S>(MmapIO<S>);
+
+#[derive(Debug)]
+pub struct MmapPlayback<S>(MmapIO<S>);
+
+pub fn new_mmap_capture<S>(p: &pcm::PCM) -> Result<MmapCapture<S>> { MmapIO::new(p, Direction::Capture).map(|i| MmapCapture(i)) }
+
+
+impl<S> MmapCapture<S> {
+    /// Read current status
+    pub fn status(&self) -> &Status { &self.0.ss }
+
+    /// Read current number of captured frames by application
+    ///
+    /// This number wraps at 'boundary'.
+    #[inline]
+    pub fn appl_ptr(&self) -> Frames { self.0.c.appl_ptr() }
+
+    /// Read current number of captured frames by hardware
+    ///
+    /// This number wraps at 'boundary'.
+    #[inline]
+    pub fn hw_ptr(&self) -> Frames { self.0.ss.hw_ptr() }
+
+    /// The number at which hw_ptr and appl_ptr wraps.
+    #[inline]
+    pub fn boundary(&self) -> Frames { self.0.bound }
+
+    /// Total number of frames in hardware buffer
+    #[inline]
+    pub fn buffer_size(&self) -> Frames { self.0.data.frames }
+
+    /// Notifies the kernel that frames have now been captured by the application
+    ///
+    /// This will allow the kernel to write new data into this part of the buffer.
+    pub fn commit(&self, v: Frames) {
+        let mut z = self.appl_ptr() + v;
+        if z + v >= self.boundary() { z -= self.boundary() };
+        self.0.c.set_appl_ptr(z)
+    }
+
+    /// Returns a raw pointer to data to read.
+    ///
+    /// Also returns the number of frames available at this location (which can be lower than "avail" returns).
+    pub fn data_ptr(&self) -> (*const S, Frames) {
+        let (hwptr, applptr) = (self.hw_ptr(), self.appl_ptr());
+        let bufsize = self.0.data.frames;
+
+        // These formulas mimics the behaviour of snd_pcm_mmap_begin (in alsa-lib/src/pcm/pcm.c).
+        let offs = applptr % bufsize;
+        let mut a = hwptr - applptr;
+        if a < 0 { a += self.boundary() };
+        a = cmp::min(a, bufsize);
+        a = cmp::min(a, bufsize - offs);
+
+        let p = unsafe { self.0.data.mem.ptr.offset(offs as isize * self.0.data.channels as isize) };
+        (p, a)
+    }
+
+    /// Number of frames available to capture
+    ///
+    /// In case of an underrun, this value might be bigger than the buffer size.
+    pub fn avail(&self) -> Frames {
+	let r = self.hw_ptr() - self.appl_ptr();
+	if r < 0 { r + self.boundary() } else { r }
+    }
+
+    /// Read samples from the buffer.
+    ///
+    /// When the iterator is dropped or depleted, the read samples will be committed, i e,
+    /// the kernel can then write data to the location again. So do this ASAP.
+    ///
+    /// Note: only have one Iter active at a time - otherwise you'll get some samples read twice
+    /// and others not read at all.
+    pub fn iter<'a>(&'a self) -> Iter<'a, S> {
+        let (p, av) = self.data_ptr();
+        Iter { m: self, p: p, count: 0, maxcount: av as isize * self.0.data.channels as isize }
+    }
+}
+
+pub struct Iter<'a, S: 'static> {
+    m: &'a MmapCapture<S>,
+    p: *const S,
+    count: isize,
+    maxcount: isize,
+}
+
+impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
+    type Item = S;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count >= self.maxcount {
+            self.m.commit((self.count / self.m.0.data.channels as isize) as Frames);
+            self.maxcount = 0;
+            self.count = 0;
+            None
+        } else {
+            let s = unsafe { *self.p.offset(self.count) };
+            self.count += 1;
+            Some(s)
+        }
+    }
+}
+
+impl<'a, S: 'static> Drop for Iter<'a, S> {
+    fn drop(&mut self) {
+        self.m.commit((self.count / self.m.0.data.channels as isize) as Frames);
+    }
+}
 
 #[test]
-#[ignore] // Not everyone has a recording device on plughw:1. So let's ignore by default.
+#[ignore] // Not everyone has a recording device on plughw:1. So let's ignore this test by default.
 fn record_from_plughw_rw() {
     use pcm::*;
     use {ValueOr, Direction};
@@ -288,25 +422,39 @@ fn record_from_plughw_rw() {
 
 
 #[test]
-#[ignore] // Not everyone has a playback device on plughw:1. So let's ignore by default.
-fn playback_to_plughw_mmap() {
+#[ignore] // Not everyone has a record device on plughw:1. So let's ignore this test by default.
+fn record_from_plughw_mmap() {
     use pcm::*;
     use {ValueOr, Direction};
     use std::ffi::CString;
-    let pcm = PCM::open(&*CString::new("plughw:1").unwrap(), Direction::Playback, false).unwrap();
-    let ss = self::Status::new(&pcm).unwrap();
-    let c = self::Control::new(&pcm).unwrap();
+    use std::{thread, time};
+
+    let pcm = PCM::open(&*CString::new("plughw:1").unwrap(), Direction::Capture, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(2).unwrap();
     hwp.set_rate(44100, ValueOr::Nearest).unwrap();
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::MMapInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
+    let m = pcm.direct_mmap_capture::<i16>().unwrap();
 
-    assert_eq!(ss.state(), State::Prepared);
-    assert_eq!(c.appl_ptr(), 0);
+    assert_eq!(m.status().state(), State::Prepared);
+    assert_eq!(m.appl_ptr(), 0);
+    assert_eq!(m.hw_ptr(), 0);
 
-    let data = SampleData::<i16>::new(&pcm).unwrap();
-    println!("{:?}, {:?}, {:?}", data, ss, c);
+    println!("{:?}", m);
+
+    let now = time::Instant::now();
+    pcm.start().unwrap();
+    while m.avail() < 256 { thread::sleep(time::Duration::from_millis(1)) };
+    assert!(now.elapsed() >= time::Duration::from_millis(256 * 1000 / 44100));
+    let (ptr1, av1) = m.data_ptr();
+    assert!(av1 >= 256);
+    println!("Has {:?} frames at {:?} in {:?}", m.avail(), ptr1, now.elapsed());
+    let samples: Vec<i16> = m.iter().collect();
+    assert!(samples.len() >= av1 as usize * 2);
+    println!("Collected {} samples", samples.len());
+    let (ptr2, _av2) = m.data_ptr();
+    assert!(unsafe { ptr1.offset(256 * 2) } <= ptr2);
 }
 

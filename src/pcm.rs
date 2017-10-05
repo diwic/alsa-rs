@@ -86,6 +86,14 @@ impl Info {
         let c = unsafe { alsa::snd_pcm_info_get_subdevice_name(self.0) };
         from_const("snd_pcm_info_get_subdevice_name", c)
     }
+
+    pub fn get_stream(&self) -> Direction {
+        match unsafe { alsa::snd_pcm_info_get_stream(self.0) } {
+            alsa::SND_PCM_STREAM_CAPTURE => Direction::Capture,
+            alsa::SND_PCM_STREAM_PLAYBACK => Direction::Playback,
+            n @ _ => panic!("snd_pcm_info_get_stream invalid direction '{}'", n), 
+        }
+    }
 }
 
 impl Drop for Info {
@@ -165,6 +173,12 @@ impl PCM {
     pub fn io_f64<'a>(&'a self) -> Result<IO<'a, f64>> { self.verify_format(Format::float64()).map(|_| IO::new(&self)) }
 
     pub fn io<'a>(&'a self) -> IO<'a, u8> { IO::new(&self) }
+
+    /// Experimental: Read buffers by talking to the kernel directly, bypassing alsa-lib.
+    pub fn direct_mmap_capture<T>(&self) -> Result<::direct::pcm::MmapCapture<T>> {
+        self.check_has_io();
+        ::pcm_direct::new_mmap_capture(self)
+    }
 
     /// Sets hw parameters. Note: No IO object can exist for this PCM
     /// when hw parameters are set.
@@ -601,6 +615,11 @@ impl<'a> SwParams<'a> {
     pub fn get_avail_min(&self) -> Result<Frames> {
         let mut v = 0;
         acheck!(snd_pcm_sw_params_get_avail_min(self.0, &mut v)).map(|_| v as Frames)
+    }
+
+    pub fn get_boundary(&self) -> Result<Frames> {
+        let mut v = 0;
+        acheck!(snd_pcm_sw_params_get_boundary(self.0, &mut v)).map(|_| v as Frames)
     }
 
     pub fn set_start_threshold(&self, v: Frames) -> Result<()> {
