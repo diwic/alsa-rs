@@ -6,6 +6,7 @@ use error::{Error, Result};
 use std::os::unix::io::RawFd;
 use {pcm, PollDescriptors, Direction};
 use pcm::Frames;
+use std::marker::PhantomData;
 
 // Some definitions from the kernel headers
 
@@ -251,17 +252,57 @@ impl<S> SampleData<S> {
     }
 }
 
+
+/// Dummy trait for better generics
+pub trait MmapDir: fmt::Debug {
+    const DIR: Direction;
+    fn avail(hwptr: Frames, applptr: Frames, buffersize: Frames, boundary: Frames) -> Frames;
+}
+
+/// Dummy struct for better generics
+#[derive(Copy, Clone, Debug)]
+pub struct Playback;
+
+impl MmapDir for Playback {
+    const DIR: Direction = Direction::Playback;
+    #[inline]
+    fn avail(hwptr: Frames, applptr: Frames, buffersize: Frames, boundary: Frames) -> Frames {
+	let r = hwptr.wrapping_add(buffersize).wrapping_sub(applptr);
+	let r = if r < 0 { r.wrapping_add(boundary) } else { r };
+        if r as usize >= boundary as usize { r.wrapping_sub(boundary) } else { r }
+    }
+}
+
+/// Dummy struct for better generics
+#[derive(Copy, Clone, Debug)]
+pub struct Capture;
+
+impl MmapDir for Capture {
+    const DIR: Direction = Direction::Capture;
+    #[inline]
+    fn avail(hwptr: Frames, applptr: Frames, _buffersize: Frames, boundary: Frames) -> Frames {
+	let r = hwptr.wrapping_sub(applptr);
+	if r < 0 { r.wrapping_add(boundary) } else { r }
+    }
+}
+
+pub type MmapPlayback<S> = MmapIO<S, Playback>;
+
+pub type MmapCapture<S> = MmapIO<S, Capture>;
+
 #[derive(Debug)]
-struct MmapIO<S> {
+/// Struct containing direct I/O functions shared between playback and capture.
+pub struct MmapIO<S, D> {
     data: SampleData<S>,
     c: Control,
     ss: Status,
     bound: Frames,
+    dir: PhantomData<*const D>,
 }
 
-impl<S> MmapIO<S> {
-    fn new(p: &pcm::PCM, d: Direction) -> Result<Self> {
-        if p.info()?.get_stream() != d {
+impl<S, D: MmapDir> MmapIO<S, D> {
+    fn new(p: &pcm::PCM) -> Result<Self> {
+        if p.info()?.get_stream() != D::DIR {
             return Err(Error::new(Some("Wrong direction".into()), -1));
         }
         let boundary = p.sw_params_current()?.get_boundary()?;
@@ -270,78 +311,91 @@ impl<S> MmapIO<S> {
             c: Control::new(p)?,
             ss: Status::new(p)?,
             bound: boundary,
+            dir: PhantomData,
         })
     }
 }
 
-#[derive(Debug)]
-pub struct MmapCapture<S>(MmapIO<S>);
+pub fn new_mmap<S, D: MmapDir>(p: &pcm::PCM) -> Result<MmapIO<S, D>> { MmapIO::new(p) }
 
-#[derive(Debug)]
-pub struct MmapPlayback<S>(MmapIO<S>);
-
-pub fn new_mmap_capture<S>(p: &pcm::PCM) -> Result<MmapCapture<S>> { MmapIO::new(p, Direction::Capture).map(|i| MmapCapture(i)) }
-
-
-impl<S> MmapCapture<S> {
+impl<S, D: MmapDir> MmapIO<S, D> {
     /// Read current status
-    pub fn status(&self) -> &Status { &self.0.ss }
+    pub fn status(&self) -> &Status { &self.ss }
 
-    /// Read current number of captured frames by application
+    /// Read current number of frames committed by application
     ///
     /// This number wraps at 'boundary'.
     #[inline]
-    pub fn appl_ptr(&self) -> Frames { self.0.c.appl_ptr() }
+    pub fn appl_ptr(&self) -> Frames { self.c.appl_ptr() }
 
-    /// Read current number of captured frames by hardware
+    /// Read current number of frames read / written by hardware
     ///
     /// This number wraps at 'boundary'.
     #[inline]
-    pub fn hw_ptr(&self) -> Frames { self.0.ss.hw_ptr() }
+    pub fn hw_ptr(&self) -> Frames { self.ss.hw_ptr() }
 
     /// The number at which hw_ptr and appl_ptr wraps.
     #[inline]
-    pub fn boundary(&self) -> Frames { self.0.bound }
+    pub fn boundary(&self) -> Frames { self.bound }
 
     /// Total number of frames in hardware buffer
     #[inline]
-    pub fn buffer_size(&self) -> Frames { self.0.data.frames }
+    pub fn buffer_size(&self) -> Frames { self.data.frames }
 
-    /// Notifies the kernel that frames have now been captured by the application
+    /// Number of channels in stream
+    #[inline]
+    pub fn channels(&self) -> u32 { self.data.channels }
+
+    /// Notifies the kernel that frames have now been read / written by the application
     ///
     /// This will allow the kernel to write new data into this part of the buffer.
     pub fn commit(&self, v: Frames) {
         let mut z = self.appl_ptr() + v;
         if z + v >= self.boundary() { z -= self.boundary() };
-        self.0.c.set_appl_ptr(z)
+        self.c.set_appl_ptr(z)
     }
 
-    /// Returns a raw pointer to data to read.
+    /// Number of frames available to read / write.
+    ///
+    /// In case of an underrun, this value might be bigger than the buffer size.
+    pub fn avail(&self) -> Frames { D::avail(self.hw_ptr(), self.appl_ptr(), self.buffer_size(), self.boundary()) }
+
+    /// Returns a raw pointer to data to read / write.
     ///
     /// Also returns the number of frames available at this location (which can be lower than "avail" returns).
-    pub fn data_ptr(&self) -> (*const S, Frames) {
+    pub fn data_ptr(&self) -> (*mut S, Frames) {
         let (hwptr, applptr) = (self.hw_ptr(), self.appl_ptr());
-        let bufsize = self.0.data.frames;
+        let bufsize = self.buffer_size();
 
         // These formulas mimics the behaviour of snd_pcm_mmap_begin (in alsa-lib/src/pcm/pcm.c).
         let offs = applptr % bufsize;
-        let mut a = hwptr - applptr;
-        if a < 0 { a += self.boundary() };
+        let mut a = D::avail(hwptr, applptr, bufsize, self.boundary());
         a = cmp::min(a, bufsize);
         a = cmp::min(a, bufsize - offs);
 
-        let p = unsafe { self.0.data.mem.ptr.offset(offs as isize * self.0.data.channels as isize) };
+        let p = unsafe { self.data.mem.ptr.offset(offs as isize * self.data.channels as isize) };
         (p, a)
     }
+}
 
-    /// Number of frames available to capture
-    ///
-    /// In case of an underrun, this value might be bigger than the buffer size.
-    pub fn avail(&self) -> Frames {
-	let r = self.hw_ptr() - self.appl_ptr();
-	if r < 0 { r + self.boundary() } else { r }
+impl<S> MmapPlayback<S> {
+    /// Write samples to the kernel ringbuffer.
+    pub fn write<I: Iterator<Item=S>>(&self, i: &mut I) -> Frames {
+        let (p, av) = self.data_ptr();
+        let maxcount = av as isize * self.channels() as isize;
+        let mut z: isize = 0;
+        while z < maxcount {
+            let b = if let Some(b) = i.next() { b } else { break };
+            unsafe { ptr::write_volatile(p.offset(z), b) };
+            z += 1;
+        }
+        let z = (z / self.channels() as isize) as Frames;
+        self.commit(z);
+        z
     }
+}
 
+impl<S> MmapCapture<S> {
     /// Read samples from the buffer.
     ///
     /// When the iterator is dropped or depleted, the read samples will be committed, i e,
@@ -351,7 +405,7 @@ impl<S> MmapCapture<S> {
     /// and others not read at all.
     pub fn iter<'a>(&'a self) -> Iter<'a, S> {
         let (p, av) = self.data_ptr();
-        Iter { m: self, p: p, count: 0, maxcount: av as isize * self.0.data.channels as isize }
+        Iter { m: self, p: p, count: 0, maxcount: av as isize * self.channels() as isize }
     }
 }
 
@@ -367,12 +421,12 @@ impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.count >= self.maxcount {
-            self.m.commit((self.count / self.m.0.data.channels as isize) as Frames);
+            self.m.commit((self.count / self.m.data.channels as isize) as Frames);
             self.maxcount = 0;
             self.count = 0;
             None
         } else {
-            let s = unsafe { *self.p.offset(self.count) };
+            let s = unsafe { ptr::read_volatile(self.p.offset(self.count)) };
             self.count += 1;
             Some(s)
         }
@@ -381,9 +435,10 @@ impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
 
 impl<'a, S: 'static> Drop for Iter<'a, S> {
     fn drop(&mut self) {
-        self.m.commit((self.count / self.m.0.data.channels as isize) as Frames);
+        self.m.commit((self.count / self.m.data.channels as isize) as Frames);
     }
 }
+
 
 #[test]
 #[ignore] // Not everyone has a recording device on plughw:1. So let's ignore this test by default.

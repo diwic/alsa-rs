@@ -175,9 +175,15 @@ impl PCM {
     pub fn io<'a>(&'a self) -> IO<'a, u8> { IO::new(&self) }
 
     /// Experimental: Read buffers by talking to the kernel directly, bypassing alsa-lib.
-    pub fn direct_mmap_capture<T>(&self) -> Result<::direct::pcm::MmapCapture<T>> {
+    pub fn direct_mmap_capture<S>(&self) -> Result<::direct::pcm::MmapCapture<S>> {
         self.check_has_io();
-        ::pcm_direct::new_mmap_capture(self)
+        ::pcm_direct::new_mmap(self)
+    }
+
+    /// Experimental: Write buffers by talking to the kernel directly, bypassing alsa-lib.
+    pub fn direct_mmap_playback<S>(&self) -> Result<::direct::pcm::MmapPlayback<S>> {
+        self.check_has_io();
+        ::pcm_direct::new_mmap(self)
     }
 
     /// Sets hw parameters. Note: No IO object can exist for this PCM
