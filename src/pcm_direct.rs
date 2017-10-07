@@ -513,3 +513,35 @@ fn record_from_plughw_mmap() {
     assert!(unsafe { ptr1.offset(256 * 2) } <= ptr2);
 }
 
+#[test]
+#[ignore] 
+fn playback_to_plughw_mmap() {
+    use pcm::*;
+    use {ValueOr, Direction};
+    use std::ffi::CString;
+
+    let pcm = PCM::open(&*CString::new("plughw:1").unwrap(), Direction::Playback, false).unwrap();
+    let hwp = HwParams::any(&pcm).unwrap();
+    hwp.set_channels(2).unwrap();
+    hwp.set_rate(44100, ValueOr::Nearest).unwrap();
+    hwp.set_format(Format::s16()).unwrap();
+    hwp.set_access(Access::MMapInterleaved).unwrap();
+    pcm.hw_params(&hwp).unwrap();
+    let m = pcm.direct_mmap_playback::<i16>().unwrap();
+
+    assert_eq!(m.status().state(), State::Prepared);
+    assert_eq!(m.appl_ptr(), 0);
+    assert_eq!(m.hw_ptr(), 0);
+
+    println!("{:?}", m);
+    let mut i = (0..(m.buffer_size() * 2)).map(|i|
+        (((i / 2) as f32 * 2.0 * ::std::f32::consts::PI / 128.0).sin() * 8192.0) as i16);
+    m.write(&mut i);
+    assert_eq!(m.appl_ptr(), m.buffer_size());
+
+    pcm.start().unwrap();
+    pcm.drain().unwrap();
+    assert_eq!(m.appl_ptr(), m.buffer_size());
+    assert_eq!(m.hw_ptr(), m.buffer_size());
+}
+
