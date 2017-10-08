@@ -362,14 +362,18 @@ impl<S, D: MmapDir> MmapIO<S, D> {
 
     /// Returns raw pointers to data to read / write.
     ///
-    /// Also returns the number of frames available at this location.
+    /// Use this if you want to read/write data yourself (instead of using iterators). If you do,
+    /// using `write_volatile` or `read_volatile` is recommended, since it's DMA memory and can
+    /// change at any time.
+    ///
+    /// The second return value returns the number of frames available at the first pointer location.
     /// Since this is a ring buffer, there might be more data to read/write in the beginning
-    /// of the buffer. If so this is returned as the third return value.
+    /// of the buffer as well. If so this is returned as the third return value.
     pub fn data_ptr(&self) -> (*mut S, Frames, Option<(*mut S, Frames)>) {
         let (hwptr, applptr) = (self.hw_ptr(), self.appl_ptr());
         let bufsize = self.buffer_size();
 
-        // These formulas partially mimic the behaviour of 
+        // These formulas mostly mimic the behaviour of 
         // snd_pcm_mmap_begin (in alsa-lib/src/pcm/pcm.c).
         let offs = applptr % bufsize;
         let mut a = D::avail(hwptr, applptr, bufsize, self.boundary());
@@ -398,7 +402,7 @@ impl<S> MmapPlayback<S> {
     }
 
     /// Write samples to the kernel ringbuffer.
-    pub fn write<I: Iterator<Item=S>>(&self, i: &mut I) -> Frames {
+    pub fn write<I: Iterator<Item=S>>(&mut self, i: &mut I) -> Frames {
         let (p, av, more_data) = self.data_ptr();
         let c = self.channels() as isize;
         let (iter_end, samples) = self.write_internal(p, av as isize * c, i);
@@ -416,14 +420,11 @@ impl<S> MmapPlayback<S> {
 }
 
 impl<S> MmapCapture<S> {
-    /// Read samples from the buffer.
+    /// Read samples from the kernel ringbuffer.
     ///
     /// When the iterator is dropped or depleted, the read samples will be committed, i e,
     /// the kernel can then write data to the location again. So do this ASAP.
-    ///
-    /// Note: only have one Iter active at a time - otherwise you'll get some samples read twice
-    /// and others not read at all.
-    pub fn iter<'a>(&'a self) -> Iter<'a, S> {
+    pub fn iter<'a>(&'a mut self) -> Iter<'a, S> {
         let (p, av, more_data) = self.data_ptr();
         let c = self.channels() as isize;
         Iter {
@@ -534,7 +535,7 @@ fn record_from_plughw_mmap() {
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::MMapInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
-    let m = pcm.direct_mmap_capture::<i16>().unwrap();
+    let mut m = pcm.direct_mmap_capture::<i16>().unwrap();
 
     assert_eq!(m.status().state(), State::Prepared);
     assert_eq!(m.appl_ptr(), 0);
@@ -571,7 +572,7 @@ fn playback_to_plughw_mmap() {
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::MMapInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
-    let m = pcm.direct_mmap_playback::<i16>().unwrap();
+    let mut m = pcm.direct_mmap_playback::<i16>().unwrap();
 
     assert_eq!(m.status().state(), State::Prepared);
     assert_eq!(m.appl_ptr(), 0);
