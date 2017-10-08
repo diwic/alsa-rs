@@ -360,36 +360,56 @@ impl<S, D: MmapDir> MmapIO<S, D> {
     /// In case of an underrun, this value might be bigger than the buffer size.
     pub fn avail(&self) -> Frames { D::avail(self.hw_ptr(), self.appl_ptr(), self.buffer_size(), self.boundary()) }
 
-    /// Returns a raw pointer to data to read / write.
+    /// Returns raw pointers to data to read / write.
     ///
-    /// Also returns the number of frames available at this location (which can be lower than "avail" returns).
-    pub fn data_ptr(&self) -> (*mut S, Frames) {
+    /// Also returns the number of frames available at this location.
+    /// Since this is a ring buffer, there might be more data to read/write in the beginning
+    /// of the buffer. If so this is returned as the third return value.
+    pub fn data_ptr(&self) -> (*mut S, Frames, Option<(*mut S, Frames)>) {
         let (hwptr, applptr) = (self.hw_ptr(), self.appl_ptr());
         let bufsize = self.buffer_size();
 
-        // These formulas mimics the behaviour of snd_pcm_mmap_begin (in alsa-lib/src/pcm/pcm.c).
+        // These formulas partially mimic the behaviour of 
+        // snd_pcm_mmap_begin (in alsa-lib/src/pcm/pcm.c).
         let offs = applptr % bufsize;
         let mut a = D::avail(hwptr, applptr, bufsize, self.boundary());
         a = cmp::min(a, bufsize);
-        a = cmp::min(a, bufsize - offs);
+        let b = bufsize - offs;
+        let more_data = if b < a {
+            let z = a - b;
+            a = b;
+            Some((self.data.mem.ptr, z))
+        } else { None };
 
         let p = unsafe { self.data.mem.ptr.offset(offs as isize * self.data.channels as isize) };
-        (p, a)
+        (p, a, more_data)
     }
 }
 
 impl<S> MmapPlayback<S> {
-    /// Write samples to the kernel ringbuffer.
-    pub fn write<I: Iterator<Item=S>>(&self, i: &mut I) -> Frames {
-        let (p, av) = self.data_ptr();
-        let maxcount = av as isize * self.channels() as isize;
-        let mut z: isize = 0;
-        while z < maxcount {
-            let b = if let Some(b) = i.next() { b } else { break };
+    fn write_internal<I: Iterator<Item=S>>(&self, p: *mut S, max_samples: isize, i: &mut I) -> (bool, isize) {
+        let mut z = 0;
+        while z < max_samples {
+            let b = if let Some(b) = i.next() { b } else { return (true, z) };
             unsafe { ptr::write_volatile(p.offset(z), b) };
             z += 1;
+        };
+        (false, z)
+    }
+
+    /// Write samples to the kernel ringbuffer.
+    pub fn write<I: Iterator<Item=S>>(&self, i: &mut I) -> Frames {
+        let (p, av, more_data) = self.data_ptr();
+        let c = self.channels() as isize;
+        let (iter_end, samples) = self.write_internal(p, av as isize * c, i);
+        let mut z = samples / c;
+        if !iter_end {
+            if let Some((p2, av2)) = more_data {
+                let (_, samples2) = self.write_internal(p2, av2 as isize * c, i);
+                z += samples2 / c;
+            }
         }
-        let z = (z / self.channels() as isize) as Frames;
+        let z = z as Frames;
         self.commit(z);
         z
     }
@@ -404,38 +424,61 @@ impl<S> MmapCapture<S> {
     /// Note: only have one Iter active at a time - otherwise you'll get some samples read twice
     /// and others not read at all.
     pub fn iter<'a>(&'a self) -> Iter<'a, S> {
-        let (p, av) = self.data_ptr();
-        Iter { m: self, p: p, count: 0, maxcount: av as isize * self.channels() as isize }
+        let (p, av, more_data) = self.data_ptr();
+        let c = self.channels() as isize;
+        Iter {
+            m: self,
+            p: p,
+            max_samples: av as isize * c,
+            p_offs: 0,
+            read_samples: 0,
+            next_p: more_data.map(|(p2, av2)| (p2 as *const S, av2 as isize * c))
+        }
     }
 }
 
 pub struct Iter<'a, S: 'static> {
     m: &'a MmapCapture<S>,
     p: *const S,
-    count: isize,
-    maxcount: isize,
+    max_samples: isize,
+    p_offs: isize,
+    read_samples: isize,
+    next_p: Option<(*const S, isize)>,
+}
+
+impl<'a, S: 'static + Copy>  Iter<'a, S> {
+    fn handle_max(&mut self) {
+        self.p_offs = 0;
+        if let Some((p2, c2)) = self.next_p.take() {
+            self.max_samples = c2;
+            self.p = p2;
+        } else {
+            self.m.commit((self.read_samples / self.m.channels() as isize) as Frames);
+            self.read_samples = 0;
+            self.max_samples = 0;
+        }
+    }
 }
 
 impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
     type Item = S;
+
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.count >= self.maxcount {
-            self.m.commit((self.count / self.m.data.channels as isize) as Frames);
-            self.maxcount = 0;
-            self.count = 0;
-            None
-        } else {
-            let s = unsafe { ptr::read_volatile(self.p.offset(self.count)) };
-            self.count += 1;
-            Some(s)
+        if self.p_offs >= self.max_samples {
+            self.handle_max();
+            if self.max_samples <= 0 { return None; }
         }
+        let s = unsafe { ptr::read_volatile(self.p.offset(self.p_offs)) };
+        self.p_offs += 1;
+        self.read_samples += 1;
+        Some(s)
     }
 }
 
 impl<'a, S: 'static> Drop for Iter<'a, S> {
     fn drop(&mut self) {
-        self.m.commit((self.count / self.m.data.channels as isize) as Frames);
+        self.m.commit((self.read_samples / self.m.data.channels as isize) as Frames);
     }
 }
 
@@ -503,13 +546,14 @@ fn record_from_plughw_mmap() {
     pcm.start().unwrap();
     while m.avail() < 256 { thread::sleep(time::Duration::from_millis(1)) };
     assert!(now.elapsed() >= time::Duration::from_millis(256 * 1000 / 44100));
-    let (ptr1, av1) = m.data_ptr();
+    let (ptr1, av1, md) = m.data_ptr();
     assert!(av1 >= 256);
+    assert!(md.is_none());
     println!("Has {:?} frames at {:?} in {:?}", m.avail(), ptr1, now.elapsed());
     let samples: Vec<i16> = m.iter().collect();
     assert!(samples.len() >= av1 as usize * 2);
     println!("Collected {} samples", samples.len());
-    let (ptr2, _av2) = m.data_ptr();
+    let (ptr2, _av2, _md) = m.data_ptr();
     assert!(unsafe { ptr1.offset(256 * 2) } <= ptr2);
 }
 
@@ -542,6 +586,6 @@ fn playback_to_plughw_mmap() {
     pcm.start().unwrap();
     pcm.drain().unwrap();
     assert_eq!(m.appl_ptr(), m.buffer_size());
-    assert_eq!(m.hw_ptr(), m.buffer_size());
+    assert!(m.hw_ptr() >= m.buffer_size());
 }
 
