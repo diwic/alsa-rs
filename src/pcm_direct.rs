@@ -300,6 +300,36 @@ pub struct MmapIO<S, D> {
     dir: PhantomData<*const D>,
 }
 
+#[derive(Debug, Clone, Copy)]
+/// A raw pointer to samples, and the amount of samples readable or writable.
+pub struct RawSamples<S> {
+    pub ptr: *mut S,
+    pub frames: Frames,
+    pub channels: u32,
+}
+
+impl<S> RawSamples<S> {
+    #[inline]
+    /// Returns `frames` * `channels`, i e the amount of samples (of type `S`) that can be read/written.
+    pub fn samples(&self) -> isize { self.frames as isize * (self.channels as isize) }
+
+    /// Writes samples from an iterator.
+    ///
+    /// Returns true if iterator was depleted, and the number of samples written.
+    /// This is just raw read/write of memory.
+    pub unsafe fn write_samples<I: Iterator<Item=S>>(&self, i: &mut I) -> (bool, isize) {
+        let mut z = 0;
+        let max_samples = self.samples();
+        while z < max_samples {
+            let b = if let Some(b) = i.next() { b } else { return (true, z) };
+            ptr::write_volatile(self.ptr.offset(z), b);
+            z += 1;
+        };
+        (false, z)
+    }
+
+}
+
 impl<S, D: MmapDir> MmapIO<S, D> {
     fn new(p: &pcm::PCM) -> Result<Self> {
         if p.info()?.get_stream() != D::DIR {
@@ -366,11 +396,11 @@ impl<S, D: MmapDir> MmapIO<S, D> {
     /// using `write_volatile` or `read_volatile` is recommended, since it's DMA memory and can
     /// change at any time.
     ///
-    /// The second return value returns the number of frames available at the first pointer location.
     /// Since this is a ring buffer, there might be more data to read/write in the beginning
-    /// of the buffer as well. If so this is returned as the third return value.
-    pub fn data_ptr(&self) -> (*mut S, Frames, Option<(*mut S, Frames)>) {
+    /// of the buffer as well. If so this is returned as the second return value.
+    pub fn data_ptr(&self) -> (RawSamples<S>, Option<RawSamples<S>>) {
         let (hwptr, applptr) = (self.hw_ptr(), self.appl_ptr());
+        let c = self.channels();
         let bufsize = self.buffer_size();
 
         // These formulas mostly mimic the behaviour of 
@@ -382,35 +412,24 @@ impl<S, D: MmapDir> MmapIO<S, D> {
         let more_data = if b < a {
             let z = a - b;
             a = b;
-            Some((self.data.mem.ptr, z))
+            Some( RawSamples { ptr: self.data.mem.ptr, frames: z, channels: c })
         } else { None };
 
         let p = unsafe { self.data.mem.ptr.offset(offs as isize * self.data.channels as isize) };
-        (p, a, more_data)
+        (RawSamples { ptr: p, frames: a, channels: c }, more_data)
     }
 }
 
 impl<S> MmapPlayback<S> {
-    fn write_internal<I: Iterator<Item=S>>(&self, p: *mut S, max_samples: isize, i: &mut I) -> (bool, isize) {
-        let mut z = 0;
-        while z < max_samples {
-            let b = if let Some(b) = i.next() { b } else { return (true, z) };
-            unsafe { ptr::write_volatile(p.offset(z), b) };
-            z += 1;
-        };
-        (false, z)
-    }
-
     /// Write samples to the kernel ringbuffer.
     pub fn write<I: Iterator<Item=S>>(&mut self, i: &mut I) -> Frames {
-        let (p, av, more_data) = self.data_ptr();
-        let c = self.channels() as isize;
-        let (iter_end, samples) = self.write_internal(p, av as isize * c, i);
-        let mut z = samples / c;
+        let (data, more_data) = self.data_ptr();
+        let (iter_end, samples) = unsafe { data.write_samples(i) };
+        let mut z = samples / data.channels as isize;
         if !iter_end {
-            if let Some((p2, av2)) = more_data {
-                let (_, samples2) = self.write_internal(p2, av2 as isize * c, i);
-                z += samples2 / c;
+            if let Some(data2) = more_data {
+                let (_, samples2) = unsafe {  data2.write_samples(i) };
+                z += samples2 / data2.channels as isize;
             }
         }
         let z = z as Frames;
@@ -425,38 +444,34 @@ impl<S> MmapCapture<S> {
     /// When the iterator is dropped or depleted, the read samples will be committed, i e,
     /// the kernel can then write data to the location again. So do this ASAP.
     pub fn iter<'a>(&'a mut self) -> Iter<'a, S> {
-        let (p, av, more_data) = self.data_ptr();
-        let c = self.channels() as isize;
+        let (data, more_data) = self.data_ptr();
         Iter {
             m: self,
-            p: p,
-            max_samples: av as isize * c,
+            samples: data,
             p_offs: 0,
             read_samples: 0,
-            next_p: more_data.map(|(p2, av2)| (p2 as *const S, av2 as isize * c))
+            next_p: more_data,
         }
     }
 }
 
 pub struct Iter<'a, S: 'static> {
     m: &'a MmapCapture<S>,
-    p: *const S,
-    max_samples: isize,
+    samples: RawSamples<S>,
     p_offs: isize,
     read_samples: isize,
-    next_p: Option<(*const S, isize)>,
+    next_p: Option<RawSamples<S>>,
 }
 
 impl<'a, S: 'static + Copy>  Iter<'a, S> {
     fn handle_max(&mut self) {
         self.p_offs = 0;
-        if let Some((p2, c2)) = self.next_p.take() {
-            self.max_samples = c2;
-            self.p = p2;
+        if let Some(p2) = self.next_p.take() {
+            self.samples = p2;
         } else {
-            self.m.commit((self.read_samples / self.m.channels() as isize) as Frames);
+            self.m.commit((self.read_samples / self.samples.channels as isize) as Frames);
             self.read_samples = 0;
-            self.max_samples = 0;
+            self.samples.frames = 0; // Shortcut to "None" in case anyone calls us again
         }
     }
 }
@@ -466,11 +481,11 @@ impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.p_offs >= self.max_samples {
+        if self.p_offs >= self.samples.samples() {
             self.handle_max();
-            if self.max_samples <= 0 { return None; }
+            if self.samples.frames <= 0 { return None; }
         }
-        let s = unsafe { ptr::read_volatile(self.p.offset(self.p_offs)) };
+        let s = unsafe { ptr::read_volatile(self.samples.ptr.offset(self.p_offs)) };
         self.p_offs += 1;
         self.read_samples += 1;
         Some(s)
@@ -547,15 +562,16 @@ fn record_from_plughw_mmap() {
     pcm.start().unwrap();
     while m.avail() < 256 { thread::sleep(time::Duration::from_millis(1)) };
     assert!(now.elapsed() >= time::Duration::from_millis(256 * 1000 / 44100));
-    let (ptr1, av1, md) = m.data_ptr();
-    assert!(av1 >= 256);
+    let (ptr1, md) = m.data_ptr();
+    assert_eq!(ptr1.channels, 2);
+    assert!(ptr1.frames >= 256);
     assert!(md.is_none());
-    println!("Has {:?} frames at {:?} in {:?}", m.avail(), ptr1, now.elapsed());
+    println!("Has {:?} frames at {:?} in {:?}", m.avail(), ptr1.ptr, now.elapsed());
     let samples: Vec<i16> = m.iter().collect();
-    assert!(samples.len() >= av1 as usize * 2);
+    assert!(samples.len() >= ptr1.frames as usize * 2);
     println!("Collected {} samples", samples.len());
-    let (ptr2, _av2, _md) = m.data_ptr();
-    assert!(unsafe { ptr1.offset(256 * 2) } <= ptr2);
+    let (ptr2, _md) = m.data_ptr();
+    assert!(unsafe { ptr1.ptr.offset(256 * 2) } <= ptr2.ptr);
 }
 
 #[test]

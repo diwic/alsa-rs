@@ -146,7 +146,7 @@ pub mod direct {
     /// modern/common ones do. It only works with hardware devices though (such as "hw:xxx" device strings),
     /// don't expect it to work with, e g, the PulseAudio plugin or so.
     pub mod pcm {
-        pub use pcm_direct::{Status, Control, MmapCapture, MmapPlayback, MmapIO};
+        pub use pcm_direct::{Status, Control, MmapCapture, MmapPlayback, MmapIO, RawSamples};
 
     }
 }
