@@ -12,7 +12,7 @@ use std::error::Error as StdError;
 /// If so, then that error code is wrapped into this `Error` struct.
 /// An Error is also returned in case ALSA returns a string that
 /// cannot be translated into Rust's UTF-8 strings.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct Error(&'static str, nix::Error);
 
 pub type Result<T> = ::std::result::Result<T, Error>;
