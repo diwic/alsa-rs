@@ -1,6 +1,6 @@
 //! Experimental stuff
 
-use libc;
+use {libc, nix};
 use std::{mem, ptr, fmt, cmp};
 use error::{Error, Result};
 use std::os::unix::io::RawFd;
@@ -79,7 +79,7 @@ fn pcm_to_fd(p: &pcm::PCM) -> Result<RawFd> {
     let mut fds: [libc::pollfd; 1] = unsafe { mem::zeroed() };
     let c = (p as &PollDescriptors).fill(&mut fds)?;
     if c != 1 {
-        return Err(Error::new(Some("snd_pcm_poll_descriptors returned wrong number of fds".into()), c as libc::c_int))
+        return Err(Error::unsupported("snd_pcm_poll_descriptors returned wrong number of fds"))
     }
     Ok(fds[0].fd)
 }
@@ -203,7 +203,7 @@ impl<S> DriverMemory<S> {
         let flags = if writable { libc::PROT_WRITE | libc::PROT_READ } else { libc::PROT_READ };
         let p = unsafe { libc::mmap(ptr::null_mut(), total, flags, libc::MAP_FILE | libc::MAP_SHARED, fd, offs) };
         if p == ptr::null_mut() || p == libc::MAP_FAILED {
-            return Err(Error::new(Some("driver memory mmap".into()), -1))
+            return Err(Error::unsupported("driver memory mmap"))
         }
         Ok(DriverMemory { ptr: p as *mut S, size: total })
     }
@@ -231,18 +231,19 @@ impl<S> SampleData<S> {
         let bufsize = params.get_buffer_size()?;
         let channels = params.get_channels()?;
         if params.get_access()? != pcm::Access::MMapInterleaved {
-            return Err(Error::new(Some("Not MMAP interleaved data".into()), -1))
+            return Err(Error::unsupported("Not MMAP interleaved data"))
         }
 
         let fd = pcm_to_fd(p)?;
         let info = unsafe {
             let mut info: snd_pcm_channel_info = mem::zeroed();
-            sndrv_pcm_ioctl_channel_info(fd, &mut info).map_err(|_| Error::new(Some("SNDRV_PCM_IOCTL_CHANNEL_INFO".into()), -1))?;
+            sndrv_pcm_ioctl_channel_info(fd, &mut info).map_err(|_|
+                Error::new("SNDRV_PCM_IOCTL_CHANNEL_INFO", nix::Errno::last() as i32))?;
             info
         };
         // println!("{:?}", info);
         if (info.step != channels * mem::size_of::<S>() as u32 * 8) || (info.first != 0) {
-            return Err(Error::new(Some("MMAP data size mismatch".into()), -1))
+            return Err(Error::unsupported("MMAP data size mismatch"))
         }
         Ok(SampleData {
             mem: DriverMemory::new(fd, (bufsize as usize) * (channels as usize), info.offset, true)?,
@@ -333,7 +334,7 @@ impl<S> RawSamples<S> {
 impl<S, D: MmapDir> MmapIO<S, D> {
     fn new(p: &pcm::PCM) -> Result<Self> {
         if p.info()?.get_stream() != D::DIR {
-            return Err(Error::new(Some("Wrong direction".into()), -1));
+            return Err(Error::unsupported("Wrong direction"));
         }
         let boundary = p.sw_params_current()?.get_boundary()?;
         Ok(MmapIO {

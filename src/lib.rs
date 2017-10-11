@@ -41,7 +41,7 @@ impl $name {
     #[allow(dead_code)]
     fn from_c_int(c: ::libc::c_int, s: &'static str) -> Result<$name> {
         Self::all().iter().find(|&&x| c == x as ::libc::c_int).map(|&x| x)
-            .ok_or_else(|| Error::new(Some(s.into()), INVALID_ENUM))
+            .ok_or_else(|| Error::unsupported(s))
     }
 }
 

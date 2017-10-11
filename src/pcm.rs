@@ -38,7 +38,7 @@
 //! ```
 
 
-use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, EINVAL, pollfd};
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
 use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -158,8 +158,8 @@ impl PCM {
         let ff = try!(self.hw_params_current().and_then(|h| h.get_format()));
         if ff == f { Ok(()) }
         else {
-            let s = format!("Invalid sample format ({:?}, expected {:?})", ff, f);
-            Err(Error::new(Some(s.into()), INVALID_FORMAT))
+            // let s = format!("Invalid sample format ({:?}, expected {:?})", ff, f);
+            Err(Error::unsupported("io_xx"))
         }
     }
 
@@ -234,7 +234,7 @@ impl PCM {
 
     pub fn get_chmap(&self) -> Result<Chmap> {
         let p = unsafe { alsa::snd_pcm_get_chmap(self.0) };
-        if p == ptr::null_mut() { Err(Error::new(Some("snd_pcm_get_chmap".into()), -EINVAL)) }
+        if p == ptr::null_mut() { Err(Error::unsupported("snd_pcm_get_chmap")) }
         else { Ok(chmap::chmap_new(p)) }
     }
 }
@@ -318,8 +318,8 @@ impl<'a, S: Copy> IO<'a, S> {
         let (first, step) = unsafe { ((*areas).first, (*areas).step) };
         if first != 0 || step as isize != self.0.frames_to_bytes(1) * 8 {
             unsafe { alsa::snd_pcm_mmap_commit((self.0).0, offs, 0) };
-            let s = format!("Can only mmap a single interleaved buffer (first = {:?}, step = {:?})", first, step);
-            return Err(Error::new(Some(s.into()), INVALID_FORMAT));
+            // let s = format!("Can only mmap a single interleaved buffer (first = {:?}, step = {:?})", first, step);
+            return Err(Error::unsupported("snd_pcm_mmap_begin"));
         }
 
         let buf = unsafe {

@@ -27,7 +27,7 @@ pub trait PollDescriptors {
     /// Wrapper around count and fill - returns an array of pollfds
     fn get(&self) -> Result<Vec<pollfd>> {
         let mut v = vec![pollfd { fd: 0, events: 0, revents: 0 }; self.count()];
-        if try!(self.fill(&mut v)) != v.len() { Err(Error::new(Some("did not fill the poll descriptors array".into()), 0)) }
+        if try!(self.fill(&mut v)) != v.len() { Err(Error::unsupported("did not fill the poll descriptors array")) }
         else { Ok(v) }
     }
 }
