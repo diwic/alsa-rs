@@ -20,7 +20,7 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 macro_rules! acheck {
     ($f: ident ( $($x: expr),* ) ) => {{
         let r = unsafe { alsa::$f( $($x),* ) };
-        if r < 0 { Err(Error::new(stringify!($f), r as ::libc::c_int)) }
+        if r < 0 { Err(Error::new(stringify!($f), -r as ::libc::c_int)) }
         else { Ok(r) }
     }}
 }
@@ -90,4 +90,5 @@ fn broken_pcm_name() {
     use std::ffi::CString;
     let e = ::PCM::open(&*CString::new("this_PCM_does_not_exist").unwrap(), ::Direction::Playback, false).err().unwrap();
     assert_eq!(e.func(), "snd_pcm_open");
+    assert_eq!(e.errno().unwrap(), nix::Errno::ENOENT);
 }

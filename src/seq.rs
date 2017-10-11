@@ -5,7 +5,7 @@ use super::error::*;
 use alsa;
 use super::{Direction, poll};
 use std::{ptr, fmt, mem, slice, time, cell};
-use std::ffi::CStr;
+use std::ffi::{CStr};
 use std::borrow::Cow;
 
 // Some constants that are not in alsa-sys

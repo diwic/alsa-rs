@@ -6,7 +6,7 @@ use super::{Direction, poll};
 use super::error::*;
 use alsa;
 use std::{ptr, io};
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 
 /// Iterator over [Rawmidi](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) devices and subdevices
 pub struct Iter<'a> {
@@ -111,6 +111,12 @@ impl Drop for Rawmidi {
 }
 
 impl Rawmidi {
+
+    /// Wrapper around open that takes a &str instead of a &CStr
+    pub fn new(name: &str, dir: Direction, nonblock: bool) -> Result<Self> {
+        Self::open(&CString::new(name).unwrap(), dir, nonblock)
+    }
+
     pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<Rawmidi> {
         let mut h = ptr::null_mut();
         let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_RAWMIDI_NONBLOCK does not exist in alsa-sys

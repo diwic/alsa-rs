@@ -23,6 +23,11 @@ pub struct Ctl(*mut alsa::snd_ctl_t);
 unsafe impl Send for Ctl {}
 
 impl Ctl {
+    /// Wrapper around open that takes a &str instead of a &CStr
+    pub fn new(c: &str, nonblock: bool) -> Result<Self> {
+        Self::open(&CString::new(c).unwrap(), nonblock)
+    }
+
     /// Open does not support async mode (it's not very Rustic anyway)
     pub fn open(c: &CStr, nonblock: bool) -> Result<Ctl> {
         let mut r = ptr::null_mut();

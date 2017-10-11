@@ -26,7 +26,7 @@
 //! ```
 
 use alsa;
-use std::ffi::{CStr};
+use std::ffi::{CStr, CString};
 use super::error::*;
 use std::ptr;
 use super::{ctl_int, poll};
@@ -43,6 +43,11 @@ impl Drop for HCtl {
 }
 
 impl HCtl {
+    /// Wrapper around open that takes a &str instead of a &CStr
+    pub fn new(c: &str, nonblock: bool) -> Result<HCtl> {
+        Self::open(&CString::new(c).unwrap(), nonblock)
+    }
+
     /// Open does not support async mode (it's not very Rustic anyway)
     /// Note: You probably want to call `load` afterwards.
     pub fn open(c: &CStr, nonblock: bool) -> Result<HCtl> {

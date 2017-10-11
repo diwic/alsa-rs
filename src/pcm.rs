@@ -4,12 +4,11 @@
 //! Playback a sine wave through the "default" device.
 //!
 //! ```
-//! use std::ffi::CString;
 //! use alsa::{Direction, ValueOr};
 //! use alsa::pcm::{PCM, HwParams, Format, Access, State};
 //!
 //! // Open default playback device
-//! let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
+//! let pcm = PCM::new("default", Direction::Playback, false).unwrap();
 //!
 //! // Set hardware parameters: 44100 Hz / Mono / 16 bit
 //! let hwp = HwParams::any(&pcm).unwrap();
@@ -19,6 +18,12 @@
 //! hwp.set_access(Access::RWInterleaved).unwrap();
 //! pcm.hw_params(&hwp).unwrap();
 //! let io = pcm.io_i16().unwrap();
+//!
+//! // Make sure we don't start the stream too early
+//! let hwp = pcm.hw_params_current().unwrap();
+//! let swp = pcm.sw_params_current().unwrap();
+//! swp.set_start_threshold(hwp.get_buffer_size().unwrap() - hwp.get_period_size().unwrap()).unwrap();
+//! pcm.sw_params(&swp).unwrap();
 //!
 //! // Make a sine wave
 //! let mut buf = [0i16; 1024];
@@ -42,7 +47,7 @@ use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
 use alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::{io, fmt, ptr, cell};
 use super::error::*;
 use super::{Direction, Output, poll, ValueOr, chmap};
@@ -110,6 +115,11 @@ impl PCM {
         if self.1.get() { panic!("No hw_params call or additional IO objects allowed") }
     }
 
+    /// Wrapper around open that takes a &str instead of a &CStr
+    pub fn new(name: &str, dir: Direction, nonblock: bool) -> Result<PCM> {
+        Self::open(&CString::new(name).unwrap(), dir, nonblock)
+    }
+
     // Does not offer async mode (it's not very Rustic anyway)
     pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<PCM> {
         let mut r = ptr::null_mut();
@@ -136,7 +146,7 @@ impl PCM {
         acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
     pub fn state(&self) -> State { State::from_c_int(
-        unsafe { alsa::snd_pcm_state(self.0) } as c_int, "snd_pcm_status_get_state").unwrap() }
+        unsafe { alsa::snd_pcm_state(self.0) } as c_int, "snd_pcm_state").unwrap() }
 
     pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
     pub fn frames_to_bytes(&self, i: Frames) -> isize { unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }}
@@ -761,6 +771,11 @@ fn playback_to_default() {
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
 
+    let hwp = pcm.hw_params_current().unwrap();
+    let swp = pcm.sw_params_current().unwrap();
+    swp.set_start_threshold(hwp.get_buffer_size().unwrap() - hwp.get_period_size().unwrap()).unwrap();
+    pcm.sw_params(&swp).unwrap();
+
     println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
     let mut outp = Output::buffer_open().unwrap();
     pcm.dump(&mut outp).unwrap();
@@ -772,6 +787,7 @@ fn playback_to_default() {
     }
     let io = pcm.io_i16().unwrap();
     for _ in 0..2*44100/1024 { // 2 seconds of playback
+        println!("PCM state: {:?}", pcm.state());
         assert_eq!(io.writei(&buf[..]).unwrap(), 1024);
     }
     if pcm.state() != State::Running { pcm.start().unwrap() };
