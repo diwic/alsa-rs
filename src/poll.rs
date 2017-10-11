@@ -9,13 +9,13 @@ use libc::pollfd;
 
 
 bitflags! {
-    pub flags PollFlags: ::libc::c_short {
-        const POLLIN  = ::libc::POLLIN,
-        const POLLPRI = ::libc::POLLPRI,
-        const POLLOUT = ::libc::POLLOUT,
-        const POLLERR = ::libc::POLLERR,
-        const POLLHUP = ::libc::POLLHUP,
-        const POLLNVAL = ::libc::POLLNVAL,
+    pub struct PollFlags: ::libc::c_short {
+        const POLLIN  = ::libc::POLLIN;
+        const POLLPRI = ::libc::POLLPRI;
+        const POLLOUT = ::libc::POLLOUT;
+        const POLLERR = ::libc::POLLERR;
+        const POLLHUP = ::libc::POLLHUP;
+        const POLLNVAL = ::libc::POLLNVAL;
     }
 }
 

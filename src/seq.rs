@@ -424,36 +424,36 @@ impl<'a> Iterator for PortIter<'a> {
 
 bitflags! {
     /// [SND_SEQ_PORT_CAP_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants 
-    pub flags PortCap: u32 {
-        const READ = 1<<0,
-        const WRITE = 1<<1,
-        const SYNC_READ = 1<<2,
-        const SYNC_WRITE = 1<<3,
-        const DUPLEX = 1<<4,
-        const SUBS_READ = 1<<5,
-        const SUBS_WRITE = 1<<6,
-        const NO_EXPORT = 1<<7,
+    pub struct PortCap: u32 {
+        const READ = 1<<0;
+        const WRITE = 1<<1;
+        const SYNC_READ = 1<<2;
+        const SYNC_WRITE = 1<<3;
+        const DUPLEX = 1<<4;
+        const SUBS_READ = 1<<5;
+        const SUBS_WRITE = 1<<6;
+        const NO_EXPORT = 1<<7;
    }
 }
 
 bitflags! {
     /// [SND_SEQ_PORT_TYPE_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants 
-    pub flags PortType: u32 {
-        const SPECIFIC = (1<<0),
-        const MIDI_GENERIC = (1<<1),
-        const MIDI_GM = (1<<2),
-        const MIDI_GS = (1<<3),
-        const MIDI_XG = (1<<4),
-        const MIDI_MT32 = (1<<5),
-        const MIDI_GM2 = (1<<6),
-        const SYNTH = (1<<10),
-        const DIRECT_SAMPLE = (1<<11),
-        const SAMPLE = (1<<12),
-        const HARDWARE = (1<<16),
-        const SOFTWARE = (1<<17),
-        const SYNTHESIZER = (1<<18),
-        const PORT = (1<<19),
-        const APPLICATION = (1<<20),
+    pub struct PortType: u32 {
+        const SPECIFIC = (1<<0);
+        const MIDI_GENERIC = (1<<1);
+        const MIDI_GM = (1<<2);
+        const MIDI_GS = (1<<3);
+        const MIDI_XG = (1<<4);
+        const MIDI_MT32 = (1<<5);
+        const MIDI_GM2 = (1<<6);
+        const SYNTH = (1<<10);
+        const DIRECT_SAMPLE = (1<<11);
+        const SAMPLE = (1<<12);
+        const HARDWARE = (1<<16);
+        const SOFTWARE = (1<<17);
+        const SYNTHESIZER = (1<<18);
+        const PORT = (1<<19);
+        const APPLICATION = (1<<20);
     }
 }
 
