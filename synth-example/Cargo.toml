@@ -1,0 +1,9 @@
+[package]
+name = "synth-example"
+version = "0.1.0"
+authors = ["David Henningsson <diwic@ubuntu.com>"]
+
+[dependencies]
+sample = "0.7"
+alsa = "0.2"
+clap = "2.20"

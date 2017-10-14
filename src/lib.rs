@@ -145,6 +145,8 @@ pub mod direct {
     /// Note: Not all sound card drivers support this direct method of communication; although almost all
     /// modern/common ones do. It only works with hardware devices though (such as "hw:xxx" device strings),
     /// don't expect it to work with, e g, the PulseAudio plugin or so.
+    ///
+    /// For an example of how to use this mode, look in the "synth-example" directory.
     pub mod pcm {
         pub use pcm_direct::{Status, Control, MmapCapture, MmapPlayback, MmapIO, RawSamples};
 
