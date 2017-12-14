@@ -142,6 +142,16 @@ impl PCM {
     pub fn recover(&self, err: c_int, silent: bool) -> Result<()> {
         acheck!(snd_pcm_recover(self.0, err, if silent { 1 } else { 0 })).map(|_| ()) }
 
+    /// Wrapper around snd_pcm_recover.
+    ///
+    /// Returns Ok if the error was successfully recovered from, or the original
+    /// error if the error was unhandled.
+    pub fn try_recover(&self, err: Error, silent: bool) -> Result<()> {
+        if let Some(e) = err.errno() {
+            self.recover(e as c_int, silent)
+        } else { Err(err) }
+    }
+
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
