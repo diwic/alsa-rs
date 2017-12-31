@@ -554,21 +554,21 @@ fn print_mixer_of_cards() {
     }
 }
 
-/*
 #[test]
+#[ignore]
 fn get_and_set_playback_volume() {
-    let mixer = Mixer::new("hw:2").unwrap();
-    let selem = mixer.find_selem("Speaker").unwrap();
+    let mixer = Mixer::new("hw:1", false).unwrap();
+    let selem = mixer.find_selem(&SelemId::new("Master", 0)).unwrap();
 
-    let range: [i64;2] = selem.get_playback_volume_range();
-    let mut channel: i32 = 0;
-    for c in 0..SelemChannelId::Last as i32 {
-        if selem.has_playback_channel(c) { channel = c; break }
+    let (rmin, rmax) = selem.get_playback_volume_range();
+    let mut channel = SelemChannelId::mono();
+    for c in SelemChannelId::all().iter() {
+        if selem.has_playback_channel(*c) { channel = *c; break }
     }
-    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), range[0], range[1], channel);
+    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), rmin, rmax, channel);
 
     let old: i64 = selem.get_playback_volume(channel).unwrap();
-    let new: i64 = range[1] / 2;
+    let new: i64 = rmax / 2;
     assert!( new != old );
 
     println!("Changing volume of {} from {} to {}", channel, old, new);
@@ -583,19 +583,20 @@ fn get_and_set_playback_volume() {
 }
 
 #[test]
+#[ignore]
 fn get_and_set_capture_volume() {
-    let mixer = Mixer::new("hw:2").unwrap();
-    let selem = mixer.find_selem("Mic").unwrap();
+    let mixer = Mixer::new("hw:1", false).unwrap();
+    let selem = mixer.find_selem(&SelemId::new("Capture", 0)).unwrap();
 
-    let range: [i64;2] = selem.get_capture_volume_range();
-    let mut channel: i32 = 0;
-    for c in 0..SelemChannelId::Last as i32 {
-        if selem.has_capture_channel(c) { channel = c; break }
+    let (rmin, rmax) = selem.get_capture_volume_range();
+    let mut channel = SelemChannelId::mono();
+    for c in SelemChannelId::all().iter() {
+        if selem.has_playback_channel(*c) { channel = *c; break }
     }
-    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), range[0], range[1], channel);
+    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), rmin, rmax, channel);
 
     let old: i64 = selem.get_capture_volume(channel).unwrap();
-    let new: i64 = range[1] / 2;
+    let new: i64 = rmax / 2;
     assert!( new != old );
 
     println!("Changing volume of {} from {} to {}", channel, old, new);
@@ -608,7 +609,7 @@ fn get_and_set_capture_volume() {
     result = selem.get_capture_volume(channel).unwrap();
     assert_eq!(old, result);
 }
-*/
+
 
 #[test]
 fn print_sizeof() {
