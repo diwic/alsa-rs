@@ -203,9 +203,10 @@ impl<S> DriverMemory<S> {
         let flags = if writable { libc::PROT_WRITE | libc::PROT_READ } else { libc::PROT_READ };
         let p = unsafe { libc::mmap(ptr::null_mut(), total, flags, libc::MAP_FILE | libc::MAP_SHARED, fd, offs) };
         if p == ptr::null_mut() || p == libc::MAP_FAILED {
-            return Err(Error::unsupported("driver memory mmap"))
+            Err(Error::new("mmap (of driver memory)", nix::Errno::last() as i32))
+        } else {
+            Ok(DriverMemory { ptr: p as *mut S, size: total })
         }
-        Ok(DriverMemory { ptr: p as *mut S, size: total })
     }
 }
 
