@@ -148,7 +148,7 @@ pub mod direct {
     ///
     /// For an example of how to use this mode, look in the "synth-example" directory.
     pub mod pcm {
-        pub use pcm_direct::{Status, Control, MmapCapture, MmapPlayback, MmapIO, RawSamples};
+        pub use pcm_direct::{SyncPtrStatus, Status, Control, MmapCapture, MmapPlayback, MmapIO, RawSamples};
 
     }
 }

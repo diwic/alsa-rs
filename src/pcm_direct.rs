@@ -14,6 +14,11 @@ use std::marker::PhantomData;
 const SNDRV_PCM_MMAP_OFFSET_STATUS: libc::c_uint = 0x80000000;
 const SNDRV_PCM_MMAP_OFFSET_CONTROL: libc::c_uint = 0x81000000;
 
+
+const SNDRV_PCM_SYNC_PTR_HWSYNC: libc::c_uint = 1;
+const SNDRV_PCM_SYNC_PTR_APPL: libc::c_uint = 2;
+const SNDRV_PCM_SYNC_PTR_AVAIL_MIN: libc::c_uint = 4;
+
 // #[repr(C)]
 #[allow(non_camel_case_types)]
 type snd_pcm_state_t = libc::c_int;
@@ -27,7 +32,8 @@ type snd_pcm_uframes_t = libc::c_ulong;
 type __kernel_off_t = libc::c_long;
 
 #[repr(C)]
-struct snd_pcm_mmap_status {
+#[derive(Copy, Clone)]
+pub struct snd_pcm_mmap_status {
 	pub state: snd_pcm_state_t,		/* RO: state - SNDRV_PCM_STATE_XXXX */
 	pub pad1: libc::c_int,			/* Needed for 64 bit alignment */
 	pub hw_ptr: snd_pcm_uframes_t,	/* RO: hw ptr (0...boundary-1) */
@@ -37,8 +43,8 @@ struct snd_pcm_mmap_status {
 }
 
 #[repr(C)]
-#[derive(Debug)]
-struct snd_pcm_mmap_control {
+#[derive(Debug, Copy, Clone)]
+pub struct snd_pcm_mmap_control {
 	pub appl_ptr: snd_pcm_uframes_t,	/* RW: appl ptr (0...boundary-1) */
 	pub avail_min: snd_pcm_uframes_t,	/* RW: min available frames for wakeup */
 }
@@ -52,19 +58,88 @@ pub struct snd_pcm_channel_info {
 	pub step: libc::c_uint, 		/* samples distance in bits */
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union snd_pcm_mmap_status_r {
+	pub status: snd_pcm_mmap_status,
+	pub reserved: [libc::c_uchar; 64],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union snd_pcm_mmap_control_r {
+	pub control: snd_pcm_mmap_control,
+	pub reserved: [libc::c_uchar; 64],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct snd_pcm_sync_ptr {
+	pub flags: libc::c_uint,
+	pub s: snd_pcm_mmap_status_r,
+	pub c: snd_pcm_mmap_control_r,
+}
+
 ioctl!(read sndrv_pcm_ioctl_channel_info with b'A', 0x32; snd_pcm_channel_info);
+ioctl!(readwrite sndrv_pcm_ioctl_sync_ptr with b'A', 0x23; snd_pcm_sync_ptr);
 
 fn pagesize() -> usize {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
 }
 
-/// Read PCM status directly, bypassing alsa-lib.
+
+
+/// Read PCM status via a simple kernel syscall, bypassing alsa-lib.
+///
+/// If Status is not available on your architecture, this is the second best option.
+pub struct SyncPtrStatus(snd_pcm_mmap_status);
+
+impl SyncPtrStatus {
+    /// Executes sync_ptr syscall.
+    ///
+    /// Unsafe because
+    ///  - setting appl_ptr and avail_min might make alsa-lib confused
+    ///  - no check that the fd is really a PCM 
+    pub unsafe fn sync_ptr(fd: RawFd, hwsync: bool, appl_ptr: Option<pcm::Frames>, avail_min: Option<pcm::Frames>) -> Result<Self> {
+        let mut data: snd_pcm_sync_ptr = mem::uninitialized();
+        data.flags = if hwsync { SNDRV_PCM_SYNC_PTR_HWSYNC } else { 0 };
+        if let Some(appl_ptr) = appl_ptr {
+            data.c.control.appl_ptr = appl_ptr as snd_pcm_uframes_t;
+        } else {
+            data.flags += SNDRV_PCM_SYNC_PTR_APPL;
+        }
+        if let Some(avail_min) = avail_min {
+            data.c.control.avail_min = avail_min as snd_pcm_uframes_t;
+        } else {
+            data.flags += SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
+        }
+
+        sndrv_pcm_ioctl_sync_ptr(fd, &mut data).map_err(|_|
+            Error::new("SNDRV_PCM_IOCTL_SYNC_PTR", nix::Errno::last() as i32))?;
+
+        let i = data.s.status.state;
+        if (i >= (pcm::State::Open as snd_pcm_state_t)) && (i <= (pcm::State::Disconnected as snd_pcm_state_t)) {
+            Ok(SyncPtrStatus(data.s.status))
+        } else {
+            Err(Error::unsupported("SNDRV_PCM_IOCTL_SYNC_PTR returned broken state"))
+        }
+    }
+
+    pub fn hw_ptr(&self) -> pcm::Frames { self.0.hw_ptr as pcm::Frames }
+    pub fn state(&self) -> pcm::State { unsafe { mem::transmute(self.0.state as u8) } /* valid range checked in sync_ptr */ }
+    pub fn htstamp(&self) -> libc::timespec { self.0.tstamp }
+}
+
+
+
+/// Read PCM status directly from memory, bypassing alsa-lib.
 ///
 /// This means that it's
 /// 1) less overhead for reading status (no syscall, no allocations, no virtual dispatch, just a read from memory)
 /// 2) Send + Sync, and
 /// 3) will only work for "hw" / "plughw" devices (not e g PulseAudio plugins), and not
 /// all of those are supported, although all common ones are (as of 2017, and a kernel from the same decade).
+/// Kernel supported archs are: x86, PowerPC, Alpha. Use "SyncPtrStatus" for other archs.
 ///
 /// The values are updated every now and then by the kernel. Many functions will force an update to happen,
 /// e g `PCM::avail()` and `PCM::delay()`.
@@ -552,11 +627,16 @@ fn record_from_plughw_mmap() {
     hwp.set_format(Format::s16()).unwrap();
     hwp.set_access(Access::MMapInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
+
+    let ss = unsafe { SyncPtrStatus::sync_ptr(pcm_to_fd(&pcm).unwrap(), false, None, None).unwrap() };
+    assert_eq!(ss.state(), State::Prepared);
+
     let mut m = pcm.direct_mmap_capture::<i16>().unwrap();
 
     assert_eq!(m.status().state(), State::Prepared);
     assert_eq!(m.appl_ptr(), 0);
     assert_eq!(m.hw_ptr(), 0);
+
 
     println!("{:?}", m);
 
