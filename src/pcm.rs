@@ -257,6 +257,14 @@ impl PCM {
         if p == ptr::null_mut() { Err(Error::unsupported("snd_pcm_get_chmap")) }
         else { Ok(chmap::chmap_new(p)) }
     }
+
+    pub fn link(&self, other: &PCM) -> Result<()> {
+        acheck!(snd_pcm_link(self.0, other.0)).map(|_| ())
+    }
+
+    pub fn unlink(&self) -> Result<()> {
+        acheck!(snd_pcm_unlink(self.0)).map(|_| ())
+    }
 }
 
 impl Drop for PCM {
