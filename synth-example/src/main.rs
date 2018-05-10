@@ -214,7 +214,11 @@ fn read_midi_event(input: &mut seq::Input, synth: &mut Synth) -> Result<bool, Bo
     match ev.get_type() {
         seq::EventType::Noteon => {
             let data: seq::EvNote = ev.get_data().unwrap();
-            synth.add_note(data.note, f64::from(data.velocity + 64) / 2048.0);
+            if data.velocity == 0 {
+                synth.remove_note(data.note);
+            } else {
+                synth.add_note(data.note, f64::from(data.velocity + 64) / 2048.0);
+            }
         },
         seq::EventType::Noteoff => {
             let data: seq::EvNote = ev.get_data().unwrap();
