@@ -574,6 +574,12 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_set_period_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t, dir as c_int)).map(|_| ())
     }
 
+    pub fn set_period_time_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_period_time_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
     pub fn get_period_size(&self) -> Result<Frames> {
         let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d)).map(|_| v as Frames)
@@ -597,9 +603,20 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_set_buffer_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
+    pub fn set_buffer_time_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_buffer_time_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
     pub fn get_buffer_size(&self) -> Result<Frames> {
         let mut v = 0;
         acheck!(snd_pcm_hw_params_get_buffer_size(self.0, &mut v)).map(|_| v as Frames)
+    }
+
+    pub fn get_buffer_time_max(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_buffer_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
