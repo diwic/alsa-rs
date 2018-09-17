@@ -53,7 +53,7 @@ pub fn poll_all<'a>(desc: &[&'a PollDescriptors], timeout: i32) -> Result<Vec<(&
     let mut indices = vec!();
     for v2 in desc.iter().map(|q| q.get()) {
         let v = try!(v2);
-        indices.push((pollfds.len() .. pollfds.len()+v.len()));
+        indices.push(pollfds.len() .. pollfds.len()+v.len());
         pollfds.extend(v);
     };
 
