@@ -9,7 +9,6 @@ use std::ffi::CString;
 use sample::signal;
 
 fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> Result<(), Box<error::Error>> {
-
     // Iterate over clients and clients' ports
     let our_id = s.client_id()?;
     let ci = seq::ClientIter::new(&s);
@@ -87,7 +86,7 @@ fn open_audio_dev() -> Result<(alsa::PCM, u32), Box<error::Error>> {
         let (bufsize, periodsize) = (hwp.get_buffer_size()?, hwp.get_period_size()?);
         swp.set_start_threshold(bufsize - periodsize)?;
         swp.set_avail_min(periodsize)?;
-        p.sw_params(&swp).unwrap();
+        p.sw_params(&swp)?;
         println!("Opened audio output {:?} with parameters: {:?}, {:?}", req_devname, hwp, swp);
         hwp.get_rate()?
     };
@@ -101,7 +100,7 @@ type SF = i16;
 type SigGen = signal::Sine<signal::ConstHz>;
 
 // Standard Hammond drawbar.
-const BAR_FREQS: [f64; 9] = [16_f64, 5_f64+1_f64/3_f64, 8_f64, 4_f64, 2_f64+2_f64/3_f64, 2_f64, 1_f64+3_f64/5_f64, 1_f64+1_f64/3_f64, 1_f64];
+const BAR_FREQS: [f64; 9] = [16., 5.+1./3., 8., 4., 2.+2./3., 2., 1.+3./5., 1.+1./3., 1.];
 
 #[derive(Clone)]
 struct Sig {
@@ -122,22 +121,22 @@ struct Synth {
 
 impl Synth {
     fn add_note(&mut self, note: u8, vol: f64) {
-        let hz = 440_f64 * 2_f64.powf(((note as f64) - 69_f64)/12_f64);
+        let hz = 440. * 2_f64.powf((note as f64 - 69.)/12.);
 
         for (baridx, barfreq) in BAR_FREQS.iter().enumerate() {
             let idx = self.sigs.iter().position(|s| s.is_none());
             let idx = if let Some(idx) = idx { idx } else {
                 println!("Voice overflow!"); return;
             };
-            let hz = self.sample_rate.const_hz(hz * 8_f64 / barfreq);
-            let s = Sig { sig: hz.sine(), note, targetvol: vol, curvol: 0.0, baridx };
+            let hz = self.sample_rate.const_hz(hz * 8. / barfreq);
+            let s = Sig { sig: hz.sine(), note, targetvol: vol, curvol: 0., baridx };
             self.sigs[idx] = Some(s);
         }
     }
     fn remove_note(&mut self, note: u8) {
         for i in self.sigs.iter_mut() {
             if let &mut Some(ref mut i) = i {
-                if i.note == note { i.targetvol = 0.0 }
+                if i.note == note { i.targetvol = 0. }
             }
         }
     }
@@ -155,7 +154,7 @@ impl Synth {
             10 => 8,
             _ => return,
         };
-        self.bar_values[idx] = f64::from(value) / 255_f64;
+        self.bar_values[idx] = f64::from(value) / 255.;
     }
 }
 
@@ -176,13 +175,18 @@ impl Iterator for Synth {
 
                 // Quick and dirty volume envelope to avoid clicks. 
                 if i.curvol != i.targetvol {
-                    if i.targetvol == 0.0 { i.curvol -= 0.002; if i.curvol <= 0.0 { remove = true }}
-                    else { i.curvol += 0.002; if i.curvol >= i.targetvol { i.curvol = i.targetvol }};
+                    if i.targetvol == 0. {
+                        i.curvol -= 0.002;
+                        if i.curvol <= 0. { remove = true; }
+                    } else {
+                        i.curvol += 0.002;
+                        if i.curvol >= i.targetvol { i.curvol = i.targetvol; }
+                    }
                 }
             }
             if remove { *sig = None };
         }
-        let z = if z > 0.999 { 0.999 } else { if z < -0.999 { -0.999 } else { z } };
+        let z = z.min(0.999).max(-0.999);
         let z: Option<SF> = Some(SF::from_sample(z));
         self.stored_sample = z;
         z
@@ -217,7 +221,7 @@ fn read_midi_event(input: &mut seq::Input, synth: &mut Synth) -> Result<bool, Bo
             if data.velocity == 0 {
                 synth.remove_note(data.note);
             } else {
-                synth.add_note(data.note, f64::from(data.velocity + 64) / 2048.0);
+                synth.add_note(data.note, f64::from(data.velocity + 64) / 2048.);
             }
         },
         seq::EventType::Noteoff => {
@@ -245,7 +249,7 @@ fn run() -> Result<(), Box<error::Error>> {
         sigs: iter::repeat(None).take(256).collect(),
         sample_rate: signal::rate(f64::from(rate)),
         stored_sample: None,
-        bar_values: [1.0, 0.75, 1.0, 0.75, 0.0, 0.0, 0.0, 0.0, 0.75], // Some Gospel-ish default.
+        bar_values: [1., 0.75, 1., 0.75, 0., 0., 0., 0., 0.75], // Some Gospel-ish default.
     };
 
     // Create an array of fds to poll.
