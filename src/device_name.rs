@@ -38,7 +38,7 @@ impl HintIter {
     }
 
     /// A constructor variant that takes the interface as a Rust string slice.
-    pub fn from_str_iface(card: Option<&Card>, iface: &str) -> Result<HintIter> {
+    pub fn new_str(card: Option<&Card>, iface: &str) -> Result<HintIter> {
         HintIter::new(card, &CString::new(iface).unwrap())
     }
 }
