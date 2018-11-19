@@ -36,6 +36,11 @@ impl HintIter {
         acheck!(snd_device_name_hint(cnr, iface.as_ptr(), &mut p))
             .map(|_| HintIter(p, 0))
     }
+
+    /// A constructor variant that takes the interface as a Rust string slice.
+    pub fn new_str(card: Option<&Card>, iface: &str) -> Result<HintIter> {
+        HintIter::new(card, &CString::new(iface).unwrap())
+    }
 }
 
 impl Iterator for HintIter {
