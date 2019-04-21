@@ -193,7 +193,7 @@ impl Iterator for Synth {
     }
 }
 
-fn write_samples(p: &alsa::PCM, mmap: &mut alsa::direct::pcm::MmapPlayback<SF>, synth: &mut Synth)
+fn write_samples_direct(p: &alsa::PCM, mmap: &mut alsa::direct::pcm::MmapPlayback<SF>, synth: &mut Synth)
     -> Result<bool, Box<error::Error>> {
 
     if mmap.avail() > 0 {
@@ -209,6 +209,35 @@ fn write_samples(p: &alsa::PCM, mmap: &mut alsa::direct::pcm::MmapPlayback<SF>, 
         n @ _ => Err(format!("Unexpected pcm state {:?}", n))?,
     }
     Ok(true) // Call us again, please, there might be more data to write
+}
+
+fn write_samples_io(p: &alsa::PCM, io: &mut alsa::pcm::IO<SF>, synth: &mut Synth) -> Result<bool, Box<error::Error>> {
+    let avail = match p.avail_update() {
+        Ok(n) => n,
+        Err(e) => {
+            println!("Recovering from {}", e);
+            if let Some(errno) = e.errno() {
+                p.recover(errno as std::os::raw::c_int, true)?;
+            }
+            p.avail_update()?
+        }
+    } as usize;
+
+    if avail > 0 {
+        io.mmap(avail, |buf| {
+            for sample in buf.iter_mut() {
+                *sample = synth.next().unwrap()
+            };
+            buf.len() / 2 
+        })?;
+    }
+    use alsa::pcm::State;
+    match p.state() {
+        State::Running => Ok(false), // All fine
+        State::Prepared => { println!("Starting audio output stream"); p.start()?; Ok(true) },
+        State::Suspended | State::XRun => Ok(true), // Recover from this in next round
+        n @ _ => Err(format!("Unexpected pcm state {:?}", n))?,
+    }
 }
 
 fn read_midi_event(input: &mut seq::Input, synth: &mut Synth) -> Result<bool, Box<error::Error>> {
@@ -258,10 +287,19 @@ fn run() -> Result<(), Box<error::Error>> {
     fds.append(&mut (&midi_dev, Some(alsa::Direction::Capture)).get()?);
     
     // Let's use the fancy new "direct mode" for minimum overhead!
-    let mut mmap = audio_dev.direct_mmap_playback::<SF>()?;
-   
+    let mut mmap = audio_dev.direct_mmap_playback::<SF>();
+    
+    // Direct mode unavailable, use alsa-lib's mmap emulation instead
+    let mut io = if mmap.is_err() {
+        Some(audio_dev.io_i16()?)
+    } else { None };
+
     loop {
-        if write_samples(&audio_dev, &mut mmap, &mut synth)? { continue; }
+        if let Ok(ref mut mmap) = mmap {
+            if write_samples_direct(&audio_dev, mmap, &mut synth)? { continue; }
+        } else if let Some(ref mut io) = io {
+            if write_samples_io(&audio_dev, io, &mut synth)? { continue; }
+        }
         if read_midi_event(&mut midi_input, &mut synth)? { continue; }
         // Nothing to do, let's sleep until woken up by the kernel.
         alsa::poll::poll(&mut fds, 100)?;
