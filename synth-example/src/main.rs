@@ -170,8 +170,11 @@ impl Iterator for Synth {
         for sig in &mut self.sigs { 
             let mut remove = false;
             if let &mut Some(ref mut i) = sig {
-                let s = i.sig.next();
-                z += s[0].mul_amp(i.curvol * self.bar_values[i.baridx]);
+                let barvalue = self.bar_values[i.baridx];
+                if barvalue > 0.0 {
+                    let s = i.sig.next();
+                    z += s[0].mul_amp(i.curvol * barvalue);
+                }
 
                 // Quick and dirty volume envelope to avoid clicks. 
                 if i.curvol != i.targetvol {
