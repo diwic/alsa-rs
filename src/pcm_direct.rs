@@ -322,7 +322,7 @@ impl<S> SampleData<S> {
             return Err(Error::unsupported("MMAP data size mismatch"))
         }
         Ok(SampleData {
-            mem: DriverMemory::new(fd, (bufsize as usize) * (channels as usize), info.offset, true)?,
+            mem: DriverMemory::new(fd, (bufsize as usize) * (channels as usize), info.offset as libc::off_t, true)?,
             frames: bufsize,
             channels: channels,
         })
