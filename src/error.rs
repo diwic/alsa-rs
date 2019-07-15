@@ -49,7 +49,7 @@ pub fn from_code(func: &'static str, r: c_int) -> Result<c_int> {
 
 impl Error {
     pub fn new(func: &'static str, res: c_int) -> Error { 
-        let errno = nix::Errno::from_i32(res as i32);
+        let errno = nix::errno::Errno::from_i32(res as i32);
         Error(func, nix::Error::from_errno(errno))
     }
 
@@ -61,7 +61,7 @@ impl Error {
     pub fn func(&self) -> &'static str { self.0 }
 
     /// The errno, if any. 
-    pub fn errno(&self) -> Option<nix::Errno> { if let nix::Error::Sys(x) = self.1 { Some(x) } else { None } }
+    pub fn errno(&self) -> Option<nix::errno::Errno> { if let nix::Error::Sys(x) = self.1 { Some(x) } else { None } }
 
     /// Underlying error
     pub fn nix_error(&self) -> nix::Error { self.1 }
@@ -90,5 +90,5 @@ fn broken_pcm_name() {
     use std::ffi::CString;
     let e = ::PCM::open(&*CString::new("this_PCM_does_not_exist").unwrap(), ::Direction::Playback, false).err().unwrap();
     assert_eq!(e.func(), "snd_pcm_open");
-    assert_eq!(e.errno().unwrap(), nix::Errno::ENOENT);
+    assert_eq!(e.errno().unwrap(), nix::errno::Errno::ENOENT);
 }

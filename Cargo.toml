@@ -12,12 +12,11 @@ categories = ["multimedia::audio", "api-bindings"]
 readme = "README.md"
 
 [dependencies]
-libc = "0.2.21"
+libc = "0.2.60"
 alsa-sys = "0.1.1"
 bitflags = "0.9"
-nix = "0.9"
+nix = "0.14.1"
 
 [badges]
 is-it-maintained-issue-resolution = { repository = "diwic/alsa-rs" }
 is-it-maintained-open-issues = { repository = "diwic/alsa-rs" }
-

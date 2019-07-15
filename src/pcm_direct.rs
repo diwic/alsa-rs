@@ -80,8 +80,8 @@ pub struct snd_pcm_sync_ptr {
 	pub c: snd_pcm_mmap_control_r,
 }
 
-ioctl!(read sndrv_pcm_ioctl_channel_info with b'A', 0x32; snd_pcm_channel_info);
-ioctl!(readwrite sndrv_pcm_ioctl_sync_ptr with b'A', 0x23; snd_pcm_sync_ptr);
+ioctl_read!(sndrv_pcm_ioctl_channel_info, b'A', 0x32, snd_pcm_channel_info);
+ioctl_readwrite!(sndrv_pcm_ioctl_sync_ptr, b'A', 0x23, snd_pcm_sync_ptr);
 
 fn pagesize() -> usize {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
@@ -115,7 +115,7 @@ impl SyncPtrStatus {
         }
 
         sndrv_pcm_ioctl_sync_ptr(fd, &mut data).map_err(|_|
-            Error::new("SNDRV_PCM_IOCTL_SYNC_PTR", nix::Errno::last() as i32))?;
+            Error::new("SNDRV_PCM_IOCTL_SYNC_PTR", nix::errno::Errno::last() as i32))?;
 
         let i = data.s.status.state;
         if (i >= (pcm::State::Open as snd_pcm_state_t)) && (i <= (pcm::State::Disconnected as snd_pcm_state_t)) {
@@ -278,7 +278,7 @@ impl<S> DriverMemory<S> {
         let flags = if writable { libc::PROT_WRITE | libc::PROT_READ } else { libc::PROT_READ };
         let p = unsafe { libc::mmap(ptr::null_mut(), total, flags, libc::MAP_FILE | libc::MAP_SHARED, fd, offs) };
         if p == ptr::null_mut() || p == libc::MAP_FAILED {
-            Err(Error::new("mmap (of driver memory)", nix::Errno::last() as i32))
+            Err(Error::new("mmap (of driver memory)", nix::errno::Errno::last() as i32))
         } else {
             Ok(DriverMemory { ptr: p as *mut S, size: total })
         }
@@ -314,7 +314,7 @@ impl<S> SampleData<S> {
         let info = unsafe {
             let mut info: snd_pcm_channel_info = mem::zeroed();
             sndrv_pcm_ioctl_channel_info(fd, &mut info).map_err(|_|
-                Error::new("SNDRV_PCM_IOCTL_CHANNEL_INFO", nix::Errno::last() as i32))?;
+                Error::new("SNDRV_PCM_IOCTL_CHANNEL_INFO", nix::errno::Errno::last() as i32))?;
             info
         };
         // println!("{:?}", info);
@@ -687,4 +687,3 @@ fn playback_to_plughw_mmap() {
     assert_eq!(m.appl_ptr(), m.buffer_size());
     assert!(m.hw_ptr() >= m.buffer_size());
 }
-
