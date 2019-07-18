@@ -2,10 +2,10 @@
 
 use {libc, nix};
 use std::{mem, ptr, fmt, cmp};
-use error::{Error, Result};
+use crate::error::{Error, Result};
 use std::os::unix::io::RawFd;
-use {pcm, PollDescriptors, Direction};
-use pcm::Frames;
+use crate::{pcm, PollDescriptors, Direction};
+use crate::pcm::Frames;
 use std::marker::PhantomData;
 
 // Some definitions from the kernel headers
@@ -579,8 +579,8 @@ impl<'a, S: 'static> Drop for Iter<'a, S> {
 #[test]
 #[ignore] // Not everyone has a recording device on plughw:1. So let's ignore this test by default.
 fn record_from_plughw_rw() {
-    use pcm::*;
-    use {ValueOr, Direction};
+    use crate::pcm::*;
+    use crate::{ValueOr, Direction};
     use std::ffi::CString;
     let pcm = PCM::open(&*CString::new("plughw:1").unwrap(), Direction::Capture, false).unwrap();
     let ss = self::Status::new(&pcm).unwrap();
@@ -615,8 +615,8 @@ fn record_from_plughw_rw() {
 #[test]
 #[ignore] // Not everyone has a record device on plughw:1. So let's ignore this test by default.
 fn record_from_plughw_mmap() {
-    use pcm::*;
-    use {ValueOr, Direction};
+    use crate::pcm::*;
+    use crate::{ValueOr, Direction};
     use std::ffi::CString;
     use std::{thread, time};
 
@@ -659,8 +659,8 @@ fn record_from_plughw_mmap() {
 #[test]
 #[ignore] 
 fn playback_to_plughw_mmap() {
-    use pcm::*;
-    use {ValueOr, Direction};
+    use crate::pcm::*;
+    use crate::{ValueOr, Direction};
     use std::ffi::CString;
 
     let pcm = PCM::open(&*CString::new("plughw:1").unwrap(), Direction::Playback, false).unwrap();

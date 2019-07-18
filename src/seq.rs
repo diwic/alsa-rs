@@ -2,7 +2,7 @@
 
 use libc::{c_uint, c_int, c_short, c_uchar, c_void, c_long, size_t, pollfd};
 use super::error::*;
-use alsa;
+use crate::alsa;
 use super::{Direction, poll};
 use std::{ptr, fmt, mem, slice, time, cell};
 use std::ffi::{CStr};
@@ -102,12 +102,12 @@ impl Seq {
     }
 
     pub fn get_any_client_info(&self, client: i32) -> Result<ClientInfo> {
-        let c = try!(ClientInfo::new());
+        let c = ClientInfo::new()?;
         acheck!(snd_seq_get_any_client_info(self.0, client, c.0)).map(|_| c)
     }
 
     pub fn get_any_port_info(&self, a: Addr) -> Result<PortInfo> {
-        let c = try!(PortInfo::new());
+        let c = PortInfo::new()?;
         acheck!(snd_seq_get_any_port_info(self.0, a.client as c_int, a.port as c_int, c.0)).map(|_| c)
     }
 
@@ -132,7 +132,7 @@ impl Seq {
     }
 
     pub fn unsubscribe_port(&self, sender: Addr, dest: Addr) -> Result<()> {
-        let z = try!(PortSubscribe::new());
+        let z = PortSubscribe::new()?;
         z.set_sender(sender);
         z.set_dest(dest);
         acheck!(snd_seq_unsubscribe_port(self.0, z.0)).map(|_| ())
@@ -160,7 +160,7 @@ impl Seq {
     }
 
     pub fn get_queue_tempo(&self, q: i32) -> Result<QueueTempo> {
-        let value = try!(QueueTempo::new());
+        let value = QueueTempo::new()?;
         acheck!(snd_seq_get_queue_tempo(self.0, q as c_int, value.0)).map(|_| value)
     }
 
@@ -211,7 +211,7 @@ impl<'a> Input<'a> {
         // other function call that might change the input buffer while the
         // event is alive.
         let mut z = ptr::null_mut();
-        try!(acheck!(snd_seq_event_input((self.0).0, &mut z)));
+        acheck!(snd_seq_event_input((self.0).0, &mut z))?;
         unsafe { Event::extract (&mut *z, "snd_seq_event_input") }
     }
 
@@ -327,7 +327,7 @@ impl PortInfo {
 
     /// Creates a new PortInfo with all fields set to zero.
     pub fn empty() -> Result<Self> {
-        let z = try!(Self::new());
+        let z = Self::new()?;
         unsafe { ptr::write_bytes(z.0 as *mut u8, 0, alsa::snd_seq_port_info_sizeof()) };
         Ok(z)
     }
@@ -488,7 +488,7 @@ impl PortSubscribe {
 
     /// Creates a new PortSubscribe with all fields set to zero.
     pub fn empty() -> Result<Self> {
-        let z = try!(Self::new());
+        let z = Self::new()?;
         unsafe { ptr::write_bytes(z.0 as *mut u8, 0, alsa::snd_seq_port_subscribe_sizeof()) };
         Ok(z)
     }
@@ -583,7 +583,7 @@ impl<'a> Event<'a> {
 
     /// Extracts event type and data. Produces a result with an arbitrary lifetime, hence the unsafety.
     unsafe fn extract<'any>(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event<'any>> {
-        let t = try!(EventType::from_c_int((*z)._type as c_int, func));
+        let t = EventType::from_c_int((*z)._type as c_int, func)?;
         let ext_data = if Event::has_ext_data(t) {
             assert!((*z).flags & SND_SEQ_EVENT_LENGTH_MASK != SND_SEQ_EVENT_LENGTH_FIXED);
             Some(Cow::Borrowed({
@@ -1101,7 +1101,7 @@ impl QueueTempo {
 
     /// Creates a new QueueTempo with all fields set to zero.
     pub fn empty() -> Result<Self> {
-        let q = try!(QueueTempo::new());
+        let q = QueueTempo::new()?;
         unsafe { ptr::write_bytes(q.0 as *mut u8, 0, alsa::snd_seq_queue_tempo_sizeof()) };
         Ok(q)
     }
@@ -1153,11 +1153,11 @@ impl MidiEvent {
         // buffer). We make this safe by taking self by unique reference and coupling it to 
         // the event's lifetime.
         let mut ev = unsafe { mem::zeroed() };
-        let r = try!(acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev)));
+        let r = acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev))?;
         let e = if ev._type == alsa::SND_SEQ_EVENT_NONE as u8 {
                 None
             } else {
-                Some(try!(unsafe { Event::extract(&mut ev, "snd_midi_event_encode") }))
+                Some(unsafe { Event::extract(&mut ev, "snd_midi_event_encode") }?)
             };
         Ok((r as usize, e))
     }

@@ -1,11 +1,11 @@
 
-use alsa;
+use crate::alsa;
 use std::ffi::{CStr, CString};
 use super::error::*;
 use super::mixer::MilliBel;
 use super::Round;
 use std::{ptr, mem, fmt, cmp};
-use {Card, poll};
+use crate::{Card, poll};
 use std::cell::UnsafeCell;
 use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 
@@ -73,7 +73,7 @@ impl Ctl {
     }
 
     pub fn read(&self) -> Result<Option<Event>> {
-        let e = try!(event_new());
+        let e = event_new()?;
         acheck!(snd_ctl_read(self.0, e.0)).map(|r| if r == 1 { Some(e) } else { None })
     }
 }
@@ -256,7 +256,7 @@ impl ElemValue {
             ElemType::Integer64 => 64,
         };
         // if count > maxcount { return Err(Error::new(Some("ElemValue::new - count too large".into()), 1)) }
-        let ev = try!(elem_value_new(t, count));
+        let ev = elem_value_new(t, count)?;
         unsafe { alsa::snd_ctl_elem_value_clear(elem_value_ptr(&ev)) };
         Ok(ev)
     }
@@ -266,15 +266,15 @@ impl ElemValue {
 impl fmt::Debug for ElemValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::ElemType::*;
-        try!(write!(f, "ElemValue({:?}", self.etype));
-        for a in 0..self.count { try!(match self.etype {
+        write!(f, "ElemValue({:?}", self.etype)?;
+        for a in 0..self.count { match self.etype {
             Boolean => write!(f, ",{:?}", self.get_boolean(a).unwrap()),
             Integer => write!(f, ",{:?}", self.get_integer(a).unwrap()),
             Integer64 => write!(f, ",{:?}", self.get_integer64(a).unwrap()),
             Enumerated => write!(f, ",{:?}", self.get_enumerated(a).unwrap()),
             Bytes => write!(f, ",{:?}", self.get_byte(a).unwrap()),
             _ => Ok(()),
-        })};
+        }?};
         write!(f, ")")
     }
 }
@@ -387,10 +387,10 @@ impl fmt::Debug for ElemId {
         let device = self.get_device();
         let subdevice = self.get_subdevice();
 
-        try!(write!(f, "ElemId(#{}, {:?}, {:?}", self.get_numid(), self.get_interface(), self.get_name()));
-        if index > 0 { try!(write!(f, ", index={}", index)) };
-        if device > 0 || subdevice > 0 { try!(write!(f, ", device={}", device)) };
-        if subdevice > 0 { try!(write!(f, ", subdevice={}", device)) };
+        write!(f, "ElemId(#{}, {:?}, {:?}", self.get_numid(), self.get_interface(), self.get_name())?;
+        if index > 0 { write!(f, ", index={}", index)? };
+        if device > 0 || subdevice > 0 { write!(f, ", device={}", device)? };
+        if subdevice > 0 { write!(f, ", subdevice={}", device)? };
         write!(f, ")")
     }
 }

@@ -1,7 +1,7 @@
 //! Sound card enumeration
 use libc::{c_int, c_char};
 use super::error::*;
-use alsa;
+use crate::alsa;
 use std::ffi::CStr;
 
 /// An ALSA sound card, uniquely identified by its index.

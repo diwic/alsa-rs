@@ -25,7 +25,7 @@
 //! }
 //! ```
 
-use alsa;
+use crate::alsa;
 use std::ffi::{CStr, CString};
 use super::error::*;
 use std::ptr;
@@ -104,17 +104,17 @@ pub struct Elem<'a>(&'a HCtl, *mut alsa::snd_hctl_elem_t);
 
 impl<'a> Elem<'a> {
     pub fn get_id(&self) -> Result<ctl_int::ElemId> {
-        let v = try!(ctl_int::elem_id_new());
+        let v = ctl_int::elem_id_new()?;
         unsafe { alsa::snd_hctl_elem_get_id(self.1, ctl_int::elem_id_ptr(&v)) };
         Ok(v)
     }
     pub fn info(&self) -> Result<ctl_int::ElemInfo> {
-        let v = try!(ctl_int::elem_info_new());
+        let v = ctl_int::elem_info_new()?;
         acheck!(snd_hctl_elem_info(self.1, ctl_int::elem_info_ptr(&v))).map(|_| v)
     }
     pub fn read(&self) -> Result<ctl_int::ElemValue> {
-        let i = try!(self.info());
-        let v = try!(ctl_int::elem_value_new(i.get_type(), i.get_count()));
+        let i = self.info()?;
+        let v = ctl_int::elem_value_new(i.get_type(), i.get_count())?;
         acheck!(snd_hctl_elem_read(self.1, ctl_int::elem_value_ptr(&v))).map(|_| v)
     }
 

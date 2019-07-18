@@ -3,9 +3,9 @@
 use std::ffi::{CStr, CString};
 use std::{ptr, mem, fmt, ops};
 use libc::{c_long, c_int, c_uint, c_short, pollfd};
-use poll;
+use crate::poll;
 
-use alsa;
+use crate::alsa;
 use super::Round;
 use super::error::*;
 
@@ -21,10 +21,10 @@ impl Mixer {
     /// Opens a mixer and attaches it to a card identified by its name (like hw:0) and loads the
     /// mixer after registering a Selem.
     pub fn new(name: &str, nonblock: bool) -> Result<Mixer> {
-        let mut mixer = try!(Mixer::open(nonblock));
-        try!(mixer.attach(&CString::new(name).unwrap()));
-        try!(Selem::register(&mut mixer));
-        try!(mixer.load());
+        let mut mixer = Mixer::open(nonblock)?;
+        mixer.attach(&CString::new(name).unwrap())?;
+        Selem::register(&mut mixer)?;
+        mixer.load()?;
         Ok(mixer)
     }
 
@@ -411,7 +411,7 @@ impl<'a> Selem<'a> {
 
     /// Enumerates over valid Enum values
     pub fn iter_enum(&self) -> Result<IterEnum> {
-        Ok(IterEnum(self, 0, try!(self.get_enum_items())))
+        Ok(IterEnum(self, 0, self.get_enum_items()?))
     }
 
     pub fn get_enum_item(&self, channel: SelemChannelId) -> Result<u32> {

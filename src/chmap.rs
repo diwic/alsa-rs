@@ -1,4 +1,4 @@
-use alsa;
+use crate::alsa;
 use libc;
 use std::{fmt, mem, ptr, slice};
 use super::error::*;
@@ -55,7 +55,7 @@ alsa_enum!(
 impl fmt::Display for ChmapPosition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = unsafe { alsa::snd_pcm_chmap_long_name(*self as libc::c_uint) };
-        let s = try!(from_const("snd_pcm_chmap_long_name", s));
+        let s = from_const("snd_pcm_chmap_long_name", s)?;
         write!(f, "{}", s)
     }
 }
@@ -81,8 +81,8 @@ impl Chmap {
 impl fmt::Display for Chmap {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut buf: Vec<libc::c_char> = vec![0; 512];
-        try!(acheck!(snd_pcm_chmap_print(self.0, buf.len() as libc::size_t, buf.as_mut_ptr())));
-        let s = try!(from_const("snd_pcm_chmap_print", buf.as_mut_ptr()));
+        acheck!(snd_pcm_chmap_print(self.0, buf.len() as libc::size_t, buf.as_mut_ptr()))?;
+        let s = from_const("snd_pcm_chmap_print", buf.as_mut_ptr())?;
         write!(f, "{}", s)
     }
 }
@@ -135,7 +135,7 @@ impl Iterator for ChmapsQuery {
 fn chmap_for_first_pcm() {
     use super::*;
     use std::ffi::CString;
-    use device_name::HintIter;
+    use crate::device_name::HintIter;
     let i = HintIter::new(None, &*CString::new("pcm").unwrap()).unwrap();
     for p in i.map(|n| n.name.unwrap()) {
         println!("Chmaps for {:?}:", p);

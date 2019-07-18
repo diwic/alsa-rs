@@ -44,7 +44,7 @@
 
 
 use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
-use alsa;
+use crate::alsa;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ffi::{CStr, CString};
@@ -175,7 +175,7 @@ impl PCM {
     }
 
     fn verify_format(&self, f: Format) -> Result<()> {
-        let ff = try!(self.hw_params_current().and_then(|h| h.get_format()));
+        let ff = self.hw_params_current().and_then(|h| h.get_format())?;
         if ff == f { Ok(()) }
         else {
             // let s = format!("Invalid sample format ({:?}, expected {:?})", ff, f);
@@ -195,15 +195,15 @@ impl PCM {
     pub fn io<'a>(&'a self) -> IO<'a, u8> { IO::new(&self) }
 
     /// Experimental: Read buffers by talking to the kernel directly, bypassing alsa-lib.
-    pub fn direct_mmap_capture<S>(&self) -> Result<::direct::pcm::MmapCapture<S>> {
+    pub fn direct_mmap_capture<S>(&self) -> Result<crate::direct::pcm::MmapCapture<S>> {
         self.check_has_io();
-        ::pcm_direct::new_mmap(self)
+        crate::pcm_direct::new_mmap(self)
     }
 
     /// Experimental: Write buffers by talking to the kernel directly, bypassing alsa-lib.
-    pub fn direct_mmap_playback<S>(&self) -> Result<::direct::pcm::MmapPlayback<S>> {
+    pub fn direct_mmap_playback<S>(&self) -> Result<crate::direct::pcm::MmapPlayback<S>> {
         self.check_has_io();
-        ::pcm_direct::new_mmap(self)
+        crate::pcm_direct::new_mmap(self)
     }
 
     /// Sets hw parameters. Note: No IO object can exist for this PCM
@@ -341,7 +341,7 @@ impl<'a, S: Copy> IO<'a, S> {
         let mut f = frames as alsa::snd_pcm_uframes_t;
         let mut offs: alsa::snd_pcm_uframes_t = 0;
         let mut areas = ptr::null();
-        try!(acheck!(snd_pcm_mmap_begin((self.0).0, &mut areas, &mut offs, &mut f)));
+        acheck!(snd_pcm_mmap_begin((self.0).0, &mut areas, &mut offs, &mut f))?;
 
         let (first, step) = unsafe { ((*areas).first, (*areas).step) };
         if first != 0 || step as isize != self.0.frames_to_bytes(1) * 8 {

@@ -10,6 +10,7 @@ keywords = ["ALSA", "audio", "sound"]
 license = "Apache-2.0/MIT"
 categories = ["multimedia::audio", "api-bindings"]
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 libc = "0.2.60"

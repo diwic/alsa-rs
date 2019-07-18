@@ -16,7 +16,7 @@
 
 use std::ptr;
 use libc::{c_void, c_int};
-use alsa;
+use crate::alsa;
 use super::{Card, Direction};
 use super::error::*;
 use std::ffi::{CStr, CString};

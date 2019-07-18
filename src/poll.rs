@@ -21,13 +21,13 @@ bitflags! {
 
 pub trait PollDescriptors {
     fn count(&self) -> usize;
-    fn fill(&self, &mut [pollfd]) -> Result<usize>;
-    fn revents(&self, &[pollfd]) -> Result<PollFlags>;
+    fn fill(&self, _: &mut [pollfd]) -> Result<usize>;
+    fn revents(&self, _: &[pollfd]) -> Result<PollFlags>;
 
     /// Wrapper around count and fill - returns an array of pollfds
     fn get(&self) -> Result<Vec<pollfd>> {
         let mut v = vec![pollfd { fd: 0, events: 0, revents: 0 }; self.count()];
-        if try!(self.fill(&mut v)) != v.len() { Err(Error::unsupported("did not fill the poll descriptors array")) }
+        if self.fill(&mut v)? != v.len() { Err(Error::unsupported("did not fill the poll descriptors array")) }
         else { Ok(v) }
     }
 }
@@ -52,16 +52,16 @@ pub fn poll_all<'a>(desc: &[&'a PollDescriptors], timeout: i32) -> Result<Vec<(&
     let mut pollfds: Vec<pollfd> = vec!();
     let mut indices = vec!();
     for v2 in desc.iter().map(|q| q.get()) {
-        let v = try!(v2);
+        let v = v2?;
         indices.push(pollfds.len() .. pollfds.len()+v.len());
         pollfds.extend(v);
     };
 
-    try!(poll(&mut pollfds, timeout));
+    poll(&mut pollfds, timeout)?;
 
     let mut res = vec!();
     for (i, r) in indices.into_iter().enumerate() {
-        let z = try!(desc[i].revents(&pollfds[r]));
+        let z = desc[i].revents(&pollfds[r])?;
         if !z.is_empty() { res.push((desc[i], z)); }
     }
     Ok(res)

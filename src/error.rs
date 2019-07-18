@@ -34,10 +34,10 @@ pub fn from_const<'a>(func: &'static str, s: *const c_char) -> Result<&'a str> {
 pub fn from_alloc(func: &'static str, s: *mut c_char) -> Result<String> {
     if s == ptr::null_mut() { return Err(invalid_str(func)) };
     let c = unsafe { CStr::from_ptr(s) };
-    let ss = try!(str::from_utf8(c.to_bytes()).map_err(|_| {
+    let ss = str::from_utf8(c.to_bytes()).map_err(|_| {
         unsafe { free(s as *mut c_void); }
         invalid_str(func)
-    })).to_string();
+    })?.to_string();
     unsafe { free(s as *mut c_void); }
     Ok(ss)
 }
@@ -88,7 +88,7 @@ impl From<Error> for fmt::Error {
 #[test]
 fn broken_pcm_name() {
     use std::ffi::CString;
-    let e = ::PCM::open(&*CString::new("this_PCM_does_not_exist").unwrap(), ::Direction::Playback, false).err().unwrap();
+    let e = crate::PCM::open(&*CString::new("this_PCM_does_not_exist").unwrap(), crate::Direction::Playback, false).err().unwrap();
     assert_eq!(e.func(), "snd_pcm_open");
     assert_eq!(e.errno().unwrap(), nix::errno::Errno::ENOENT);
 }

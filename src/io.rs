@@ -1,4 +1,4 @@
-use alsa;
+use crate::alsa;
 use super::error::*;
 use std::{slice, ptr, fmt};
 
@@ -30,8 +30,8 @@ impl Output {
 
 impl fmt::Debug for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "Output("));
-        try!((&self as &fmt::Display).fmt(f));
+        write!(f, "Output(")?;
+        (&self as &fmt::Display).fmt(f)?;
         write!(f, ")")
         /* self.buffer_string(|b| f.write_str(try!(str::from_utf8(b).map_err(|_| fmt::Error)))) */
     }

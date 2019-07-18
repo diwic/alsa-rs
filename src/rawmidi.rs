@@ -4,7 +4,7 @@ use libc::{c_int, c_uint, c_void, size_t, c_short, pollfd};
 use super::ctl_int::{ctl_ptr, Ctl};
 use super::{Direction, poll};
 use super::error::*;
-use alsa;
+use crate::alsa;
 use std::{ptr, io};
 use std::ffi::{CStr, CString};
 
@@ -31,7 +31,7 @@ impl Info {
     }
 
     fn from_iter(c: &Ctl, device: i32, sub: i32, dir: Direction) -> Result<Info> {
-        let r = try!(Info::new());
+        let r = Info::new()?;
         unsafe { alsa::snd_rawmidi_info_set_device(r.0, device as c_uint) };
         let d = match dir {
             Direction::Playback => alsa::SND_RAWMIDI_STREAM_OUTPUT,
@@ -43,8 +43,8 @@ impl Info {
     }
 
     fn subdev_count(c: &Ctl, device: c_int) -> Result<(i32, i32)> {
-        let i = try!(Info::from_iter(c, device, 0, Direction::Capture));
-        let o = try!(Info::from_iter(c, device, 0, Direction::Playback));
+        let i = Info::from_iter(c, device, 0, Direction::Capture)?;
+        let o = Info::from_iter(c, device, 0, Direction::Playback)?;
         Ok((unsafe { alsa::snd_rawmidi_info_get_subdevices_count(o.0) as i32 },
             unsafe { alsa::snd_rawmidi_info_get_subdevices_count(i.0) as i32 }))
     }
