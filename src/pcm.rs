@@ -508,7 +508,7 @@ impl<'a> HwParams<'a> {
 
     pub fn get_rate_resample(&self) -> Result<bool> {
         let mut v = 0;
-        acheck!(snd_pcm_hw_params_get_channels(self.0, &mut v)).map(|_| v != 0)
+        acheck!(snd_pcm_hw_params_get_rate_resample((self.1).0, self.0, &mut v)).map(|_| v != 0)
     }
 
     pub fn set_rate_resample(&self, resample: bool) -> Result<()> {
