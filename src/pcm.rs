@@ -570,11 +570,17 @@ impl<'a> HwParams<'a> {
 
     pub fn get_rate_max(&self) -> Result<u32> {
         let mut v = 0;
+        // Note on the null ptr: if this ptr is not null, then the value behind it is replaced with
+        // -1 if the suprenum is not in the set (i.e. it's an open range), 0 otherwise. This could
+        // be returned along with the value, but it's safe to pass a null ptr in, in which case the
+        // pointer is not dereferenced.
         acheck!(snd_pcm_hw_params_get_rate_max(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
     }
 
     pub fn get_rate_min(&self) -> Result<u32> {
         let mut v = 0;
+        // Note on the null ptr: see get_rate_max but read +1 and infinum instead of -1 and
+        // suprenum.
         acheck!(snd_pcm_hw_params_get_rate_min(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
     }
 
@@ -592,6 +598,8 @@ impl<'a> HwParams<'a> {
             .and_then(|_| Format::from_c_int(v, "snd_pcm_hw_params_get_format"))
     }
 
+    /// Returns true if the supplied format is valid for the pcm device this HwParams is attached
+    /// to.
     pub fn test_format(&self, v: Format) -> bool {
         unsafe { alsa::snd_pcm_hw_params_test_format((self.1).0, self.0, v as c_int) == 0 }
     }
@@ -671,6 +679,8 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_buffer_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
+    /// Returns true if the alsa stream can be paused, false if not.
+    ///
     /// This function should only be called when the configuration space contains a single
     /// configuration. Call `PCM::hw_params` to choose a single configuration from the
     /// configuration space.
@@ -678,6 +688,8 @@ impl<'a> HwParams<'a> {
         unsafe { alsa::snd_pcm_hw_params_can_pause(self.0) != 0 }
     }
 
+    /// Returns true if the alsa stream can be resumed, false if not.
+    ///
     /// This function should only be called when the configuration space contains a single
     /// configuration. Call `PCM::hw_params` to choose a single configuration from the
     /// configuration space.
@@ -707,7 +719,7 @@ impl<'a> fmt::Debug for HwParams<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("HwParams")
             .field("channels", &self.get_channels())
-            .field("rate", &format!("{:?}Hz", self.get_rate()))
+            .field("rate", &format!("{:?} Hz", self.get_rate()))
             .field("format", &self.get_format())
             .field("access", &self.get_access())
             .field("period_size", &format!("{:?} frames", self.get_period_size()))
