@@ -96,7 +96,7 @@ impl Info {
         match unsafe { alsa::snd_pcm_info_get_stream(self.0) } {
             alsa::SND_PCM_STREAM_CAPTURE => Direction::Capture,
             alsa::SND_PCM_STREAM_PLAYBACK => Direction::Playback,
-            n @ _ => panic!("snd_pcm_info_get_stream invalid direction '{}'", n), 
+            n @ _ => panic!("snd_pcm_info_get_stream invalid direction '{}'", n),
         }
     }
 }
@@ -213,6 +213,7 @@ impl PCM {
         acheck!(snd_pcm_hw_params(self.0, h.0)).map(|_| ())
     }
 
+    /// Retreive current PCM hardware configuration.
     pub fn hw_params_current<'a>(&'a self) -> Result<HwParams<'a>> {
         HwParams::new(&self).and_then(|h|
             acheck!(snd_pcm_hw_params_current(self.0, h.0)).map(|_| h))
@@ -225,6 +226,15 @@ impl PCM {
     pub fn sw_params_current<'a>(&'a self) -> Result<SwParams<'a>> {
         SwParams::new(&self).and_then(|h|
             acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
+    }
+
+    /// Wraps `snd_pcm_get_params`, returns `(buffer_size, period_size)`.
+    pub fn get_params(&self) -> Result<(u64, u64)> {
+        let mut buffer_size = 0;
+        let mut period_size = 0;
+        acheck!(snd_pcm_get_params(self.0, &mut buffer_size, &mut period_size))
+            .map(|_| (buffer_size as u64, period_size as u64))
+
     }
 
     pub fn info(&self) -> Result<Info> {
@@ -529,6 +539,20 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_channels(self.0, &mut v)).map(|_| v as u32)
     }
 
+    pub fn get_channels_max(&self) -> Result<u32> {
+        let mut v = 0;
+        acheck!(snd_pcm_hw_params_get_channels_max(self.0, &mut v)).map(|_| v as u32)
+    }
+
+    pub fn get_channels_min(&self) -> Result<u32> {
+        let mut v = 0;
+        acheck!(snd_pcm_hw_params_get_channels_min(self.0, &mut v)).map(|_| v as u32)
+    }
+
+    pub fn test_channels(&self, v: u32) -> bool {
+        unsafe { alsa::snd_pcm_hw_params_test_channels((self.1).0, self.0, v as c_uint) == 0 }
+    }
+
     pub fn set_rate_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
@@ -544,6 +568,26 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_rate(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
+    pub fn get_rate_max(&self) -> Result<u32> {
+        let mut v = 0;
+        // Note on the null ptr: if this ptr is not null, then the value behind it is replaced with
+        // -1 if the suprenum is not in the set (i.e. it's an open range), 0 otherwise. This could
+        // be returned along with the value, but it's safe to pass a null ptr in, in which case the
+        // pointer is not dereferenced.
+        acheck!(snd_pcm_hw_params_get_rate_max(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
+    }
+
+    pub fn get_rate_min(&self) -> Result<u32> {
+        let mut v = 0;
+        // Note on the null ptr: see get_rate_max but read +1 and infinum instead of -1 and
+        // suprenum.
+        acheck!(snd_pcm_hw_params_get_rate_min(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
+    }
+
+    pub fn test_rate(&self, rate: u32) -> bool {
+        unsafe { alsa::snd_pcm_hw_params_test_rate((self.1).0, self.0, rate as c_uint, 0) == 0 }
+    }
+
     pub fn set_format(&self, v: Format) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_format((self.1).0, self.0, v as c_int)).map(|_| ())
     }
@@ -552,6 +596,12 @@ impl<'a> HwParams<'a> {
         let mut v = 0;
         acheck!(snd_pcm_hw_params_get_format(self.0, &mut v))
             .and_then(|_| Format::from_c_int(v, "snd_pcm_hw_params_get_format"))
+    }
+
+    /// Returns true if the supplied format is valid for the pcm device this HwParams is attached
+    /// to.
+    pub fn test_format(&self, v: Format) -> bool {
+        unsafe { alsa::snd_pcm_hw_params_test_format((self.1).0, self.0, v as c_int) == 0 }
     }
 
     pub fn set_access(&self, v: Access) -> Result<()> {
@@ -599,6 +649,16 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_set_buffer_size_near((self.1).0, self.0, &mut r)).map(|_| r as Frames)
     }
 
+    pub fn set_buffer_size_max(&self, v: Frames) -> Result<Frames> {
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_buffer_size_max((self.1).0, self.0, &mut r)).map(|_| r as Frames)
+    }
+
+    pub fn set_buffer_size_min(&self, v: Frames) -> Result<Frames> {
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_buffer_size_min((self.1).0, self.0, &mut r)).map(|_| r as Frames)
+    }
+
     pub fn set_buffer_size(&self, v: Frames) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_buffer_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
@@ -617,6 +677,24 @@ impl<'a> HwParams<'a> {
     pub fn get_buffer_time_max(&self) -> Result<u32> {
         let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_buffer_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    /// Returns true if the alsa stream can be paused, false if not.
+    ///
+    /// This function should only be called when the configuration space contains a single
+    /// configuration. Call `PCM::hw_params` to choose a single configuration from the
+    /// configuration space.
+    pub fn can_pause(&self) -> bool {
+        unsafe { alsa::snd_pcm_hw_params_can_pause(self.0) != 0 }
+    }
+
+    /// Returns true if the alsa stream can be resumed, false if not.
+    ///
+    /// This function should only be called when the configuration space contains a single
+    /// configuration. Call `PCM::hw_params` to choose a single configuration from the
+    /// configuration space.
+    pub fn can_resume(&self) -> bool {
+        unsafe { alsa::snd_pcm_hw_params_can_resume(self.0) != 0 }
     }
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
@@ -639,9 +717,14 @@ impl<'a> Clone for HwParams<'a> {
 
 impl<'a> fmt::Debug for HwParams<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,
-           "HwParams(channels: {:?}, rate: {:?} Hz, format: {:?}, access: {:?}, period size: {:?} frames, buffer size: {:?} frames)",
-           self.get_channels(), self.get_rate(), self.get_format(), self.get_access(), self.get_period_size(), self.get_buffer_size())
+        f.debug_struct("HwParams")
+            .field("channels", &self.get_channels())
+            .field("rate", &format!("{:?} Hz", self.get_rate()))
+            .field("format", &self.get_format())
+            .field("access", &self.get_access())
+            .field("period_size", &format!("{:?} frames", self.get_period_size()))
+            .field("buffer_size", &format!("{:?} frames", self.get_buffer_size()))
+            .finish()
     }
 }
 
