@@ -549,8 +549,8 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_channels_min(self.0, &mut v)).map(|_| v as u32)
     }
 
-    pub fn test_channels(&self, v: u32) -> bool {
-        unsafe { alsa::snd_pcm_hw_params_test_channels((self.1).0, self.0, v as c_uint) == 0 }
+    pub fn test_channels(&self, v: u32) -> Result<()> {
+        acheck!(snd_pcm_hw_params_test_channels((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn set_rate_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
@@ -584,8 +584,8 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_rate_min(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
     }
 
-    pub fn test_rate(&self, rate: u32) -> bool {
-        unsafe { alsa::snd_pcm_hw_params_test_rate((self.1).0, self.0, rate as c_uint, 0) == 0 }
+    pub fn test_rate(&self, rate: u32) -> Result<()> {
+        acheck!(snd_pcm_hw_params_test_rate((self.1).0, self.0, rate as c_uint, 0)).map(|_| ())
     }
 
     pub fn set_format(&self, v: Format) -> Result<()> {
@@ -598,10 +598,8 @@ impl<'a> HwParams<'a> {
             .and_then(|_| Format::from_c_int(v, "snd_pcm_hw_params_get_format"))
     }
 
-    /// Returns true if the supplied format is valid for the pcm device this HwParams is attached
-    /// to.
-    pub fn test_format(&self, v: Format) -> bool {
-        unsafe { alsa::snd_pcm_hw_params_test_format((self.1).0, self.0, v as c_int) == 0 }
+    pub fn test_format(&self, v: Format) -> Result<()> {
+        acheck!(snd_pcm_hw_params_test_format((self.1).0, self.0, v as c_int)).map(|_| ())
     }
 
     pub fn set_access(&self, v: Access) -> Result<()> {
