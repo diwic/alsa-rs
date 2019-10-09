@@ -168,6 +168,11 @@ impl Seq {
         acheck!(snd_seq_set_queue_tempo(self.0, q as c_int, value.0)).map(|_| ())
     }
 
+    pub fn get_queue_status(&self, q: i32) -> Result<QueueStatus> {
+        let value = QueueStatus::new()?;
+        acheck!(snd_seq_get_queue_status(self.0, q as c_int, value.0)).map(|_| value)
+    }
+
     pub fn free_queue(&self, q: i32) -> Result<()> { acheck!(snd_seq_free_queue(self.0, q)).map(|_| ()) }
     pub fn alloc_queue(&self) -> Result<i32> { acheck!(snd_seq_alloc_queue(self.0)).map(|q| q as i32) }
     pub fn alloc_named_queue(&self, n: &CStr) -> Result<i32> {
@@ -1117,6 +1122,38 @@ impl QueueTempo {
     pub fn set_ppq(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_ppq(self.0, value as c_int) } }
     pub fn set_skew(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew(self.0, value as c_uint) } }
     pub fn set_skew_base(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew_base(self.0, value as c_uint) } }
+}
+
+/// [snd_seq_queue_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_queue.html) wrapper
+pub struct QueueStatus(*mut alsa::snd_seq_queue_status_t);
+
+unsafe impl Send for QueueStatus {}
+
+impl Drop for QueueStatus {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_queue_status_free(self.0) } }
+}
+
+impl QueueStatus {
+    fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_queue_status_malloc(&mut q)).map(|_| QueueStatus(q))
+    }
+
+    /// Creates a new QueueStatus with all fields set to zero.
+    pub fn empty() -> Result<Self> {
+        let q = QueueStatus::new()?;
+        unsafe { ptr::write_bytes(q.0 as *mut u8, 0, alsa::snd_seq_queue_status_sizeof()) };
+        Ok(q)
+    }
+
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_queue_status_get_queue(self.0) as i32 } }
+    pub fn get_events(&self) -> i32 { unsafe { alsa::snd_seq_queue_status_get_events(self.0) as i32 } }
+    pub fn get_tick_time(&self) -> u32 { unsafe {alsa::snd_seq_queue_status_get_tick_time(self.0) as u32 } }
+    pub fn get_real_time(&self) -> time::Duration { unsafe {
+        let t = &(*alsa::snd_seq_queue_status_get_real_time(self.0));
+        time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    } }
+    pub fn get_status(&self) -> u32 { unsafe { alsa::snd_seq_queue_status_get_status(self.0) as u32 } }
 }
 
 /// [snd_midi_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___m_i_d_i___event.html) Wrapper
