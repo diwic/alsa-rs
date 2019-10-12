@@ -188,6 +188,10 @@ impl Seq {
     pub fn input<'a>(&'a self) -> Input<'a> {
         Input::new(self)
     }
+    
+    pub fn remove_events(&self, condition: RemoveEventsInfo) -> Result<()> {
+        acheck!(snd_seq_remove_events(self.0, condition.0)).map(|_| ())
+    }    
 }
 
 /// Struct for receiving input events from a sequencer. The methods offered by this
@@ -459,6 +463,22 @@ bitflags! {
         const SYNTHESIZER = (1<<18);
         const PORT = (1<<19);
         const APPLICATION = (1<<20);
+    }
+}
+
+bitflags! {
+    /// [SND_SEQ_REMOVE_xxx]https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants 
+    pub struct RemoveEventsCondition: u32 {
+        const REMOVE_INPUT = (1<<0);
+        const REMOVE_OUTPUT = (1<<1);
+        const REMOVE_DEST = (1<<2);
+        const REMOVE_DEST_CHANNEL = (1<<3);
+        const REMOVE_TIME_BEFORE = (1<<4);
+        const REMOVE_TIME_AFTER = (1<<5);
+        const REMOVE_TIME_TICK = (1<<6);
+        const REMOVE_EVENT_TYPE = (1<<7);
+        const REMOVE_IGNORE_OFF = (1<<8);
+        const REMOVE_TAG_MATCH = (1<<9);
     }
 }
 
@@ -1156,6 +1176,79 @@ impl QueueStatus {
     pub fn get_status(&self) -> u32 { unsafe { alsa::snd_seq_queue_status_get_status(self.0) as u32 } }
 }
 
+/// [snd_seq_remove_events_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) wrapper
+pub struct RemoveEventsInfo(*mut alsa::snd_seq_remove_events_t);
+
+unsafe impl Send for RemoveEventsInfo {}
+
+impl Drop for RemoveEventsInfo {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_remove_events_free(self.0) } }
+}
+
+impl RemoveEventsInfo {
+    pub fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_remove_events_malloc(&mut q)).map(|_| RemoveEventsInfo(q))
+    }
+
+
+    pub fn get_condition(&self) -> RemoveEventsCondition { unsafe { 
+        RemoveEventsCondition::from_bits_truncate(alsa::snd_seq_remove_events_get_condition(self.0) as u32) 
+    } }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_queue(self.0) as i32 } }
+    pub fn get_time(&self) -> time::Duration { unsafe {
+        let mut d = alsa::snd_seq_timestamp_t { data: (*alsa::snd_seq_remove_events_get_time(self.0)).data };
+        let t = &(*d.time());
+        
+        time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    } }
+    pub fn get_tick(&self) -> u32 { unsafe {
+        let mut d = alsa::snd_seq_timestamp_t { data: (*alsa::snd_seq_remove_events_get_time(self.0)).data };
+        
+        *d.tick()
+    } }
+    pub fn get_dest(&self) -> Addr { unsafe {
+        let a = &(*alsa::snd_seq_remove_events_get_dest(self.0));
+        
+        Addr { client: a.client as i32, port: a.port as i32 }
+    } }
+    pub fn get_channel(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_channel(self.0) as i32 } }
+    pub fn get_event_type(&self) -> Result<EventType> { unsafe {
+        EventType::from_c_int(alsa::snd_seq_remove_events_get_event_type(self.0), "snd_seq_remove_events_get_event_type")
+    } }
+    pub fn get_tag(&self) -> u8 { unsafe { alsa::snd_seq_remove_events_get_tag(self.0) as u8 } }
+
+    
+    pub fn set_condition(&self, value: RemoveEventsCondition) { unsafe {
+        alsa::snd_seq_remove_events_set_condition(self.0, value.bits() as c_uint);
+    } }
+    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_queue(self.0, value as c_int) } }
+    pub fn set_time(&self, value: time::Duration) { unsafe {
+        let mut d = alsa::snd_seq_timestamp_t {data: [0; 2]};
+        let mut t = &mut (*d.time());
+        
+        t.tv_sec = value.as_secs() as c_uint;
+        t.tv_nsec = value.subsec_nanos() as c_uint;
+
+        alsa::snd_seq_remove_events_set_time(self.0, &d);
+    } }
+    pub fn set_tick(&self, value: u32) { unsafe {
+        let mut d = alsa::snd_seq_timestamp_t {data: [0; 2]};
+
+        (*d.tick()) = value;
+        
+        alsa::snd_seq_remove_events_set_time(self.0, &d);
+    } }
+    pub fn set_dest(&self, value: Addr) { unsafe {
+        let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
+        
+        alsa::snd_seq_remove_events_set_dest(self.0, &a);
+    } }
+    pub fn set_channel(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_channel(self.0, value as c_int) } }
+    pub fn set_event_type(&self, value: EventType) { unsafe { alsa::snd_seq_remove_events_set_event_type(self.0, value as i32); } }
+    pub fn set_tag(&self, value: u8) { unsafe { alsa::snd_seq_remove_events_set_tag(self.0, value as c_int) } }
+}
+
 /// [snd_midi_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___m_i_d_i___event.html) Wrapper
 ///
 /// Sequencer event <-> MIDI byte stream coder
@@ -1321,4 +1414,30 @@ fn seq_has_data() {
         if EvQueueControl::<time::Duration>::has_data(v) { i += 1; }
         if i != 1 { panic!("{:?}: {} has_data", v, i) }
     }
+}
+
+#[test]
+fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let info = RemoveEventsInfo::new()?;
+    
+    info.set_condition(REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
+    info.set_queue(123);
+    info.set_time(time::Duration::new(456, 789));
+    info.set_dest(Addr { client: 212, port: 121 });
+    info.set_channel(15);
+    info.set_event_type(EventType::Noteon);
+    info.set_tag(213);
+
+    assert_eq!(info.get_condition(), REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
+    assert_eq!(info.get_queue(), 123);
+    assert_eq!(info.get_time(), time::Duration::new(456, 789));
+    assert_eq!(info.get_dest(), Addr { client: 212, port: 121 });
+    assert_eq!(info.get_channel(), 15);
+    assert_eq!(info.get_event_type()?, EventType::Noteon);
+    assert_eq!(info.get_tag(), 213);
+    
+    info.set_tick(43215);
+    assert_eq!(info.get_tick(), 43215);
+
+    Ok(())
 }
