@@ -550,6 +550,94 @@ impl PortSubscribe {
 
 }
 
+/// [snd_seq_query_subs_type_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
+#[derive(Copy, Clone)]
+pub enum SubscriptionQueryType {
+    READ = alsa::SND_SEQ_QUERY_SUBS_READ as isize,
+    WRITE = alsa::SND_SEQ_QUERY_SUBS_WRITE as isize,
+}
+
+/// [snd_seq_query_subscribe_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
+//(kept private, functionality exposed by PortSubscribeIter)
+struct SubscriptionQueryInfo(*mut alsa::snd_seq_query_subscribe_t);
+
+unsafe impl Send for SubscriptionQueryInfo {}
+
+impl Drop for SubscriptionQueryInfo {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_query_subscribe_free(self.0) } }
+}
+
+impl SubscriptionQueryInfo {
+    pub fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_query_subscribe_malloc(&mut q)).map(|_| SubscriptionQueryInfo(q))
+    }
+
+    pub fn get_index(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_index(self.0) as i32 } }
+    pub fn get_addr(&self) -> Addr { unsafe {
+        let a = &(*alsa::snd_seq_query_subscribe_get_addr(self.0));
+        Addr { client: a.client as i32, port: a.port as i32 }
+    } }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_queue(self.0) as i32 } }
+    pub fn get_exclusive(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_exclusive(self.0) == 1 } }
+    pub fn get_time_update(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_time_update(self.0) == 1 } }
+    pub fn get_time_real(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_time_real(self.0) == 1 } }
+
+    pub fn set_root(&self, value: Addr) { unsafe {
+        let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
+        alsa::snd_seq_query_subscribe_set_root(self.0, &a);
+    } }
+    pub fn set_type(&self, value: SubscriptionQueryType) { unsafe {
+        alsa::snd_seq_query_subscribe_set_type(self.0, value as alsa::snd_seq_query_subs_type_t)
+    } }
+    pub fn set_index(&self, value: i32) { unsafe { alsa::snd_seq_query_subscribe_set_index(self.0, value as c_int) } }
+}
+
+#[derive(Copy, Clone)]
+/// Iterates over port subscriptions for a givent client:port/type.
+pub struct PortSubscribeIter<'a>(&'a Seq, Addr, SubscriptionQueryType, i32);
+
+impl<'a> PortSubscribeIter<'a> {
+    pub fn new(seq: &'a Seq, addr: Addr, sub_type: SubscriptionQueryType) -> Self { PortSubscribeIter(seq, addr, sub_type, 0) }
+}
+
+impl<'a> Iterator for PortSubscribeIter<'a> {
+    type Item = PortSubscribe;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let query = SubscriptionQueryInfo::new().unwrap();
+
+        query.set_root(self.1);
+        query.set_type(self.2);
+        query.set_index(self.3);
+
+        let r = unsafe { alsa::snd_seq_query_port_subscribers((self.0).0, query.0) };
+        if r < 0 {
+            self.3 = 0;
+            return None;
+        }
+
+        self.3 = query.get_index() + 1;
+        let vtr = PortSubscribe::new().unwrap();
+        match self.2 {
+            SubscriptionQueryType::READ => {
+                vtr.set_sender(self.1);
+                vtr.set_dest(query.get_addr());
+            },
+            SubscriptionQueryType:: WRITE => {
+                vtr.set_sender(query.get_addr());
+                vtr.set_dest(self.1);
+            }
+        };
+        vtr.set_queue(query.get_queue());
+        vtr.set_exclusive(query.get_exclusive());
+        vtr.set_time_update(query.get_time_update());
+        vtr.set_time_real(query.get_time_real());
+
+        Some(vtr)
+    }
+}
+
 /// [snd_seq_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__event__t.html) wrapper
 ///
 /// Fields of the event is not directly exposed. Instead call `Event::new` to set data (which can be, e g, an EvNote).
@@ -1440,4 +1528,48 @@ fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(info.get_tick(), 43215);
 
     Ok(())
+}
+
+#[test]
+fn seq_portsubscribeiter() {
+    let s = super::Seq::open(None, None, false).unwrap();
+
+    // Create ports
+    let sinfo = PortInfo::empty().unwrap();
+    sinfo.set_capability(READ | SUBS_READ);
+    sinfo.set_type(MIDI_GENERIC | APPLICATION);
+    s.create_port(&sinfo).unwrap();
+    let sport = sinfo.get_port();
+    let dinfo = PortInfo::empty().unwrap();
+    dinfo.set_capability(WRITE | SUBS_WRITE);
+    dinfo.set_type(MIDI_GENERIC | APPLICATION);
+    s.create_port(&dinfo).unwrap();
+    let dport = dinfo.get_port();
+
+    // Connect them
+    let subs = PortSubscribe::empty().unwrap();
+    subs.set_sender(Addr { client: s.client_id().unwrap(), port: sport });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: dport });
+    s.subscribe_port(&subs).unwrap();
+
+    // Query READ subs from sport's point of view
+    let read_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: sport },
+                        SubscriptionQueryType::READ).collect();
+    assert_eq!(read_subs.len(), 1);
+    assert_eq!(read_subs[0].get_sender(), subs.get_sender());
+    assert_eq!(read_subs[0].get_dest(), subs.get_dest());
+
+    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: sport },
+                        SubscriptionQueryType::WRITE).collect();
+    assert_eq!(write_subs.len(), 0);
+
+    // Now query WRITE subs from dport's point of view
+    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: dport },
+                        SubscriptionQueryType::WRITE).collect();
+    assert_eq!(write_subs.len(), 1);
+    assert_eq!(write_subs[0].get_sender(), subs.get_sender());
+    assert_eq!(write_subs[0].get_dest(), subs.get_dest());
 }
