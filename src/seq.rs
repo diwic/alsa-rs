@@ -1367,6 +1367,13 @@ impl MidiEvent {
     /// Alsa-lib is a bit confusing here. Anyhow, set "enable" to true to enable running status.
     pub fn enable_running_status(&self, enable: bool) { unsafe { alsa::snd_midi_event_no_status(self.0, if enable {0} else {1}) } }
 
+    /// Resets both encoder and decoder
+    pub fn reset_all(&self) { unsafe { alsa::snd_midi_event_init(self.0) } }
+
+    pub fn reset_encode(&self) { unsafe { alsa::snd_midi_event_reset_encode(self.0) } }
+
+    pub fn reset_decode(&self) { unsafe { alsa::snd_midi_event_reset_decode(self.0) } }
+
     pub fn decode(&self, buf: &mut [u8], ev: &mut Event) -> Result<usize> {
         ev.ensure_buf();
         acheck!(snd_midi_event_decode(self.0, buf.as_mut_ptr() as *mut c_uchar, buf.len() as c_long, &ev.0)).map(|r| r as usize)
