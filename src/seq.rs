@@ -183,6 +183,10 @@ impl Seq {
         acheck!(snd_seq_sync_output_queue(self.0)).map(|_| ())
     }
 
+    pub fn drop_output(&self) -> Result<()> {
+        acheck!(snd_seq_drop_output(self.0)).map(|_| ())
+    }
+
     /// Call this function to obtain an instance of `Input` to access the functions `event_input`,
     /// `event_input_pending` and `set_input_buffer_size`. See the documentation of `Input` for details.
     pub fn input<'a>(&'a self) -> Input<'a> {
@@ -230,6 +234,10 @@ impl<'a> Input<'a> {
 
     pub fn set_input_buffer_size(&self, size: u32)  -> Result<()> {
         acheck!(snd_seq_set_input_buffer_size((self.0).0, size as size_t)).map(|_| ())
+    }
+
+    pub fn drop_input(&self) -> Result<()> {
+        acheck!(snd_seq_drop_input((self.0).0)).map(|_| ())
     }
 }
 
