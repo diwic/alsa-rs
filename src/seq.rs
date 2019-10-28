@@ -193,7 +193,7 @@ impl Seq {
         Input::new(self)
     }
     
-    pub fn remove_events(&self, condition: RemoveEventsInfo) -> Result<()> {
+    pub fn remove_events(&self, condition: RemoveEvents) -> Result<()> {
         acheck!(snd_seq_remove_events(self.0, condition.0)).map(|_| ())
     }    
 }
@@ -476,7 +476,7 @@ bitflags! {
 
 bitflags! {
     /// [SND_SEQ_REMOVE_xxx]https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants 
-    pub struct RemoveEventsCondition: u32 {
+    pub struct Remove: u32 {
         const REMOVE_INPUT = (1<<0);
         const REMOVE_OUTPUT = (1<<1);
         const REMOVE_DEST = (1<<2);
@@ -560,25 +560,25 @@ impl PortSubscribe {
 
 /// [snd_seq_query_subs_type_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
 #[derive(Copy, Clone)]
-pub enum SubscriptionQueryType {
+pub enum QuerySubsType {
     READ = alsa::SND_SEQ_QUERY_SUBS_READ as isize,
     WRITE = alsa::SND_SEQ_QUERY_SUBS_WRITE as isize,
 }
 
 /// [snd_seq_query_subscribe_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
 //(kept private, functionality exposed by PortSubscribeIter)
-struct SubscriptionQueryInfo(*mut alsa::snd_seq_query_subscribe_t);
+struct QuerySubscribe(*mut alsa::snd_seq_query_subscribe_t);
 
-unsafe impl Send for SubscriptionQueryInfo {}
+unsafe impl Send for QuerySubscribe {}
 
-impl Drop for SubscriptionQueryInfo {
+impl Drop for QuerySubscribe {
     fn drop(&mut self) { unsafe { alsa::snd_seq_query_subscribe_free(self.0) } }
 }
 
-impl SubscriptionQueryInfo {
+impl QuerySubscribe {
     pub fn new() -> Result<Self> {
         let mut q = ptr::null_mut();
-        acheck!(snd_seq_query_subscribe_malloc(&mut q)).map(|_| SubscriptionQueryInfo(q))
+        acheck!(snd_seq_query_subscribe_malloc(&mut q)).map(|_| QuerySubscribe(q))
     }
 
     pub fn get_index(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_index(self.0) as i32 } }
@@ -595,7 +595,7 @@ impl SubscriptionQueryInfo {
         let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
         alsa::snd_seq_query_subscribe_set_root(self.0, &a);
     } }
-    pub fn set_type(&self, value: SubscriptionQueryType) { unsafe {
+    pub fn set_type(&self, value: QuerySubsType) { unsafe {
         alsa::snd_seq_query_subscribe_set_type(self.0, value as alsa::snd_seq_query_subs_type_t)
     } }
     pub fn set_index(&self, value: i32) { unsafe { alsa::snd_seq_query_subscribe_set_index(self.0, value as c_int) } }
@@ -603,38 +603,45 @@ impl SubscriptionQueryInfo {
 
 #[derive(Copy, Clone)]
 /// Iterates over port subscriptions for a givent client:port/type.
-pub struct PortSubscribeIter<'a>(&'a Seq, Addr, SubscriptionQueryType, i32);
+pub struct PortSubscribeIter<'a> {
+    seq: &'a Seq,
+    addr: Addr,
+    query_subs_type: QuerySubsType,
+    index: i32
+}
 
 impl<'a> PortSubscribeIter<'a> {
-    pub fn new(seq: &'a Seq, addr: Addr, sub_type: SubscriptionQueryType) -> Self { PortSubscribeIter(seq, addr, sub_type, 0) }
+    pub fn new(seq: &'a Seq, addr: Addr, query_subs_type: QuerySubsType) -> Self {
+        PortSubscribeIter {seq, addr, query_subs_type, index: 0 }
+    }
 }
 
 impl<'a> Iterator for PortSubscribeIter<'a> {
     type Item = PortSubscribe;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let query = SubscriptionQueryInfo::new().unwrap();
+        let query = QuerySubscribe::new().unwrap();
 
-        query.set_root(self.1);
-        query.set_type(self.2);
-        query.set_index(self.3);
+        query.set_root(self.addr);
+        query.set_type(self.query_subs_type);
+        query.set_index(self.index);
 
-        let r = unsafe { alsa::snd_seq_query_port_subscribers((self.0).0, query.0) };
+        let r = unsafe { alsa::snd_seq_query_port_subscribers((self.seq).0, query.0) };
         if r < 0 {
-            self.3 = 0;
+            self.index = 0;
             return None;
         }
 
-        self.3 = query.get_index() + 1;
+        self.index = query.get_index() + 1;
         let vtr = PortSubscribe::new().unwrap();
-        match self.2 {
-            SubscriptionQueryType::READ => {
-                vtr.set_sender(self.1);
+        match self.query_subs_type {
+            QuerySubsType::READ => {
+                vtr.set_sender(self.addr);
                 vtr.set_dest(query.get_addr());
             },
-            SubscriptionQueryType:: WRITE => {
+            QuerySubsType:: WRITE => {
                 vtr.set_sender(query.get_addr());
-                vtr.set_dest(self.1);
+                vtr.set_dest(self.addr);
             }
         };
         vtr.set_queue(query.get_queue());
@@ -1273,23 +1280,22 @@ impl QueueStatus {
 }
 
 /// [snd_seq_remove_events_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) wrapper
-pub struct RemoveEventsInfo(*mut alsa::snd_seq_remove_events_t);
+pub struct RemoveEvents(*mut alsa::snd_seq_remove_events_t);
 
-unsafe impl Send for RemoveEventsInfo {}
+unsafe impl Send for RemoveEvents {}
 
-impl Drop for RemoveEventsInfo {
+impl Drop for RemoveEvents {
     fn drop(&mut self) { unsafe { alsa::snd_seq_remove_events_free(self.0) } }
 }
 
-impl RemoveEventsInfo {
+impl RemoveEvents {
     pub fn new() -> Result<Self> {
         let mut q = ptr::null_mut();
-        acheck!(snd_seq_remove_events_malloc(&mut q)).map(|_| RemoveEventsInfo(q))
+        acheck!(snd_seq_remove_events_malloc(&mut q)).map(|_| RemoveEvents(q))
     }
 
-
-    pub fn get_condition(&self) -> RemoveEventsCondition { unsafe { 
-        RemoveEventsCondition::from_bits_truncate(alsa::snd_seq_remove_events_get_condition(self.0) as u32) 
+    pub fn get_condition(&self) -> Remove { unsafe {
+        Remove::from_bits_truncate(alsa::snd_seq_remove_events_get_condition(self.0) as u32)
     } }
     pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_queue(self.0) as i32 } }
     pub fn get_time(&self) -> time::Duration { unsafe {
@@ -1297,11 +1303,6 @@ impl RemoveEventsInfo {
         let t = &(*d.time());
         
         time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
-    } }
-    pub fn get_tick(&self) -> u32 { unsafe {
-        let mut d = alsa::snd_seq_timestamp_t { data: (*alsa::snd_seq_remove_events_get_time(self.0)).data };
-        
-        *d.tick()
     } }
     pub fn get_dest(&self) -> Addr { unsafe {
         let a = &(*alsa::snd_seq_remove_events_get_dest(self.0));
@@ -1315,7 +1316,7 @@ impl RemoveEventsInfo {
     pub fn get_tag(&self) -> u8 { unsafe { alsa::snd_seq_remove_events_get_tag(self.0) as u8 } }
 
     
-    pub fn set_condition(&self, value: RemoveEventsCondition) { unsafe {
+    pub fn set_condition(&self, value: Remove) { unsafe {
         alsa::snd_seq_remove_events_set_condition(self.0, value.bits() as c_uint);
     } }
     pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_queue(self.0, value as c_int) } }
@@ -1326,13 +1327,6 @@ impl RemoveEventsInfo {
         t.tv_sec = value.as_secs() as c_uint;
         t.tv_nsec = value.subsec_nanos() as c_uint;
 
-        alsa::snd_seq_remove_events_set_time(self.0, &d);
-    } }
-    pub fn set_tick(&self, value: u32) { unsafe {
-        let mut d = alsa::snd_seq_timestamp_t {data: [0; 2]};
-
-        (*d.tick()) = value;
-        
         alsa::snd_seq_remove_events_set_time(self.0, &d);
     } }
     pub fn set_dest(&self, value: Addr) { unsafe {
@@ -1368,7 +1362,7 @@ impl MidiEvent {
     pub fn enable_running_status(&self, enable: bool) { unsafe { alsa::snd_midi_event_no_status(self.0, if enable {0} else {1}) } }
 
     /// Resets both encoder and decoder
-    pub fn reset_all(&self) { unsafe { alsa::snd_midi_event_init(self.0) } }
+    pub fn init(&self) { unsafe { alsa::snd_midi_event_init(self.0) } }
 
     pub fn reset_encode(&self) { unsafe { alsa::snd_midi_event_reset_encode(self.0) } }
 
@@ -1521,7 +1515,7 @@ fn seq_has_data() {
 
 #[test]
 fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let info = RemoveEventsInfo::new()?;
+    let info = RemoveEvents::new()?;
     
     info.set_condition(REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
     info.set_queue(123);
@@ -1538,9 +1532,6 @@ fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(info.get_channel(), 15);
     assert_eq!(info.get_event_type()?, EventType::Noteon);
     assert_eq!(info.get_tag(), 213);
-    
-    info.set_tick(43215);
-    assert_eq!(info.get_tick(), 43215);
 
     Ok(())
 }
@@ -1570,20 +1561,20 @@ fn seq_portsubscribeiter() {
     // Query READ subs from sport's point of view
     let read_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
                         Addr {client: s.client_id().unwrap(), port: sport },
-                        SubscriptionQueryType::READ).collect();
+                        QuerySubsType::READ).collect();
     assert_eq!(read_subs.len(), 1);
     assert_eq!(read_subs[0].get_sender(), subs.get_sender());
     assert_eq!(read_subs[0].get_dest(), subs.get_dest());
 
     let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
                         Addr {client: s.client_id().unwrap(), port: sport },
-                        SubscriptionQueryType::WRITE).collect();
+                        QuerySubsType::WRITE).collect();
     assert_eq!(write_subs.len(), 0);
 
     // Now query WRITE subs from dport's point of view
     let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
                         Addr {client: s.client_id().unwrap(), port: dport },
-                        SubscriptionQueryType::WRITE).collect();
+                        QuerySubsType::WRITE).collect();
     assert_eq!(write_subs.len(), 1);
     assert_eq!(write_subs[0].get_sender(), subs.get_sender());
     assert_eq!(write_subs[0].get_dest(), subs.get_dest());
