@@ -101,18 +101,18 @@ impl SyncPtrStatus {
     ///  - setting appl_ptr and avail_min might make alsa-lib confused
     ///  - no check that the fd is really a PCM
     pub unsafe fn sync_ptr(fd: RawFd, hwsync: bool, appl_ptr: Option<pcm::Frames>, avail_min: Option<pcm::Frames>) -> Result<Self> {
-        let mut data: snd_pcm_sync_ptr = mem::uninitialized();
-        data.flags = if hwsync { SNDRV_PCM_SYNC_PTR_HWSYNC } else { 0 };
-        if let Some(appl_ptr) = appl_ptr {
-            data.c.control.appl_ptr = appl_ptr as snd_pcm_uframes_t;
-        } else {
-            data.flags += SNDRV_PCM_SYNC_PTR_APPL;
-        }
-        if let Some(avail_min) = avail_min {
-            data.c.control.avail_min = avail_min as snd_pcm_uframes_t;
-        } else {
-            data.flags += SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
-        }
+        let mut data = snd_pcm_sync_ptr {
+			flags: (if hwsync { SNDRV_PCM_SYNC_PTR_HWSYNC } else { 0 }) +
+				(if appl_ptr.is_some() { SNDRV_PCM_SYNC_PTR_APPL } else { 0 }) +
+				(if avail_min.is_some() { SNDRV_PCM_SYNC_PTR_AVAIL_MIN } else { 0 }),
+			c: snd_pcm_mmap_control_r {
+				control: snd_pcm_mmap_control {
+					appl_ptr: appl_ptr.unwrap_or(0) as snd_pcm_uframes_t,
+					avail_min: avail_min.unwrap_or(0) as snd_pcm_uframes_t,
+				}
+			},
+			s: mem::zeroed()
+		};
 
         sndrv_pcm_ioctl_sync_ptr(fd, &mut data).map_err(|_|
             Error::new("SNDRV_PCM_IOCTL_SYNC_PTR", nix::errno::Errno::last() as i32))?;
