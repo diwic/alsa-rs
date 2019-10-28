@@ -1,6 +1,6 @@
 [package]
 name = "alsa"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Thin but safe wrappers for ALSA (Linux sound API)"
@@ -13,10 +13,10 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-libc = "0.2.60"
-alsa-sys = "0.1.1"
+libc = "0.2.65"
+alsa-sys = "0.2"
 bitflags = "1.2.1"
-nix = "0.14.1"
+nix = "0.15"
 
 [badges]
 is-it-maintained-issue-resolution = { repository = "diwic/alsa-rs" }
