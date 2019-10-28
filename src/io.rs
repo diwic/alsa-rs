@@ -22,7 +22,7 @@ impl Output {
         let b = unsafe {
             let mut q = ptr::null_mut();
             let s = alsa::snd_output_buffer_string(self.0, &mut q);
-            slice::from_raw_parts(q as *const u8, s as usize) 
+            slice::from_raw_parts(q as *const u8, s as usize)
         };
         f(b)
     }
@@ -31,7 +31,7 @@ impl Output {
 impl fmt::Debug for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Output(")?;
-        (&self as &fmt::Display).fmt(f)?;
+        fmt::Display::fmt(self, f)?;
         write!(f, ")")
         /* self.buffer_string(|b| f.write_str(try!(str::from_utf8(b).map_err(|_| fmt::Error)))) */
     }

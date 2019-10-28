@@ -47,7 +47,7 @@ pub fn poll(fds: &mut[pollfd], timeout: i32) -> Result<usize> {
 }
 
 /// Builds a pollfd array, polls it, and returns the poll descriptors which have non-zero revents.
-pub fn poll_all<'a>(desc: &[&'a PollDescriptors], timeout: i32) -> Result<Vec<(&'a PollDescriptors, PollFlags)>> {
+pub fn poll_all<'a>(desc: &[&'a dyn PollDescriptors], timeout: i32) -> Result<Vec<(&'a dyn PollDescriptors, PollFlags)>> {
 
     let mut pollfds: Vec<pollfd> = vec!();
     let mut indices = vec!();

@@ -99,7 +99,7 @@ impl SyncPtrStatus {
     ///
     /// Unsafe because
     ///  - setting appl_ptr and avail_min might make alsa-lib confused
-    ///  - no check that the fd is really a PCM 
+    ///  - no check that the fd is really a PCM
     pub unsafe fn sync_ptr(fd: RawFd, hwsync: bool, appl_ptr: Option<pcm::Frames>, avail_min: Option<pcm::Frames>) -> Result<Self> {
         let mut data: snd_pcm_sync_ptr = mem::uninitialized();
         data.flags = if hwsync { SNDRV_PCM_SYNC_PTR_HWSYNC } else { 0 };
@@ -152,7 +152,7 @@ pub struct Status(DriverMemory<snd_pcm_mmap_status>);
 
 fn pcm_to_fd(p: &pcm::PCM) -> Result<RawFd> {
     let mut fds: [libc::pollfd; 1] = unsafe { mem::zeroed() };
-    let c = (p as &PollDescriptors).fill(&mut fds)?;
+    let c = PollDescriptors::fill(p, &mut fds)?;
     if c != 1 {
         return Err(Error::unsupported("snd_pcm_poll_descriptors returned wrong number of fds"))
     }
@@ -261,7 +261,7 @@ impl Control {
 }
 
 struct DriverMemory<S> {
-   ptr: *mut S, 
+   ptr: *mut S,
    size: libc::size_t,
 }
 
@@ -295,7 +295,7 @@ impl<S> Drop for DriverMemory<S> {
 }
 
 #[derive(Debug)]
-pub struct SampleData<S> { 
+pub struct SampleData<S> {
     mem: DriverMemory<S>,
     frames: pcm::Frames,
     channels: u32,
@@ -480,7 +480,7 @@ impl<S, D: MmapDir> MmapIO<S, D> {
         let c = self.channels();
         let bufsize = self.buffer_size();
 
-        // These formulas mostly mimic the behaviour of 
+        // These formulas mostly mimic the behaviour of
         // snd_pcm_mmap_begin (in alsa-lib/src/pcm/pcm.c).
         let offs = applptr % bufsize;
         let mut a = D::avail(hwptr, applptr, bufsize, self.boundary());
@@ -657,7 +657,7 @@ fn record_from_plughw_mmap() {
 }
 
 #[test]
-#[ignore] 
+#[ignore]
 fn playback_to_plughw_mmap() {
     use crate::pcm::*;
     use crate::{ValueOr, Direction};

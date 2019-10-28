@@ -48,19 +48,19 @@ pub fn from_code(func: &'static str, r: c_int) -> Result<c_int> {
 }
 
 impl Error {
-    pub fn new(func: &'static str, res: c_int) -> Error { 
+    pub fn new(func: &'static str, res: c_int) -> Error {
         let errno = nix::errno::Errno::from_i32(res as i32);
         Error(func, nix::Error::from_errno(errno))
     }
 
-    pub fn unsupported(func: &'static str) -> Error { 
+    pub fn unsupported(func: &'static str) -> Error {
         Error(func, nix::Error::UnsupportedOperation)
     }
 
     /// The function which failed.
     pub fn func(&self) -> &'static str { self.0 }
 
-    /// The errno, if any. 
+    /// The errno, if any.
     pub fn errno(&self) -> Option<nix::errno::Errno> { if let nix::Error::Sys(x) = self.1 { Some(x) } else { None } }
 
     /// Underlying error
@@ -71,7 +71,7 @@ pub fn invalid_str(func: &'static str) -> Error { Error(func, nix::Error::Invali
 
 impl StdError for Error {
     fn description(&self) -> &str { "ALSA error" }
-    fn cause(&self) -> Option<&StdError> { Some(&self.1) }
+    fn cause(&self) -> Option<&dyn StdError> { Some(&self.1) }
 }
 
 impl fmt::Display for Error {
