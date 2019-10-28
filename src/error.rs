@@ -71,7 +71,7 @@ pub fn invalid_str(func: &'static str) -> Error { Error(func, nix::Error::Invali
 
 impl StdError for Error {
     fn description(&self) -> &str { "ALSA error" }
-    fn cause(&self) -> Option<&dyn StdError> { Some(&self.1) }
+    fn source(&self) -> Option<&(dyn StdError + 'static)> { Some(&self.1) }
 }
 
 impl fmt::Display for Error {
