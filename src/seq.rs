@@ -168,6 +168,11 @@ impl Seq {
         acheck!(snd_seq_set_queue_tempo(self.0, q as c_int, value.0)).map(|_| ())
     }
 
+    pub fn get_queue_status(&self, q: i32) -> Result<QueueStatus> {
+        let value = QueueStatus::new()?;
+        acheck!(snd_seq_get_queue_status(self.0, q as c_int, value.0)).map(|_| value)
+    }
+
     pub fn free_queue(&self, q: i32) -> Result<()> { acheck!(snd_seq_free_queue(self.0, q)).map(|_| ()) }
     pub fn alloc_queue(&self) -> Result<i32> { acheck!(snd_seq_alloc_queue(self.0)).map(|q| q as i32) }
     pub fn alloc_named_queue(&self, n: &CStr) -> Result<i32> {
@@ -178,11 +183,19 @@ impl Seq {
         acheck!(snd_seq_sync_output_queue(self.0)).map(|_| ())
     }
 
+    pub fn drop_output(&self) -> Result<()> {
+        acheck!(snd_seq_drop_output(self.0)).map(|_| ())
+    }
+
     /// Call this function to obtain an instance of `Input` to access the functions `event_input`,
     /// `event_input_pending` and `set_input_buffer_size`. See the documentation of `Input` for details.
     pub fn input<'a>(&'a self) -> Input<'a> {
         Input::new(self)
     }
+    
+    pub fn remove_events(&self, condition: RemoveEvents) -> Result<()> {
+        acheck!(snd_seq_remove_events(self.0, condition.0)).map(|_| ())
+    }    
 }
 
 /// Struct for receiving input events from a sequencer. The methods offered by this
@@ -221,6 +234,10 @@ impl<'a> Input<'a> {
 
     pub fn set_input_buffer_size(&self, size: u32)  -> Result<()> {
         acheck!(snd_seq_set_input_buffer_size((self.0).0, size as size_t)).map(|_| ())
+    }
+
+    pub fn drop_input(&self) -> Result<()> {
+        acheck!(snd_seq_drop_input((self.0).0)).map(|_| ())
     }
 }
 
@@ -457,6 +474,22 @@ bitflags! {
     }
 }
 
+bitflags! {
+    /// [SND_SEQ_REMOVE_xxx]https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants 
+    pub struct Remove: u32 {
+        const REMOVE_INPUT = (1<<0);
+        const REMOVE_OUTPUT = (1<<1);
+        const REMOVE_DEST = (1<<2);
+        const REMOVE_DEST_CHANNEL = (1<<3);
+        const REMOVE_TIME_BEFORE = (1<<4);
+        const REMOVE_TIME_AFTER = (1<<5);
+        const REMOVE_TIME_TICK = (1<<6);
+        const REMOVE_EVENT_TYPE = (1<<7);
+        const REMOVE_IGNORE_OFF = (1<<8);
+        const REMOVE_TAG_MATCH = (1<<9);
+    }
+}
+
 
 /// [snd_seq_addr_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__addr__t.html) wrapper
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
@@ -523,6 +556,101 @@ impl PortSubscribe {
     pub fn set_time_update(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_update(self.0, if value { 1 } else { 0 } ) } }
     pub fn set_time_real(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_real(self.0, if value { 1 } else { 0 } ) } }
 
+}
+
+/// [snd_seq_query_subs_type_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
+#[derive(Copy, Clone)]
+pub enum QuerySubsType {
+    READ = alsa::SND_SEQ_QUERY_SUBS_READ as isize,
+    WRITE = alsa::SND_SEQ_QUERY_SUBS_WRITE as isize,
+}
+
+/// [snd_seq_query_subscribe_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
+//(kept private, functionality exposed by PortSubscribeIter)
+struct QuerySubscribe(*mut alsa::snd_seq_query_subscribe_t);
+
+unsafe impl Send for QuerySubscribe {}
+
+impl Drop for QuerySubscribe {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_query_subscribe_free(self.0) } }
+}
+
+impl QuerySubscribe {
+    pub fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_query_subscribe_malloc(&mut q)).map(|_| QuerySubscribe(q))
+    }
+
+    pub fn get_index(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_index(self.0) as i32 } }
+    pub fn get_addr(&self) -> Addr { unsafe {
+        let a = &(*alsa::snd_seq_query_subscribe_get_addr(self.0));
+        Addr { client: a.client as i32, port: a.port as i32 }
+    } }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_queue(self.0) as i32 } }
+    pub fn get_exclusive(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_exclusive(self.0) == 1 } }
+    pub fn get_time_update(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_time_update(self.0) == 1 } }
+    pub fn get_time_real(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_time_real(self.0) == 1 } }
+
+    pub fn set_root(&self, value: Addr) { unsafe {
+        let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
+        alsa::snd_seq_query_subscribe_set_root(self.0, &a);
+    } }
+    pub fn set_type(&self, value: QuerySubsType) { unsafe {
+        alsa::snd_seq_query_subscribe_set_type(self.0, value as alsa::snd_seq_query_subs_type_t)
+    } }
+    pub fn set_index(&self, value: i32) { unsafe { alsa::snd_seq_query_subscribe_set_index(self.0, value as c_int) } }
+}
+
+#[derive(Copy, Clone)]
+/// Iterates over port subscriptions for a givent client:port/type.
+pub struct PortSubscribeIter<'a> {
+    seq: &'a Seq,
+    addr: Addr,
+    query_subs_type: QuerySubsType,
+    index: i32
+}
+
+impl<'a> PortSubscribeIter<'a> {
+    pub fn new(seq: &'a Seq, addr: Addr, query_subs_type: QuerySubsType) -> Self {
+        PortSubscribeIter {seq, addr, query_subs_type, index: 0 }
+    }
+}
+
+impl<'a> Iterator for PortSubscribeIter<'a> {
+    type Item = PortSubscribe;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let query = QuerySubscribe::new().unwrap();
+
+        query.set_root(self.addr);
+        query.set_type(self.query_subs_type);
+        query.set_index(self.index);
+
+        let r = unsafe { alsa::snd_seq_query_port_subscribers((self.seq).0, query.0) };
+        if r < 0 {
+            self.index = 0;
+            return None;
+        }
+
+        self.index = query.get_index() + 1;
+        let vtr = PortSubscribe::new().unwrap();
+        match self.query_subs_type {
+            QuerySubsType::READ => {
+                vtr.set_sender(self.addr);
+                vtr.set_dest(query.get_addr());
+            },
+            QuerySubsType:: WRITE => {
+                vtr.set_sender(query.get_addr());
+                vtr.set_dest(self.addr);
+            }
+        };
+        vtr.set_queue(query.get_queue());
+        vtr.set_exclusive(query.get_exclusive());
+        vtr.set_time_update(query.get_time_update());
+        vtr.set_time_real(query.get_time_real());
+
+        Some(vtr)
+    }
 }
 
 /// [snd_seq_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__event__t.html) wrapper
@@ -1119,6 +1247,98 @@ impl QueueTempo {
     pub fn set_skew_base(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew_base(self.0, value as c_uint) } }
 }
 
+/// [snd_seq_queue_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_queue.html) wrapper
+pub struct QueueStatus(*mut alsa::snd_seq_queue_status_t);
+
+unsafe impl Send for QueueStatus {}
+
+impl Drop for QueueStatus {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_queue_status_free(self.0) } }
+}
+
+impl QueueStatus {
+    fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_queue_status_malloc(&mut q)).map(|_| QueueStatus(q))
+    }
+
+    /// Creates a new QueueStatus with all fields set to zero.
+    pub fn empty() -> Result<Self> {
+        let q = QueueStatus::new()?;
+        unsafe { ptr::write_bytes(q.0 as *mut u8, 0, alsa::snd_seq_queue_status_sizeof()) };
+        Ok(q)
+    }
+
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_queue_status_get_queue(self.0) as i32 } }
+    pub fn get_events(&self) -> i32 { unsafe { alsa::snd_seq_queue_status_get_events(self.0) as i32 } }
+    pub fn get_tick_time(&self) -> u32 { unsafe {alsa::snd_seq_queue_status_get_tick_time(self.0) as u32 } }
+    pub fn get_real_time(&self) -> time::Duration { unsafe {
+        let t = &(*alsa::snd_seq_queue_status_get_real_time(self.0));
+        time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    } }
+    pub fn get_status(&self) -> u32 { unsafe { alsa::snd_seq_queue_status_get_status(self.0) as u32 } }
+}
+
+/// [snd_seq_remove_events_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) wrapper
+pub struct RemoveEvents(*mut alsa::snd_seq_remove_events_t);
+
+unsafe impl Send for RemoveEvents {}
+
+impl Drop for RemoveEvents {
+    fn drop(&mut self) { unsafe { alsa::snd_seq_remove_events_free(self.0) } }
+}
+
+impl RemoveEvents {
+    pub fn new() -> Result<Self> {
+        let mut q = ptr::null_mut();
+        acheck!(snd_seq_remove_events_malloc(&mut q)).map(|_| RemoveEvents(q))
+    }
+
+    pub fn get_condition(&self) -> Remove { unsafe {
+        Remove::from_bits_truncate(alsa::snd_seq_remove_events_get_condition(self.0) as u32)
+    } }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_queue(self.0) as i32 } }
+    pub fn get_time(&self) -> time::Duration { unsafe {
+        let mut d = alsa::snd_seq_timestamp_t { data: (*alsa::snd_seq_remove_events_get_time(self.0)).data };
+        let t = &(*d.time());
+        
+        time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    } }
+    pub fn get_dest(&self) -> Addr { unsafe {
+        let a = &(*alsa::snd_seq_remove_events_get_dest(self.0));
+        
+        Addr { client: a.client as i32, port: a.port as i32 }
+    } }
+    pub fn get_channel(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_channel(self.0) as i32 } }
+    pub fn get_event_type(&self) -> Result<EventType> { unsafe {
+        EventType::from_c_int(alsa::snd_seq_remove_events_get_event_type(self.0), "snd_seq_remove_events_get_event_type")
+    } }
+    pub fn get_tag(&self) -> u8 { unsafe { alsa::snd_seq_remove_events_get_tag(self.0) as u8 } }
+
+    
+    pub fn set_condition(&self, value: Remove) { unsafe {
+        alsa::snd_seq_remove_events_set_condition(self.0, value.bits() as c_uint);
+    } }
+    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_queue(self.0, value as c_int) } }
+    pub fn set_time(&self, value: time::Duration) { unsafe {
+        let mut d = alsa::snd_seq_timestamp_t {data: [0; 2]};
+        let mut t = &mut (*d.time());
+        
+        t.tv_sec = value.as_secs() as c_uint;
+        t.tv_nsec = value.subsec_nanos() as c_uint;
+
+        alsa::snd_seq_remove_events_set_time(self.0, &d);
+    } }
+    pub fn set_dest(&self, value: Addr) { unsafe {
+        let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
+        
+        alsa::snd_seq_remove_events_set_dest(self.0, &a);
+    } }
+    pub fn set_channel(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_channel(self.0, value as c_int) } }
+    pub fn set_event_type(&self, value: EventType) { unsafe { alsa::snd_seq_remove_events_set_event_type(self.0, value as i32); } }
+    pub fn set_tag(&self, value: u8) { unsafe { alsa::snd_seq_remove_events_set_tag(self.0, value as c_int) } }
+}
+
 /// [snd_midi_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___m_i_d_i___event.html) Wrapper
 ///
 /// Sequencer event <-> MIDI byte stream coder
@@ -1140,6 +1360,13 @@ impl MidiEvent {
     ///
     /// Alsa-lib is a bit confusing here. Anyhow, set "enable" to true to enable running status.
     pub fn enable_running_status(&self, enable: bool) { unsafe { alsa::snd_midi_event_no_status(self.0, if enable {0} else {1}) } }
+
+    /// Resets both encoder and decoder
+    pub fn init(&self) { unsafe { alsa::snd_midi_event_init(self.0) } }
+
+    pub fn reset_encode(&self) { unsafe { alsa::snd_midi_event_reset_encode(self.0) } }
+
+    pub fn reset_decode(&self) { unsafe { alsa::snd_midi_event_reset_decode(self.0) } }
 
     pub fn decode(&self, buf: &mut [u8], ev: &mut Event) -> Result<usize> {
         ev.ensure_buf();
@@ -1284,4 +1511,71 @@ fn seq_has_data() {
         if EvQueueControl::<time::Duration>::has_data(v) { i += 1; }
         if i != 1 { panic!("{:?}: {} has_data", v, i) }
     }
+}
+
+#[test]
+fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let info = RemoveEvents::new()?;
+    
+    info.set_condition(REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
+    info.set_queue(123);
+    info.set_time(time::Duration::new(456, 789));
+    info.set_dest(Addr { client: 212, port: 121 });
+    info.set_channel(15);
+    info.set_event_type(EventType::Noteon);
+    info.set_tag(213);
+
+    assert_eq!(info.get_condition(), REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
+    assert_eq!(info.get_queue(), 123);
+    assert_eq!(info.get_time(), time::Duration::new(456, 789));
+    assert_eq!(info.get_dest(), Addr { client: 212, port: 121 });
+    assert_eq!(info.get_channel(), 15);
+    assert_eq!(info.get_event_type()?, EventType::Noteon);
+    assert_eq!(info.get_tag(), 213);
+
+    Ok(())
+}
+
+#[test]
+fn seq_portsubscribeiter() {
+    let s = super::Seq::open(None, None, false).unwrap();
+
+    // Create ports
+    let sinfo = PortInfo::empty().unwrap();
+    sinfo.set_capability(READ | SUBS_READ);
+    sinfo.set_type(MIDI_GENERIC | APPLICATION);
+    s.create_port(&sinfo).unwrap();
+    let sport = sinfo.get_port();
+    let dinfo = PortInfo::empty().unwrap();
+    dinfo.set_capability(WRITE | SUBS_WRITE);
+    dinfo.set_type(MIDI_GENERIC | APPLICATION);
+    s.create_port(&dinfo).unwrap();
+    let dport = dinfo.get_port();
+
+    // Connect them
+    let subs = PortSubscribe::empty().unwrap();
+    subs.set_sender(Addr { client: s.client_id().unwrap(), port: sport });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: dport });
+    s.subscribe_port(&subs).unwrap();
+
+    // Query READ subs from sport's point of view
+    let read_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: sport },
+                        QuerySubsType::READ).collect();
+    assert_eq!(read_subs.len(), 1);
+    assert_eq!(read_subs[0].get_sender(), subs.get_sender());
+    assert_eq!(read_subs[0].get_dest(), subs.get_dest());
+
+    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: sport },
+                        QuerySubsType::WRITE).collect();
+    assert_eq!(write_subs.len(), 0);
+
+    // Now query WRITE subs from dport's point of view
+    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: dport },
+                        QuerySubsType::WRITE).collect();
+    assert_eq!(write_subs.len(), 1);
+    assert_eq!(write_subs[0].get_sender(), subs.get_sender());
+    assert_eq!(write_subs[0].get_dest(), subs.get_dest());
 }
