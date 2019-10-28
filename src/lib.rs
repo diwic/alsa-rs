@@ -3,13 +3,13 @@
 //! [Github repo](https://github.com/diwic/alsa-rs)
 //!
 //! [Crates.io](https://crates.io/crates/alsa)
-//! 
+//!
 //! This ALSA API wrapper/binding is WIP - the ALSA API is huge, and new
 //! functions and structs might be added as requested.
 //!
 //! Most functions map 1-to-1 to alsa-lib functions, e g, `ctl::CardInfo::get_id()` is a wrapper around
 //! `snd_ctl_card_info_get_id` and the [alsa-lib documentation](http://www.alsa-project.org/alsa-doc/alsa-lib/)
-//! can be consulted for additional information. 
+//! can be consulted for additional information.
 //!
 //! Enjoy!
 
@@ -110,7 +110,7 @@ pub use crate::rawmidi::Rawmidi as Rawmidi;
 pub mod device_name;
 
 pub mod poll;
-pub use crate::poll::PollDescriptors as PollDescriptors;
+pub use crate::poll::Descriptors as PollDescriptors;
 
 pub mod mixer;
 pub use crate::mixer::Mixer as Mixer;
@@ -134,7 +134,7 @@ pub mod direct {
     ///
     /// The reasons for doing this are:
     ///
-    ///  * Minimum overhead where it matters most: let alsa-lib do the code heavy setup - 
+    ///  * Minimum overhead where it matters most: let alsa-lib do the code heavy setup -
     ///    then steal its file descriptor and deal with sample streaming from Rust.
     ///  * RT-safety to the maximum extent possible. Creating/dropping any of these structs causes syscalls,
     ///    but function calls on these are just read and write from memory. No syscalls, no memory allocations,

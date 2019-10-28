@@ -9,20 +9,20 @@ use libc::pollfd;
 
 
 bitflags! {
-    pub struct PollFlags: ::libc::c_short {
-        const POLLIN  = ::libc::POLLIN;
-        const POLLPRI = ::libc::POLLPRI;
-        const POLLOUT = ::libc::POLLOUT;
-        const POLLERR = ::libc::POLLERR;
-        const POLLHUP = ::libc::POLLHUP;
-        const POLLNVAL = ::libc::POLLNVAL;
+    pub struct Flags: ::libc::c_short {
+        const IN  = ::libc::POLLIN;
+        const PRI = ::libc::POLLPRI;
+        const OUT = ::libc::POLLOUT;
+        const ERR = ::libc::POLLERR;
+        const HUP = ::libc::POLLHUP;
+        const NVAL = ::libc::POLLNVAL;
     }
 }
 
-pub trait PollDescriptors {
+pub trait Descriptors {
     fn count(&self) -> usize;
     fn fill(&self, _: &mut [pollfd]) -> Result<usize>;
-    fn revents(&self, _: &[pollfd]) -> Result<PollFlags>;
+    fn revents(&self, _: &[pollfd]) -> Result<Flags>;
 
     /// Wrapper around count and fill - returns an array of pollfds
     fn get(&self) -> Result<Vec<pollfd>> {
@@ -32,10 +32,10 @@ pub trait PollDescriptors {
     }
 }
 
-impl PollDescriptors for pollfd {
+impl Descriptors for pollfd {
     fn count(&self) -> usize { 1 }
     fn fill(&self, a: &mut [pollfd]) -> Result<usize> { a[0] = self.clone(); Ok(1) }
-    fn revents(&self, a: &[pollfd]) -> Result<PollFlags> { Ok(PollFlags::from_bits_truncate(a[0].revents)) }
+    fn revents(&self, a: &[pollfd]) -> Result<Flags> { Ok(Flags::from_bits_truncate(a[0].revents)) }
 }
 
 /// Wrapper around the libc poll call.
@@ -47,7 +47,7 @@ pub fn poll(fds: &mut[pollfd], timeout: i32) -> Result<usize> {
 }
 
 /// Builds a pollfd array, polls it, and returns the poll descriptors which have non-zero revents.
-pub fn poll_all<'a>(desc: &[&'a dyn PollDescriptors], timeout: i32) -> Result<Vec<(&'a dyn PollDescriptors, PollFlags)>> {
+pub fn poll_all<'a>(desc: &[&'a dyn Descriptors], timeout: i32) -> Result<Vec<(&'a dyn Descriptors, Flags)>> {
 
     let mut pollfds: Vec<pollfd> = vec!();
     let mut indices = vec!();

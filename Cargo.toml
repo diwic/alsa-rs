@@ -15,7 +15,7 @@ edition = "2018"
 [dependencies]
 libc = "0.2.60"
 alsa-sys = "0.1.1"
-bitflags = "0.9"
+bitflags = "1.2.1"
 nix = "0.14.1"
 
 [badges]

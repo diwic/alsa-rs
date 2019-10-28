@@ -67,7 +67,7 @@ impl Ctl {
 
     /// Note: According to alsa-lib documentation, you're also supposed to have functionality for
     /// returning whether or not you are subscribed. This does not work in practice, so I'm not
-    /// including that here. 
+    /// including that here.
     pub fn subscribe_events(&self, subscribe: bool) -> Result<()> {
         acheck!(snd_ctl_subscribe_events(self.0, if subscribe { 1 } else { 0 })).map(|_| ())
     }
@@ -82,7 +82,7 @@ impl Drop for Ctl {
     fn drop(&mut self) { unsafe { alsa::snd_ctl_close(self.0) }; }
 }
 
-impl poll::PollDescriptors for Ctl {
+impl poll::Descriptors for Ctl {
     fn count(&self) -> usize {
         unsafe { alsa::snd_ctl_poll_descriptors_count(self.0) as usize }
     }
@@ -90,10 +90,10 @@ impl poll::PollDescriptors for Ctl {
         let z = unsafe { alsa::snd_ctl_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
         from_code("snd_ctl_poll_descriptors", z).map(|_| z as usize)
     }
-    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
+    fn revents(&self, p: &[pollfd]) -> Result<poll::Flags> {
         let mut r = 0;
         let z = unsafe { alsa::snd_ctl_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
-        from_code("snd_ctl_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
+        from_code("snd_ctl_poll_descriptors_revents", z).map(|_| poll::Flags::from_bits_truncate(r as c_short))
     }
 }
 
@@ -175,7 +175,7 @@ pub fn elem_value_new(t: ElemType, count: u32) -> Result<ElemValue> {
 
 impl ElemValue {
 
-    // Note: The get_bytes hands out a reference to inside the object. Therefore, we can't treat 
+    // Note: The get_bytes hands out a reference to inside the object. Therefore, we can't treat
     // the content as "cell"ed, but must take a "&mut self" (to make sure the reference
     // from get_bytes has been dropped when calling a set_* function).
 
@@ -238,7 +238,7 @@ impl ElemValue {
     pub fn set_bytes(&mut self, val: &[u8]) -> Option<()> {
         if self.etype != ElemType::Bytes || val.len() != self.count as usize { None }
 
-        // Note: the alsa-lib function definition is broken. First, the pointer is declared as mut even 
+        // Note: the alsa-lib function definition is broken. First, the pointer is declared as mut even
         // though it's const, and second, there is a "value" missing between "elem" and "set_bytes".
         else { unsafe { alsa::snd_ctl_elem_set_bytes(self.ptr, val.as_ptr() as *mut c_void, val.len() as size_t) }; Some(()) }
     }
@@ -361,9 +361,9 @@ impl ElemId {
     pub fn set_interface(&mut self, v: ElemIface) { unsafe { alsa::snd_ctl_elem_id_set_interface(elem_id_ptr(&self), v as u32) }}
     pub fn set_name(&mut self, v: &CStr) { unsafe { alsa::snd_ctl_elem_id_set_name(elem_id_ptr(&self), v.as_ptr()) }}
 
-    /// Creates a new ElemId. 
+    /// Creates a new ElemId.
     ///
-    /// To ensure safety (i e make sure we never have an invalid interface enum), we need to supply it to the "new" function.  
+    /// To ensure safety (i e make sure we never have an invalid interface enum), we need to supply it to the "new" function.
     pub fn new(iface: ElemIface) -> Self {
         let mut r = elem_id_new().unwrap();
         r.set_interface(iface);
@@ -377,7 +377,7 @@ impl cmp::PartialEq for ElemId {
     fn eq(&self, a: &ElemId) -> bool {
         self.get_numid() == a.get_numid() && self.get_interface() == a.get_interface() &&
         self.get_index() == a.get_index() && self.get_device() == a.get_device() &&
-        self.get_subdevice() == a.get_subdevice() && self.get_name().ok() == a.get_name().ok() 
+        self.get_subdevice() == a.get_subdevice() && self.get_name().ok() == a.get_name().ok()
     }
 }
 
@@ -409,7 +409,7 @@ pub fn event_new() -> Result<Event> {
 
 impl Event {
     pub fn get_mask(&self) -> EventMask { EventMask(unsafe { alsa::snd_ctl_event_elem_get_mask(self.0) as u32 })}
-    pub fn get_id(&self) -> ElemId { 
+    pub fn get_id(&self) -> ElemId {
         let r = elem_id_new().unwrap();
         unsafe { alsa::snd_ctl_event_elem_get_id(self.0, elem_id_ptr(&r)) };
         r
@@ -441,4 +441,3 @@ fn print_sizeof() {
 
     println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
 }
-

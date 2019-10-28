@@ -148,7 +148,7 @@ impl Seq {
         e.ensure_buf();
         acheck!(snd_seq_event_output(self.0, &mut e.0)).map(|q| q as u32)
     }
-    
+
     pub fn event_output_buffer(&self, e: &mut Event) -> Result<u32> {
         e.ensure_buf();
         acheck!(snd_seq_event_output_buffer(self.0, &mut e.0)).map(|q| q as u32)
@@ -192,10 +192,10 @@ impl Seq {
     pub fn input<'a>(&'a self) -> Input<'a> {
         Input::new(self)
     }
-    
+
     pub fn remove_events(&self, condition: RemoveEvents) -> Result<()> {
         acheck!(snd_seq_remove_events(self.0, condition.0)).map(|_| ())
-    }    
+    }
 }
 
 /// Struct for receiving input events from a sequencer. The methods offered by this
@@ -243,13 +243,13 @@ impl<'a> Input<'a> {
 
 fn polldir(o: Option<Direction>) -> c_short {
     match o {
-        None => poll::POLLIN | poll::POLLOUT,
-        Some(Direction::Playback) => poll::POLLOUT,
-        Some(Direction::Capture) => poll::POLLIN,
+        None => poll::Flags::IN | poll::Flags::OUT,
+        Some(Direction::Playback) => poll::Flags::OUT,
+        Some(Direction::Capture) => poll::Flags::IN,
     }.bits()
 }
 
-impl<'a> poll::PollDescriptors for (&'a Seq, Option<Direction>) {
+impl<'a> poll::Descriptors for (&'a Seq, Option<Direction>) {
 
     fn count(&self) -> usize {
         unsafe { alsa::snd_seq_poll_descriptors_count((self.0).0, polldir(self.1)) as usize }
@@ -260,10 +260,10 @@ impl<'a> poll::PollDescriptors for (&'a Seq, Option<Direction>) {
         from_code("snd_seq_poll_descriptors", z).map(|_| z as usize)
     }
 
-    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
+    fn revents(&self, p: &[pollfd]) -> Result<poll::Flags> {
         let mut r = 0;
         let z = unsafe { alsa::snd_seq_poll_descriptors_revents((self.0).0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
-        from_code("snd_seq_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
+        from_code("snd_seq_poll_descriptors_revents", z).map(|_| poll::Flags::from_bits_truncate(r as c_short))
     }
 }
 
@@ -288,7 +288,7 @@ impl ClientInfo {
     fn set_client(&self, client: i32) {
         unsafe { alsa::snd_seq_client_info_set_client(self.0, client as c_int) };
     }
-    
+
     pub fn get_client(&self) -> i32 {
         unsafe { alsa::snd_seq_client_info_get_client(self.0) as i32 }
     }
@@ -440,7 +440,7 @@ impl<'a> Iterator for PortIter<'a> {
 }
 
 bitflags! {
-    /// [SND_SEQ_PORT_CAP_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants 
+    /// [SND_SEQ_PORT_CAP_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants
     pub struct PortCap: u32 {
         const READ = 1<<0;
         const WRITE = 1<<1;
@@ -454,7 +454,7 @@ bitflags! {
 }
 
 bitflags! {
-    /// [SND_SEQ_PORT_TYPE_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants 
+    /// [SND_SEQ_PORT_TYPE_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants
     pub struct PortType: u32 {
         const SPECIFIC = (1<<0);
         const MIDI_GENERIC = (1<<1);
@@ -475,18 +475,18 @@ bitflags! {
 }
 
 bitflags! {
-    /// [SND_SEQ_REMOVE_xxx]https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants 
+    /// [SND_SEQ_REMOVE_xxx]https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants
     pub struct Remove: u32 {
-        const REMOVE_INPUT = (1<<0);
-        const REMOVE_OUTPUT = (1<<1);
-        const REMOVE_DEST = (1<<2);
-        const REMOVE_DEST_CHANNEL = (1<<3);
-        const REMOVE_TIME_BEFORE = (1<<4);
-        const REMOVE_TIME_AFTER = (1<<5);
-        const REMOVE_TIME_TICK = (1<<6);
-        const REMOVE_EVENT_TYPE = (1<<7);
-        const REMOVE_IGNORE_OFF = (1<<8);
-        const REMOVE_TAG_MATCH = (1<<9);
+        const INPUT = (1<<0);
+        const OUTPUT = (1<<1);
+        const DEST = (1<<2);
+        const DEST_CHANNEL = (1<<3);
+        const TIME_BEFORE = (1<<4);
+        const TIME_AFTER = (1<<5);
+        const TIME_TICK = (1<<6);
+        const EVENT_TYPE = (1<<7);
+        const IGNORE_OFF = (1<<8);
+        const TAG_MATCH = (1<<9);
     }
 }
 
@@ -801,7 +801,7 @@ impl<'a> Event<'a> {
             let mut d = alsa::snd_seq_timestamp_t { data: self.0.time.data };
             let t = unsafe { &(*d.time()) };
             Some(time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32))
-        } else { None } 
+        } else { None }
     }
 
     pub fn get_tick(&self) -> Option<u32> {
@@ -1161,54 +1161,54 @@ alsa_enum!(
     Control14 = SND_SEQ_EVENT_CONTROL14,
     Controller = SND_SEQ_EVENT_CONTROLLER,
     Echo = SND_SEQ_EVENT_ECHO,
-    Keypress = SND_SEQ_EVENT_KEYPRESS, 	
-    Keysign = SND_SEQ_EVENT_KEYSIGN,	
-    None = SND_SEQ_EVENT_NONE,	
+    Keypress = SND_SEQ_EVENT_KEYPRESS,
+    Keysign = SND_SEQ_EVENT_KEYSIGN,
+    None = SND_SEQ_EVENT_NONE,
     Nonregparam = SND_SEQ_EVENT_NONREGPARAM,
     Note = SND_SEQ_EVENT_NOTE,
     Noteoff = SND_SEQ_EVENT_NOTEOFF,
-    Noteon = SND_SEQ_EVENT_NOTEON,	
+    Noteon = SND_SEQ_EVENT_NOTEON,
     Oss = SND_SEQ_EVENT_OSS,
     Pgmchange = SND_SEQ_EVENT_PGMCHANGE,
-    Pitchbend = SND_SEQ_EVENT_PITCHBEND, 	
+    Pitchbend = SND_SEQ_EVENT_PITCHBEND,
     PortChange = SND_SEQ_EVENT_PORT_CHANGE,
-    PortExit = SND_SEQ_EVENT_PORT_EXIT,	
+    PortExit = SND_SEQ_EVENT_PORT_EXIT,
     PortStart = SND_SEQ_EVENT_PORT_START,
     PortSubscribed = SND_SEQ_EVENT_PORT_SUBSCRIBED,
     PortUnsubscribed = SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
     Qframe = SND_SEQ_EVENT_QFRAME,
     QueueSkew = SND_SEQ_EVENT_QUEUE_SKEW,
-    Regparam = SND_SEQ_EVENT_REGPARAM,	
-    Reset = SND_SEQ_EVENT_RESET,	
+    Regparam = SND_SEQ_EVENT_REGPARAM,
+    Reset = SND_SEQ_EVENT_RESET,
     Result = SND_SEQ_EVENT_RESULT,
     Sensing = SND_SEQ_EVENT_SENSING,
     SetposTick = SND_SEQ_EVENT_SETPOS_TICK,
-    SetposTime = SND_SEQ_EVENT_SETPOS_TIME, 	
+    SetposTime = SND_SEQ_EVENT_SETPOS_TIME,
     Songpos = SND_SEQ_EVENT_SONGPOS,
-    Songsel = SND_SEQ_EVENT_SONGSEL, 	
-    Start = SND_SEQ_EVENT_START,	
-    Stop = SND_SEQ_EVENT_STOP,	
+    Songsel = SND_SEQ_EVENT_SONGSEL,
+    Start = SND_SEQ_EVENT_START,
+    Stop = SND_SEQ_EVENT_STOP,
     SyncPos = SND_SEQ_EVENT_SYNC_POS,
-    Sysex = SND_SEQ_EVENT_SYSEX,	
+    Sysex = SND_SEQ_EVENT_SYSEX,
     System = SND_SEQ_EVENT_SYSTEM,
-    Tempo = SND_SEQ_EVENT_TEMPO,	
-    Tick = SND_SEQ_EVENT_TICK,	
+    Tempo = SND_SEQ_EVENT_TEMPO,
+    Tick = SND_SEQ_EVENT_TICK,
     Timesign = SND_SEQ_EVENT_TIMESIGN,
     TuneRequest = SND_SEQ_EVENT_TUNE_REQUEST,
     Usr0 = SND_SEQ_EVENT_USR0,
-    Usr1 = SND_SEQ_EVENT_USR1, 	
-    Usr2 = SND_SEQ_EVENT_USR2, 	
-    Usr3 = SND_SEQ_EVENT_USR3, 	
-    Usr4 = SND_SEQ_EVENT_USR4, 	
-    Usr5 = SND_SEQ_EVENT_USR5, 	
-    Usr6 = SND_SEQ_EVENT_USR6, 	
-    Usr7 = SND_SEQ_EVENT_USR7, 	
-    Usr8 = SND_SEQ_EVENT_USR8, 	
-    Usr9 = SND_SEQ_EVENT_USR9, 	
+    Usr1 = SND_SEQ_EVENT_USR1,
+    Usr2 = SND_SEQ_EVENT_USR2,
+    Usr3 = SND_SEQ_EVENT_USR3,
+    Usr4 = SND_SEQ_EVENT_USR4,
+    Usr5 = SND_SEQ_EVENT_USR5,
+    Usr6 = SND_SEQ_EVENT_USR6,
+    Usr7 = SND_SEQ_EVENT_USR7,
+    Usr8 = SND_SEQ_EVENT_USR8,
+    Usr9 = SND_SEQ_EVENT_USR9,
     UsrVar0 = SND_SEQ_EVENT_USR_VAR0,
     UsrVar1 = SND_SEQ_EVENT_USR_VAR1,
-    UsrVar2 = SND_SEQ_EVENT_USR_VAR2, 	
-    UsrVar3 = SND_SEQ_EVENT_USR_VAR3, 	
+    UsrVar2 = SND_SEQ_EVENT_USR_VAR2,
+    UsrVar3 = SND_SEQ_EVENT_USR_VAR3,
     UsrVar4 = SND_SEQ_EVENT_USR_VAR4,
 );
 
@@ -1301,12 +1301,12 @@ impl RemoveEvents {
     pub fn get_time(&self) -> time::Duration { unsafe {
         let mut d = alsa::snd_seq_timestamp_t { data: (*alsa::snd_seq_remove_events_get_time(self.0)).data };
         let t = &(*d.time());
-        
+
         time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
     } }
     pub fn get_dest(&self) -> Addr { unsafe {
         let a = &(*alsa::snd_seq_remove_events_get_dest(self.0));
-        
+
         Addr { client: a.client as i32, port: a.port as i32 }
     } }
     pub fn get_channel(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_channel(self.0) as i32 } }
@@ -1315,7 +1315,7 @@ impl RemoveEvents {
     } }
     pub fn get_tag(&self) -> u8 { unsafe { alsa::snd_seq_remove_events_get_tag(self.0) as u8 } }
 
-    
+
     pub fn set_condition(&self, value: Remove) { unsafe {
         alsa::snd_seq_remove_events_set_condition(self.0, value.bits() as c_uint);
     } }
@@ -1323,7 +1323,7 @@ impl RemoveEvents {
     pub fn set_time(&self, value: time::Duration) { unsafe {
         let mut d = alsa::snd_seq_timestamp_t {data: [0; 2]};
         let mut t = &mut (*d.time());
-        
+
         t.tv_sec = value.as_secs() as c_uint;
         t.tv_nsec = value.subsec_nanos() as c_uint;
 
@@ -1331,7 +1331,7 @@ impl RemoveEvents {
     } }
     pub fn set_dest(&self, value: Addr) { unsafe {
         let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
-        
+
         alsa::snd_seq_remove_events_set_dest(self.0, &a);
     } }
     pub fn set_channel(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_channel(self.0, value as c_int) } }
@@ -1377,7 +1377,7 @@ impl MidiEvent {
     pub fn encode<'a>(&'a mut self, buf: &[u8]) -> Result<(usize, Option<Event<'a>>)> {
         // The ALSA documentation clearly states that the event will be valid as long as the Encoder
         // is not messed with (because the data pointer for sysex events may point into the Encoder's
-        // buffer). We make this safe by taking self by unique reference and coupling it to 
+        // buffer). We make this safe by taking self by unique reference and coupling it to
         // the event's lifetime.
         let mut ev = unsafe { mem::zeroed() };
         let r = acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev))?;
@@ -1425,13 +1425,13 @@ fn seq_loopback() {
 
     // Create ports
     let sinfo = PortInfo::empty().unwrap();
-    sinfo.set_capability(READ | SUBS_READ);
-    sinfo.set_type(MIDI_GENERIC | APPLICATION);
+    sinfo.set_capability(PortCap::READ | PortCap::SUBS_READ);
+    sinfo.set_type(PortType::MIDI_GENERIC | PortType::APPLICATION);
     s.create_port(&sinfo).unwrap();
     let sport = sinfo.get_port();
     let dinfo = PortInfo::empty().unwrap();
-    dinfo.set_capability(WRITE | SUBS_WRITE);
-    dinfo.set_type(MIDI_GENERIC | APPLICATION);
+    dinfo.set_capability(PortCap::WRITE | PortCap::SUBS_WRITE);
+    dinfo.set_type(PortType::MIDI_GENERIC | PortType::APPLICATION);
     s.create_port(&dinfo).unwrap();
     let dport = dinfo.get_port();
 
@@ -1451,7 +1451,7 @@ fn seq_loopback() {
     println!("Sending {:?}", e);
     s.event_output(&mut e).unwrap();
     s.drain_output().unwrap();
- 
+
     // Receive the note!
     let mut input = s.input();
     let e2 = input.event_input().unwrap();
@@ -1516,8 +1516,9 @@ fn seq_has_data() {
 #[test]
 fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let info = RemoveEvents::new()?;
-    
-    info.set_condition(REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
+
+
+    info.set_condition(Remove::INPUT | Remove::DEST | Remove::TIME_BEFORE | Remove::TAG_MATCH);
     info.set_queue(123);
     info.set_time(time::Duration::new(456, 789));
     info.set_dest(Addr { client: 212, port: 121 });
@@ -1525,7 +1526,7 @@ fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
     info.set_event_type(EventType::Noteon);
     info.set_tag(213);
 
-    assert_eq!(info.get_condition(), REMOVE_INPUT | REMOVE_DEST | REMOVE_TIME_BEFORE | REMOVE_TAG_MATCH);
+    assert_eq!(info.get_condition(), Remove::INPUT | Remove::DEST | Remove::TIME_BEFORE | Remove::TAG_MATCH);
     assert_eq!(info.get_queue(), 123);
     assert_eq!(info.get_time(), time::Duration::new(456, 789));
     assert_eq!(info.get_dest(), Addr { client: 212, port: 121 });
@@ -1542,13 +1543,13 @@ fn seq_portsubscribeiter() {
 
     // Create ports
     let sinfo = PortInfo::empty().unwrap();
-    sinfo.set_capability(READ | SUBS_READ);
-    sinfo.set_type(MIDI_GENERIC | APPLICATION);
+    sinfo.set_capability(PortCap::READ | PortCap::SUBS_READ);
+    sinfo.set_type(PortType::MIDI_GENERIC | PortType::APPLICATION);
     s.create_port(&sinfo).unwrap();
     let sport = sinfo.get_port();
     let dinfo = PortInfo::empty().unwrap();
-    dinfo.set_capability(WRITE | SUBS_WRITE);
-    dinfo.set_type(MIDI_GENERIC | APPLICATION);
+    dinfo.set_capability(PortCap::WRITE | PortCap::SUBS_WRITE);
+    dinfo.set_type(PortType::MIDI_GENERIC | PortType::APPLICATION);
     s.create_port(&dinfo).unwrap();
     let dport = dinfo.get_port();
 

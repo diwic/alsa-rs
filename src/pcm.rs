@@ -282,7 +282,7 @@ impl Drop for PCM {
 }
 
 
-impl poll::PollDescriptors for PCM {
+impl poll::Descriptors for PCM {
     fn count(&self) -> usize {
         unsafe { alsa::snd_pcm_poll_descriptors_count(self.0) as usize }
     }
@@ -290,10 +290,10 @@ impl poll::PollDescriptors for PCM {
         let z = unsafe { alsa::snd_pcm_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
         from_code("snd_pcm_poll_descriptors", z).map(|_| z as usize)
     }
-    fn revents(&self, p: &[pollfd]) -> Result<poll::PollFlags> {
+    fn revents(&self, p: &[pollfd]) -> Result<poll::Flags> {
         let mut r = 0;
         let z = unsafe { alsa::snd_pcm_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
-        from_code("snd_pcm_poll_descriptors_revents", z).map(|_| poll::PollFlags::from_bits_truncate(r as c_short))
+        from_code("snd_pcm_poll_descriptors_revents", z).map(|_| poll::Flags::from_bits_truncate(r as c_short))
     }
 }
 
