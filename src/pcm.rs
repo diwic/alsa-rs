@@ -633,6 +633,16 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
+    pub fn get_period_size_min(&self) -> Result<Frames> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_size_min(self.0, &mut v, &mut d)).map(|_| v as Frames)
+    }
+
+    pub fn get_period_size_max(&self) -> Result<Frames> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_size_max(self.0, &mut v, &mut d)).map(|_| v as Frames)
+    }
+
     pub fn set_periods(&self, v: u32, dir: ValueOr) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_periods((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
@@ -670,6 +680,16 @@ impl<'a> HwParams<'a> {
     pub fn get_buffer_size(&self) -> Result<Frames> {
         let mut v = 0;
         acheck!(snd_pcm_hw_params_get_buffer_size(self.0, &mut v)).map(|_| v as Frames)
+    }
+
+    pub fn get_buffer_size_min(&self) -> Result<Frames> {
+        let mut v = 0;
+        acheck!(snd_pcm_hw_params_get_buffer_size_min(self.0, &mut v)).map(|_| v as Frames)
+    }
+
+    pub fn get_buffer_size_max(&self) -> Result<Frames> {
+        let mut v = 0;
+        acheck!(snd_pcm_hw_params_get_buffer_size_max(self.0, &mut v)).map(|_| v as Frames)
     }
 
     pub fn get_buffer_time_max(&self) -> Result<u32> {
