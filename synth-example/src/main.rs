@@ -8,7 +8,9 @@ use alsa::{seq, pcm};
 use std::ffi::CString;
 use sample::signal;
 
-fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> Result<(), Box<error::Error>> {
+type Res<T> = Result<T, Box<dyn error::Error>>;
+
+fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> Res<()> {
     // Iterate over clients and clients' ports
     let our_id = s.client_id()?;
     let ci = seq::ClientIter::new(&s);
@@ -19,8 +21,8 @@ fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> Result<(), Box<err
             let caps = port.get_capability();
 
             // Check that it's a normal input port
-            if !caps.contains(seq::READ) || !caps.contains(seq::SUBS_READ) { continue; }
-            if !port.get_type().contains(seq::MIDI_GENERIC) { continue; }
+            if !caps.contains(seq::PortCap::READ) || !caps.contains(seq::PortCap::SUBS_READ) { continue; }
+            if !port.get_type().contains(seq::PortType::MIDI_GENERIC) { continue; }
 
             // Connect source and dest ports
             let subs = seq::PortSubscribe::empty()?;
@@ -32,9 +34,9 @@ fn connect_midi_source_ports(s: &alsa::Seq, our_port: i32) -> Result<(), Box<err
     }
 
     Ok(())
-} 
+}
 
-fn open_midi_dev() -> Result<alsa::Seq, Box<error::Error>> {
+fn open_midi_dev() -> Res<alsa::Seq> {
     // Open the sequencer.
     let s = alsa::Seq::open(None, Some(alsa::Direction::Capture), true)?;
     let cstr = CString::new("rust_synth_example").unwrap();
@@ -42,8 +44,8 @@ fn open_midi_dev() -> Result<alsa::Seq, Box<error::Error>> {
 
     // Create a destination port we can read from
     let mut dinfo = seq::PortInfo::empty().unwrap();
-    dinfo.set_capability(seq::WRITE | seq::SUBS_WRITE);
-    dinfo.set_type(seq::MIDI_GENERIC | seq::APPLICATION);
+    dinfo.set_capability(seq::PortCap::WRITE | seq::PortCap::SUBS_WRITE);
+    dinfo.set_type(seq::PortType::MIDI_GENERIC | seq::PortType::APPLICATION);
     dinfo.set_name(&cstr);
     s.create_port(&dinfo).unwrap();
     let dport = dinfo.get_port();
@@ -54,19 +56,19 @@ fn open_midi_dev() -> Result<alsa::Seq, Box<error::Error>> {
     Ok(s)
 }
 
-fn open_audio_dev() -> Result<(alsa::PCM, u32), Box<error::Error>> {
+fn open_audio_dev() -> Res<(alsa::PCM, u32)> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() < 2 { 
+    if args.len() < 2 {
         println!("Usage: 'cargo run --release CARD_NAME SAMPLE_RATE BUF_SIZE'");
         Err("No card name specified")?
     }
     let req_devname = format!("hw:{}", args[1]);
     let req_samplerate = args.get(2).map(|x| x.parse()).unwrap_or(Ok(48000))?;
-    let req_bufsize = args.get(3).map(|x| x.parse()).unwrap_or(Ok(256))?; // A few ms latency by default, that should be nice 
-    
+    let req_bufsize = args.get(3).map(|x| x.parse()).unwrap_or(Ok(256))?; // A few ms latency by default, that should be nice
+
     // Open the device
     let p = alsa::PCM::new(&req_devname, alsa::Direction::Playback, false)?;
-    
+
     // Set hardware parameters
     {
         let hwp = pcm::HwParams::any(&p)?;
@@ -158,16 +160,16 @@ impl Synth {
     }
 }
 
-impl Iterator for Synth { 
+impl Iterator for Synth {
     type Item = SF;
     fn next(&mut self) -> Option<Self::Item> {
         use sample::{Signal, Sample};
 
         // Mono -> Stereo
         if let Some(s) = self.stored_sample.take() { return Some(s) };
-        
+
         let mut z = 0f64;
-        for sig in &mut self.sigs { 
+        for sig in &mut self.sigs {
             let mut remove = false;
             if let &mut Some(ref mut i) = sig {
                 let barvalue = self.bar_values[i.baridx];
@@ -176,7 +178,7 @@ impl Iterator for Synth {
                     z += s[0].mul_amp(i.curvol * barvalue);
                 }
 
-                // Quick and dirty volume envelope to avoid clicks. 
+                // Quick and dirty volume envelope to avoid clicks.
                 if i.curvol != i.targetvol {
                     if i.targetvol == 0. {
                         i.curvol -= 0.002;
@@ -197,7 +199,7 @@ impl Iterator for Synth {
 }
 
 fn write_samples_direct(p: &alsa::PCM, mmap: &mut alsa::direct::pcm::MmapPlayback<SF>, synth: &mut Synth)
-    -> Result<bool, Box<error::Error>> {
+    -> Res<bool> {
 
     if mmap.avail() > 0 {
         // Write samples to DMA area from iterator
@@ -214,7 +216,7 @@ fn write_samples_direct(p: &alsa::PCM, mmap: &mut alsa::direct::pcm::MmapPlaybac
     Ok(true) // Call us again, please, there might be more data to write
 }
 
-fn write_samples_io(p: &alsa::PCM, io: &mut alsa::pcm::IO<SF>, synth: &mut Synth) -> Result<bool, Box<error::Error>> {
+fn write_samples_io(p: &alsa::PCM, io: &mut alsa::pcm::IO<SF>, synth: &mut Synth) -> Res<bool> {
     let avail = match p.avail_update() {
         Ok(n) => n,
         Err(e) => {
@@ -231,7 +233,7 @@ fn write_samples_io(p: &alsa::PCM, io: &mut alsa::pcm::IO<SF>, synth: &mut Synth
             for sample in buf.iter_mut() {
                 *sample = synth.next().unwrap()
             };
-            buf.len() / 2 
+            buf.len() / 2
         })?;
     }
     use alsa::pcm::State;
@@ -243,7 +245,7 @@ fn write_samples_io(p: &alsa::PCM, io: &mut alsa::pcm::IO<SF>, synth: &mut Synth
     }
 }
 
-fn read_midi_event(input: &mut seq::Input, synth: &mut Synth) -> Result<bool, Box<error::Error>> {
+fn read_midi_event(input: &mut seq::Input, synth: &mut Synth) -> Res<bool> {
     if input.event_input_pending(true)? == 0 { return Ok(false); }
     let ev = input.event_input()?;
     // println!("Received: {:?}", ev);
@@ -270,10 +272,10 @@ fn read_midi_event(input: &mut seq::Input, synth: &mut Synth) -> Result<bool, Bo
 }
 
 
-fn run() -> Result<(), Box<error::Error>> {
+fn run() -> Res<()> {
     let (audio_dev, rate) = open_audio_dev()?;
     let midi_dev = open_midi_dev()?;
-    
+
     let mut midi_input = midi_dev.input();
 
     // 256 Voices synth
@@ -288,10 +290,10 @@ fn run() -> Result<(), Box<error::Error>> {
     use alsa::PollDescriptors;
     let mut fds = audio_dev.get()?;
     fds.append(&mut (&midi_dev, Some(alsa::Direction::Capture)).get()?);
-    
+
     // Let's use the fancy new "direct mode" for minimum overhead!
     let mut mmap = audio_dev.direct_mmap_playback::<SF>();
-    
+
     // Direct mode unavailable, use alsa-lib's mmap emulation instead
     let mut io = if mmap.is_err() {
         Some(audio_dev.io_i16()?)
