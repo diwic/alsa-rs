@@ -1,22 +1,30 @@
-Thin but safe wrappers for [ALSA](http://http://alsa-project.org).
+ALSA bindings for Rust
+=======================
 
-[API Documentation](http://docs.rs/alsa)
+Thin but safe wrappers for [ALSA](http://http://alsa-project.org), the most
+common API for accessing audio devices on Linux.
 
-[Crates.io](https://crates.io/crates/alsa)
+[![crates.io](https://img.shields.io/crates/v/alsa.svg)](https://crates.io/crates/alsa)
+[![API documentation](https://docs.rs/alsa/badge.svg)](https://docs.rs/alsa)
+[![license](https://img.shields.io/crates/l/alsa.svg)](https://crates.io/crates/alsa)
 
-Expect the following to work:
+The ALSA API is rather big, so everything is not covered yet, but expect the following to work:
 
- * Audio Playback
+ * Audio Playback (example in `pcm` module docs)
 
  * Audio Recording
 
  * Mixer controls
 
- * HCtl API (for jack detection)
+ * HCtl API (jack detection example in `hctl` module docs)
 
  * Raw midi
 
- * Midi sequencer API (most of it)
+ * Midi sequencer (most of it)
+
+ * Ctl API
+
+ * Device name hints (example in `device_name` module docs)
 
  * Enumerations of all of the above
 
@@ -45,5 +53,5 @@ Quickstart guide / API design:
 
  * Enumeration of cards, devices etc is done through structs implementing `Iterator`.
 
- * Many structs implement `Polldescriptors`, to combine with poll or mio. (Or just use `wait` if you don't need that functionality.)
-
+ * Many structs implement `poll::Descriptors`, to combine with poll or mio.
+   Or just use `wait` if you don't need non-blocking functionality.
