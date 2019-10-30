@@ -124,31 +124,4 @@ pub use crate::io::Output;
 // Reexported inside PCM module
 mod chmap;
 
-mod pcm_direct;
-
-/// Functions that bypass alsa-lib and talk directly to the kernel.
-pub mod direct {
-    /// This module bypasses alsa-lib and directly read and write into memory mapped kernel memory.
-    ///
-    /// In case of the sample memory, this is in many cases the DMA buffers that is transferred to the sound card.
-    ///
-    /// The reasons for doing this are:
-    ///
-    ///  * Minimum overhead where it matters most: let alsa-lib do the code heavy setup -
-    ///    then steal its file descriptor and deal with sample streaming from Rust.
-    ///  * RT-safety to the maximum extent possible. Creating/dropping any of these structs causes syscalls,
-    ///    but function calls on these are just read and write from memory. No syscalls, no memory allocations,
-    ///    not even loops (with the exception of `MmapPlayback::write` that loops over samples to write).
-    ///  * Possibility to allow Send + Sync for structs
-    ///  * It's a fun experiment and an interesting deep dive into how alsa-lib does things.
-    ///
-    /// Note: Not all sound card drivers support this direct method of communication; although almost all
-    /// modern/common ones do. It only works with hardware devices though (such as "hw:xxx" device strings),
-    /// don't expect it to work with, e g, the PulseAudio plugin or so.
-    ///
-    /// For an example of how to use this mode, look in the "synth-example" directory.
-    pub mod pcm {
-        pub use crate::pcm_direct::{SyncPtrStatus, Status, Control, MmapCapture, MmapPlayback, MmapIO, RawSamples};
-
-    }
-}
+pub mod direct;

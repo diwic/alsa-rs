@@ -1,4 +1,23 @@
-//! Experimental stuff
+/*!
+This module bypasses alsa-lib and directly read and write into memory mapped kernel memory.
+In case of the sample memory, this is in many cases the DMA buffers that is transferred to the sound card.
+
+The reasons for doing this are:
+
+ * Minimum overhead where it matters most: let alsa-lib do the code heavy setup -
+   then steal its file descriptor and deal with sample streaming from Rust.
+ * RT-safety to the maximum extent possible. Creating/dropping any of these structs causes syscalls,
+   but function calls on these are just read and write from memory. No syscalls, no memory allocations,
+   not even loops (with the exception of `MmapPlayback::write` that loops over samples to write).
+ * Possibility to allow Send + Sync for structs
+ * It's a fun experiment and an interesting deep dive into how alsa-lib does things.
+
+Note: Not all sound card drivers support this direct method of communication; although almost all
+modern/common ones do. It only works with hardware devices though (such as "hw:xxx" device strings),
+don't expect it to work with, e g, the PulseAudio plugin or so.
+
+For an example of how to use this mode, look in the "synth-example" directory.
+*/
 
 use {libc, nix};
 use std::{mem, ptr, fmt, cmp};
@@ -8,86 +27,7 @@ use crate::{pcm, PollDescriptors, Direction};
 use crate::pcm::Frames;
 use std::marker::PhantomData;
 
-// Some definitions from the kernel headers
-
-// const SNDRV_PCM_MMAP_OFFSET_DATA: c_uint = 0x00000000;
-const SNDRV_PCM_MMAP_OFFSET_STATUS: libc::c_uint = 0x80000000;
-const SNDRV_PCM_MMAP_OFFSET_CONTROL: libc::c_uint = 0x81000000;
-
-
-const SNDRV_PCM_SYNC_PTR_HWSYNC: libc::c_uint = 1;
-const SNDRV_PCM_SYNC_PTR_APPL: libc::c_uint = 2;
-const SNDRV_PCM_SYNC_PTR_AVAIL_MIN: libc::c_uint = 4;
-
-// #[repr(C)]
-#[allow(non_camel_case_types)]
-type snd_pcm_state_t = libc::c_int;
-
-// #[repr(C)]
-#[allow(non_camel_case_types)]
-type snd_pcm_uframes_t = libc::c_ulong;
-
-// I think?! Not sure how this will work with X32 ABI?!
-#[allow(non_camel_case_types)]
-type __kernel_off_t = libc::c_long;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct snd_pcm_mmap_status {
-	pub state: snd_pcm_state_t,		/* RO: state - SNDRV_PCM_STATE_XXXX */
-	pub pad1: libc::c_int,			/* Needed for 64 bit alignment */
-	pub hw_ptr: snd_pcm_uframes_t,	/* RO: hw ptr (0...boundary-1) */
-	pub tstamp: libc::timespec,		/* Timestamp */
-	pub suspended_state: snd_pcm_state_t, /* RO: suspended stream state */
-	pub audio_tstamp: libc::timespec,	/* from sample counter or wall clock */
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct snd_pcm_mmap_control {
-	pub appl_ptr: snd_pcm_uframes_t,	/* RW: appl ptr (0...boundary-1) */
-	pub avail_min: snd_pcm_uframes_t,	/* RW: min available frames for wakeup */
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct snd_pcm_channel_info {
-	pub channel: libc::c_uint,
-	pub offset: __kernel_off_t,		/* mmap offset */
-	pub first: libc::c_uint,		/* offset to first sample in bits */
-	pub step: libc::c_uint, 		/* samples distance in bits */
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union snd_pcm_mmap_status_r {
-	pub status: snd_pcm_mmap_status,
-	pub reserved: [libc::c_uchar; 64],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union snd_pcm_mmap_control_r {
-	pub control: snd_pcm_mmap_control,
-	pub reserved: [libc::c_uchar; 64],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct snd_pcm_sync_ptr {
-	pub flags: libc::c_uint,
-	pub s: snd_pcm_mmap_status_r,
-	pub c: snd_pcm_mmap_control_r,
-}
-
-ioctl_read!(sndrv_pcm_ioctl_channel_info, b'A', 0x32, snd_pcm_channel_info);
-ioctl_readwrite!(sndrv_pcm_ioctl_sync_ptr, b'A', 0x23, snd_pcm_sync_ptr);
-
-fn pagesize() -> usize {
-    unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
-}
-
-
+use super::ffi::*;
 
 /// Read PCM status via a simple kernel syscall, bypassing alsa-lib.
 ///
@@ -295,7 +235,7 @@ impl<S> Drop for DriverMemory<S> {
 }
 
 #[derive(Debug)]
-pub struct SampleData<S> {
+struct SampleData<S> {
     mem: DriverMemory<S>,
     frames: pcm::Frames,
     channels: u32,
@@ -423,7 +363,7 @@ impl<S, D: MmapDir> MmapIO<S, D> {
     }
 }
 
-pub fn new_mmap<S, D: MmapDir>(p: &pcm::PCM) -> Result<MmapIO<S, D>> { MmapIO::new(p) }
+pub (crate) fn new_mmap<S, D: MmapDir>(p: &pcm::PCM) -> Result<MmapIO<S, D>> { MmapIO::new(p) }
 
 impl<S, D: MmapDir> MmapIO<S, D> {
     /// Read current status
@@ -520,9 +460,9 @@ impl<S> MmapCapture<S> {
     ///
     /// When the iterator is dropped or depleted, the read samples will be committed, i e,
     /// the kernel can then write data to the location again. So do this ASAP.
-    pub fn iter<'a>(&'a mut self) -> Iter<'a, S> {
+    pub fn iter<'a>(&'a mut self) -> CaptureIter<'a, S> {
         let (data, more_data) = self.data_ptr();
-        Iter {
+        CaptureIter {
             m: self,
             samples: data,
             p_offs: 0,
@@ -532,7 +472,8 @@ impl<S> MmapCapture<S> {
     }
 }
 
-pub struct Iter<'a, S: 'static> {
+/// Iterator over captured samples
+pub struct CaptureIter<'a, S: 'static> {
     m: &'a MmapCapture<S>,
     samples: RawSamples<S>,
     p_offs: isize,
@@ -540,7 +481,7 @@ pub struct Iter<'a, S: 'static> {
     next_p: Option<RawSamples<S>>,
 }
 
-impl<'a, S: 'static + Copy>  Iter<'a, S> {
+impl<'a, S: 'static + Copy> CaptureIter<'a, S> {
     fn handle_max(&mut self) {
         self.p_offs = 0;
         if let Some(p2) = self.next_p.take() {
@@ -553,7 +494,7 @@ impl<'a, S: 'static + Copy>  Iter<'a, S> {
     }
 }
 
-impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
+impl<'a, S: 'static + Copy> Iterator for CaptureIter<'a, S> {
     type Item = S;
 
     #[inline]
@@ -569,7 +510,7 @@ impl<'a, S: 'static + Copy> Iterator for Iter<'a, S> {
     }
 }
 
-impl<'a, S: 'static> Drop for Iter<'a, S> {
+impl<'a, S: 'static> Drop for CaptureIter<'a, S> {
     fn drop(&mut self) {
         self.m.commit((self.read_samples / self.m.data.channels as isize) as Frames);
     }
