@@ -440,7 +440,7 @@ impl<'a> Iterator for PortIter<'a> {
 }
 
 bitflags! {
-    /// [SND_SEQ_PORT_CAP_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants
+    /// [SND_SEQ_PORT_CAP_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants
     pub struct PortCap: u32 {
         const READ = 1<<0;
         const WRITE = 1<<1;
@@ -454,7 +454,7 @@ bitflags! {
 }
 
 bitflags! {
-    /// [SND_SEQ_PORT_TYPE_xxx]http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants
+    /// [SND_SEQ_PORT_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_port.html) constants
     pub struct PortType: u32 {
         const SPECIFIC = (1<<0);
         const MIDI_GENERIC = (1<<1);
@@ -475,7 +475,7 @@ bitflags! {
 }
 
 bitflags! {
-    /// [SND_SEQ_REMOVE_xxx]https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants
+    /// [SND_SEQ_REMOVE_xxx](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) constants
     pub struct Remove: u32 {
         const INPUT = (1<<0);
         const OUTPUT = (1<<1);
