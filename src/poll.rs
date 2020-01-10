@@ -40,7 +40,7 @@ impl Descriptors for pollfd {
 
 /// Wrapper around the libc poll call.
 pub fn poll(fds: &mut[pollfd], timeout: i32) -> Result<usize> {
-    let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::c_ulong, timeout as libc::c_int) };
+    let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout as libc::c_int) };
     if r >= 0 { Ok(r as usize) } else {
          from_code("poll", -io::Error::last_os_error().raw_os_error().unwrap()).map(|_| unreachable!())
     }
