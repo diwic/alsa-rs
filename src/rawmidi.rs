@@ -119,7 +119,7 @@ impl Rawmidi {
 
     pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<Rawmidi> {
         let mut h = ptr::null_mut();
-        let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_RAWMIDI_NONBLOCK does not exist in alsa-sys
+        let flags = if nonblock { 2 } else { 0 }; // FIXME: alsa::SND_RAWMIDI_NONBLOCK does not exist in alsa-sys
         acheck!(snd_rawmidi_open(
             if dir == Direction::Capture { &mut h } else { ptr::null_mut() },
             if dir == Direction::Playback { &mut h } else { ptr::null_mut() },
