@@ -407,7 +407,7 @@ alsa_enum!(
 
 alsa_enum!(
     /// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    Format, ALL_FORMATS[45],
+    Format, ALL_FORMATS[48],
 
     Unknown = SND_PCM_FORMAT_UNKNOWN,
     S8 = SND_PCM_FORMAT_S8,
@@ -454,9 +454,9 @@ alsa_enum!(
     G723401B = SND_PCM_FORMAT_G723_40_1B,
     DSDU8 = SND_PCM_FORMAT_DSD_U8,
     DSDU16LE = SND_PCM_FORMAT_DSD_U16_LE,
-//    DSDU32LE = SND_PCM_FORMAT_DSD_U32_LE,
-//    DSDU16BE = SND_PCM_FORMAT_DSD_U16_BE,
-//    DSDU32BE = SND_PCM_FORMAT_DSD_U32_BE,
+    DSDU32LE = SND_PCM_FORMAT_DSD_U32_LE,
+    DSDU16BE = SND_PCM_FORMAT_DSD_U16_BE,
+    DSDU32BE = SND_PCM_FORMAT_DSD_U32_BE,
 );
 
 impl Format {
