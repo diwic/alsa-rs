@@ -549,7 +549,7 @@ fn record_from_plughw_rw() {
     assert_eq!(ss.state(), State::Running);
     assert!(ss.hw_ptr() >= 512);
     let t2 = ss.htstamp();
-    assert!(t2.tv_sec > 0 || t2.tv_sec > 0);
+    assert!(t2.tv_sec > 0 || t2.tv_nsec > 0);
 }
 
 
