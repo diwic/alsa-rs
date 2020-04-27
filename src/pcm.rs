@@ -503,6 +503,15 @@ alsa_enum!(
     RWNonInterleaved = SND_PCM_ACCESS_RW_NONINTERLEAVED,
 );
 
+alsa_enum!(
+    /// [SND_PCM_TSTAMP_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    TstampType, ALL_TSTAMP_TYPES[3],
+
+    Gettimeofday = SND_PCM_TSTAMP_TYPE_GETTIMEOFDAY,
+    Monotonic = SND_PCM_TSTAMP_TYPE_MONOTONIC,
+    MonotonicRaw = SND_PCM_TSTAMP_TYPE_MONOTONIC_RAW,
+);
+
 /// [snd_pcm_hw_params_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___h_w___params.html) wrapper
 pub struct HwParams<'a>(*mut alsa::snd_pcm_hw_params_t, &'a PCM);
 
@@ -804,6 +813,16 @@ impl<'a> SwParams<'a> {
     pub fn get_tstamp_mode(&self) -> Result<bool> {
         let mut v = 0;
         acheck!(snd_pcm_sw_params_get_tstamp_mode(self.0, &mut v)).map(|_| v != 0)
+    }
+
+    pub fn set_tstamp_type(&self, v: TstampType) -> Result<()> {
+        acheck!(snd_pcm_sw_params_set_tstamp_type((self.1).0, self.0, v as u32)).map(|_| ())
+    }
+
+    pub fn get_tstamp_type(&self) -> Result<TstampType> {
+        let mut v = 0;
+        acheck!(snd_pcm_sw_params_get_tstamp_type(self.0, &mut v))?;
+        TstampType::from_c_int(v as c_int, "snd_pcm_sw_params_get_tstamp_type")
     }
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
