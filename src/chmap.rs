@@ -124,7 +124,7 @@ impl Iterator for ChmapsQuery {
         let p = unsafe { *self.0.offset(self.1) };
         if p == ptr::null_mut() { return None; }
         self.1 += 1;
-        let t = ChmapType::from_c_int(unsafe { (*p)._type } as libc::c_int, "snd_pcm_query_chmaps").unwrap();
+        let t = ChmapType::from_c_int(unsafe { (*p).type_ } as libc::c_int, "snd_pcm_query_chmaps").unwrap();
         let m = Chmap(unsafe { &mut (*p).map }, false);
         Some((t, m))
     }
