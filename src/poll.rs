@@ -5,7 +5,7 @@
 use libc;
 use super::error::*;
 use std::io;
-use libc::pollfd;
+pub use libc::pollfd;
 
 
 bitflags! {
