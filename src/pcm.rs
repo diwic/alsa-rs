@@ -22,7 +22,7 @@
 //! // Make sure we don't start the stream too early
 //! let hwp = pcm.hw_params_current().unwrap();
 //! let swp = pcm.sw_params_current().unwrap();
-//! swp.set_start_threshold(hwp.get_buffer_size().unwrap() - hwp.get_period_size().unwrap()).unwrap();
+//! swp.set_start_threshold(hwp.get_buffer_size().unwrap()).unwrap();
 //! pcm.sw_params(&swp).unwrap();
 //!
 //! // Make a sine wave
@@ -932,7 +932,7 @@ fn playback_to_default() {
 
     let hwp = pcm.hw_params_current().unwrap();
     let swp = pcm.sw_params_current().unwrap();
-    swp.set_start_threshold(hwp.get_buffer_size().unwrap() - hwp.get_period_size().unwrap()).unwrap();
+    swp.set_start_threshold(hwp.get_buffer_size().unwrap()).unwrap();
     pcm.sw_params(&swp).unwrap();
 
     println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
