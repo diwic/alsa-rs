@@ -187,16 +187,22 @@ impl PCM {
         }
     }
 
-    pub fn io_i8<'a>(&'a self) -> Result<IO<'a, i8>> { self.verify_format(Format::S8).map(|_| IO::new(&self)) }
-    pub fn io_u8<'a>(&'a self) -> Result<IO<'a, u8>> { self.verify_format(Format::U8).map(|_| IO::new(&self)) }
-    pub fn io_i16<'a>(&'a self) -> Result<IO<'a, i16>> { self.verify_format(Format::s16()).map(|_| IO::new(&self)) }
-    pub fn io_u16<'a>(&'a self) -> Result<IO<'a, u16>> { self.verify_format(Format::u16()).map(|_| IO::new(&self)) }
-    pub fn io_i32<'a>(&'a self) -> Result<IO<'a, i32>> { self.verify_format(Format::s32()).map(|_| IO::new(&self)) }
-    pub fn io_u32<'a>(&'a self) -> Result<IO<'a, u32>> { self.verify_format(Format::u32()).map(|_| IO::new(&self)) }
-    pub fn io_f32<'a>(&'a self) -> Result<IO<'a, f32>> { self.verify_format(Format::float()).map(|_| IO::new(&self)) }
-    pub fn io_f64<'a>(&'a self) -> Result<IO<'a, f64>> { self.verify_format(Format::float64()).map(|_| IO::new(&self)) }
+    pub fn io_i8<'a>(&'a self) -> Result<IO<'a, i8>> { self.io_checked() }
+    pub fn io_u8<'a>(&'a self) -> Result<IO<'a, u8>> { self.io_checked() }
+    pub fn io_i16<'a>(&'a self) -> Result<IO<'a, i16>> { self.io_checked() }
+    pub fn io_u16<'a>(&'a self) -> Result<IO<'a, u16>> { self.io_checked() }
+    pub fn io_i32<'a>(&'a self) -> Result<IO<'a, i32>> { self.io_checked() }
+    pub fn io_u32<'a>(&'a self) -> Result<IO<'a, u32>> { self.io_checked() }
+    pub fn io_f32<'a>(&'a self) -> Result<IO<'a, f32>> { self.io_checked() }
+    pub fn io_f64<'a>(&'a self) -> Result<IO<'a, f64>> { self.io_checked() }
 
+    pub fn io_checked<'a, S: IoFormat>(&'a self) -> Result<IO<'a, S>> {
+        self.verify_format(S::FORMAT).map(|_| IO::new(&self))
+    }
+
+    #[deprecated(note = "renamed to io_bytes")]
     pub fn io<'a>(&'a self) -> IO<'a, u8> { IO::new(&self) }
+    pub fn io_bytes<'a>(&'a self) -> IO<'a, u8> { IO::new(&self) }
 
     /// Read buffers by talking to the kernel directly, bypassing alsa-lib.
     pub fn direct_mmap_capture<S>(&self) -> Result<crate::direct::pcm::MmapCapture<S>> {
@@ -464,11 +470,12 @@ alsa_enum!(
 );
 
 impl Format {
-    #[cfg(target_endian = "little")] pub fn s16() -> Format { Format::S16LE }
-    #[cfg(target_endian = "big")] pub fn s16() -> Format { Format::S16BE }
-
-    #[cfg(target_endian = "little")] pub fn u16() -> Format { Format::U16LE }
-    #[cfg(target_endian = "big")] pub fn u16() -> Format { Format::U16BE }
+    pub fn s16() -> Format { <i16 as IoFormat>::FORMAT }
+    pub fn u16() -> Format { <u16 as IoFormat>::FORMAT }
+    pub fn s32() -> Format { <i32 as IoFormat>::FORMAT }
+    pub fn u32() -> Format { <u32 as IoFormat>::FORMAT }
+    pub fn float() -> Format { <f32 as IoFormat>::FORMAT }
+    pub fn float64() -> Format { <f64 as IoFormat>::FORMAT }
 
     #[cfg(target_endian = "little")] pub fn s24() -> Format { Format::S24LE }
     #[cfg(target_endian = "big")] pub fn s24() -> Format { Format::S24BE }
@@ -476,21 +483,55 @@ impl Format {
     #[cfg(target_endian = "little")] pub fn u24() -> Format { Format::U24LE }
     #[cfg(target_endian = "big")] pub fn u24() -> Format { Format::U24BE }
 
-    #[cfg(target_endian = "little")] pub fn s32() -> Format { Format::S32LE }
-    #[cfg(target_endian = "big")] pub fn s32() -> Format { Format::S32BE }
-
-    #[cfg(target_endian = "little")] pub fn u32() -> Format { Format::U32LE }
-    #[cfg(target_endian = "big")] pub fn u32() -> Format { Format::U32BE }
-
-    #[cfg(target_endian = "little")] pub fn float() -> Format { Format::FloatLE }
-    #[cfg(target_endian = "big")] pub fn float() -> Format { Format::FloatBE }
-
-    #[cfg(target_endian = "little")] pub fn float64() -> Format { Format::Float64LE }
-    #[cfg(target_endian = "big")] pub fn float64() -> Format { Format::Float64BE }
-
     #[cfg(target_endian = "little")] pub fn iec958_subframe() -> Format { Format::IEC958SubframeLE }
     #[cfg(target_endian = "big")] pub fn iec958_subframe() -> Format { Format::IEC958SubframeBE }
 }
+
+
+pub trait IoFormat: Copy {
+    const FORMAT: Format;
+}
+
+impl IoFormat for i8 { const FORMAT: Format = Format::S8; }
+impl IoFormat for u8 { const FORMAT: Format = Format::U8; }
+
+impl IoFormat for i16 {
+    #[cfg(target_endian = "little")]
+    const FORMAT: Format = Format::S16LE;
+    #[cfg(target_endian = "big")]
+    const FORMAT: Format = Format::S16BE;
+}
+impl IoFormat for u16 {
+    #[cfg(target_endian = "little")]
+    const FORMAT: Format = Format::U16LE;
+    #[cfg(target_endian = "big")]
+    const FORMAT: Format = Format::U16BE;
+}
+impl IoFormat for i32 {
+    #[cfg(target_endian = "little")]
+    const FORMAT: Format = Format::S32LE;
+    #[cfg(target_endian = "big")]
+    const FORMAT: Format = Format::S32BE;
+}
+impl IoFormat for u32 {
+    #[cfg(target_endian = "little")]
+    const FORMAT: Format = Format::U32LE;
+    #[cfg(target_endian = "big")]
+    const FORMAT: Format = Format::U32BE;
+}
+impl IoFormat for f32 {
+    #[cfg(target_endian = "little")]
+    const FORMAT: Format = Format::FloatLE;
+    #[cfg(target_endian = "big")]
+    const FORMAT: Format = Format::FloatBE;
+}
+impl IoFormat for f64 {
+    #[cfg(target_endian = "little")]
+    const FORMAT: Format = Format::Float64LE;
+    #[cfg(target_endian = "big")]
+    const FORMAT: Format = Format::Float64BE;
+}
+
 
 alsa_enum!(
     /// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
