@@ -5,6 +5,7 @@ use super::error::*;
 use crate::alsa;
 use super::{Direction, poll};
 use std::{ptr, fmt, mem, slice, time, cell};
+use std::str::{FromStr, Split};
 use std::ffi::{CStr};
 use std::borrow::Cow;
 
@@ -369,6 +370,14 @@ impl PortInfo {
         unsafe { alsa::snd_seq_port_info_set_type(self.0, c.bits() as c_uint) }
     }
 
+    /// Returns an Addr containing this PortInfo's client and port id.
+    pub fn addr(&self) -> Addr {
+        Addr {
+            client: self.get_client(),
+            port: self.get_port(),
+        }
+    }
+
     pub fn get_midi_channels(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_midi_channels(self.0) as i32 } }
     pub fn get_midi_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_midi_voices(self.0) as i32 } }
     pub fn get_synth_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_synth_voices(self.0) as i32 } }
@@ -472,6 +481,28 @@ bitflags! {
 pub struct Addr {
     pub client: i32,
     pub port: i32,
+}
+
+impl FromStr for Addr {
+    type Err = Box<dyn std::error::Error>;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let mut split: Split<'_, &str> = s.trim().split(":");
+        let client = split.next()
+                          .ok_or_else(|| "no client provided")?
+                          .parse::<i32>()?;
+        let port = split.next()
+                        .ok_or_else(|| "no port provided")?
+                        .parse::<i32>()?;
+        match split.next() {
+            Some(_) => {
+                Err("too many arguments".into())
+            },
+            None => {
+                Ok(Addr { client, port })
+            }
+        }
+    }
 }
 
 impl Addr {
