@@ -5,5 +5,5 @@ authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 [dependencies]
 sample = "0.7"
-alsa = "0.4"
+alsa = { path = ".." }
 clap = "2.20"
