@@ -13,7 +13,7 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-libc = "0.2.81"
+libc = "0.2.65"
 alsa-sys = "0.3.0"
 bitflags = "1.2.1"
 nix = "0.19.1"
