@@ -174,8 +174,7 @@ impl PCM {
     }
 
     pub fn status(&self) -> Result<Status> {
-        let z = Status::new();
-        acheck!(snd_pcm_status(self.0, z.ptr())).map(|_| z)
+        StatusBuilder::new().build(self)
     }
 
     fn verify_format(&self, f: Format) -> Result<()> {
@@ -770,6 +769,15 @@ impl<'a> HwParams<'a> {
         unsafe { alsa::snd_pcm_hw_params_can_resume(self.0) != 0 }
     }
 
+    /// Returns true if the alsa stream supports the provided `AudioTstampType`, false if not.
+    ///
+    /// This function should only be called when the configuration space contains a single
+    /// configuration. Call `PCM::hw_params` to choose a single configuration from the
+    /// configuration space.
+    pub fn supports_audio_ts_type(&self, type_: AudioTstampType) -> bool {
+        unsafe { alsa::snd_pcm_hw_params_supports_audio_ts_type(self.0, type_ as libc::c_int) != 0 }
+    }
+
     pub fn dump(&self, o: &mut Output) -> Result<()> {
         acheck!(snd_pcm_hw_params_dump(self.0, super::io::output_handle(o))).map(|_| ())
     }
@@ -923,6 +931,47 @@ impl Status {
         acheck!(snd_pcm_status_dump(self.ptr(), super::io::output_handle(o))).map(|_| ())
     }
 }
+
+/// Builder for [`Status`].
+///
+/// Allows setting the audio timestamp configuration before retrieving the
+/// status from the stream.
+pub struct StatusBuilder(Status);
+
+impl StatusBuilder {
+    pub fn new() -> Self {
+        StatusBuilder(Status::new())
+    }
+
+    pub fn audio_htstamp_config(
+        self,
+        type_requested: AudioTstampType,
+        report_delay: bool,
+    ) -> Self {
+        let mut cfg: alsa::snd_pcm_audio_tstamp_config_t = unsafe { std::mem::zeroed() };
+        cfg.set_type_requested(type_requested as _);
+        cfg.set_report_delay(report_delay as _);
+        unsafe { alsa::snd_pcm_status_set_audio_htstamp_config(self.0.ptr(), &mut cfg) };
+        self
+    }
+
+    pub fn build(self, pcm: &PCM) -> Result<Status> {
+        acheck!(snd_pcm_status(pcm.0, self.0.ptr())).map(|_| self.0)
+    }
+}
+
+alsa_enum!(
+    #[non_exhaustive]
+    /// [SND_PCM_AUDIO_TSTAMP_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
+    AudioTstampType, ALL_AUDIO_TSTAMP_TYPES[6],
+
+    Compat = SND_PCM_AUDIO_TSTAMP_TYPE_COMPAT,
+    Default = SND_PCM_AUDIO_TSTAMP_TYPE_DEFAULT,
+    Link = SND_PCM_AUDIO_TSTAMP_TYPE_LINK,
+    LinkAbsolute = SND_PCM_AUDIO_TSTAMP_TYPE_LINK_ABSOLUTE,
+    LinkEstimated = SND_PCM_AUDIO_TSTAMP_TYPE_LINK_ESTIMATED,
+    LinkSynchronized = SND_PCM_AUDIO_TSTAMP_TYPE_LINK_SYNCHRONIZED,
+);
 
 #[test]
 fn info_from_default() {
