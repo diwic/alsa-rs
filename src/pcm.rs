@@ -471,21 +471,21 @@ alsa_enum!(
 );
 
 impl Format {
-    pub fn s16() -> Format { <i16 as IoFormat>::FORMAT }
-    pub fn u16() -> Format { <u16 as IoFormat>::FORMAT }
-    pub fn s32() -> Format { <i32 as IoFormat>::FORMAT }
-    pub fn u32() -> Format { <u32 as IoFormat>::FORMAT }
-    pub fn float() -> Format { <f32 as IoFormat>::FORMAT }
-    pub fn float64() -> Format { <f64 as IoFormat>::FORMAT }
+    pub const fn s16() -> Format { <i16 as IoFormat>::FORMAT }
+    pub const fn u16() -> Format { <u16 as IoFormat>::FORMAT }
+    pub const fn s32() -> Format { <i32 as IoFormat>::FORMAT }
+    pub const fn u32() -> Format { <u32 as IoFormat>::FORMAT }
+    pub const fn float() -> Format { <f32 as IoFormat>::FORMAT }
+    pub const fn float64() -> Format { <f64 as IoFormat>::FORMAT }
 
-    #[cfg(target_endian = "little")] pub fn s24() -> Format { Format::S24LE }
-    #[cfg(target_endian = "big")] pub fn s24() -> Format { Format::S24BE }
+    #[cfg(target_endian = "little")] pub const fn s24() -> Format { Format::S24LE }
+    #[cfg(target_endian = "big")] pub const fn s24() -> Format { Format::S24BE }
 
-    #[cfg(target_endian = "little")] pub fn u24() -> Format { Format::U24LE }
-    #[cfg(target_endian = "big")] pub fn u24() -> Format { Format::U24BE }
+    #[cfg(target_endian = "little")] pub const fn u24() -> Format { Format::U24LE }
+    #[cfg(target_endian = "big")] pub const fn u24() -> Format { Format::U24BE }
 
-    #[cfg(target_endian = "little")] pub fn iec958_subframe() -> Format { Format::IEC958SubframeLE }
-    #[cfg(target_endian = "big")] pub fn iec958_subframe() -> Format { Format::IEC958SubframeBE }
+    #[cfg(target_endian = "little")] pub const fn iec958_subframe() -> Format { Format::IEC958SubframeLE }
+    #[cfg(target_endian = "big")] pub const fn iec958_subframe() -> Format { Format::IEC958SubframeBE }
 }
 
 
