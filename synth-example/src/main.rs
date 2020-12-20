@@ -312,5 +312,5 @@ fn run() -> Res<()> {
 }
 
 fn main() {
-    if let Err(e) = run() { println!("Error ({}) {}", e.description(), e); }
+    if let Err(e) = run() { println!("Error: {}", e); }
 }
