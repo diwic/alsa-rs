@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Load loopback driver
+      run: sudo modprobe snd-aloop
     - name: Install dependencies
       run: sudo apt-get install --no-install-recommends -y libasound2-dev      
     - name: Build
