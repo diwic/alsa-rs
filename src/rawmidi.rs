@@ -66,6 +66,25 @@ impl Info {
     }
 }
 
+/// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
+pub struct Status(*mut alsa::snd_rawmidi_status_t);
+
+impl Status {
+    fn new() -> Result<Self> {
+        let mut p = ptr::null_mut();
+        acheck!(snd_rawmidi_status_malloc(&mut p)).map(|_| Status(p))
+    }
+}
+
+impl Status {
+    pub fn get_avail(&self) -> usize { unsafe { alsa::snd_rawmidi_status_get_avail(self.0 as *const _) } }
+    pub fn get_xruns(&self) -> usize { unsafe { alsa::snd_rawmidi_status_get_xruns(self.0 as *const _) } }
+}
+
+impl Drop for Status {
+    fn drop(&mut self) { unsafe { alsa::snd_rawmidi_status_free(self.0) }; }
+}
+
 
 impl<'a> Iter<'a> {
     pub fn new(c: &'a Ctl) -> Iter<'a> { Iter { ctl: c, device: -1, in_count: 0, out_count: 0, current: 0 }}
@@ -129,6 +148,10 @@ impl Rawmidi {
 
     pub fn info(&self) -> Result<Info> {
         Info::new().and_then(|i| acheck!(snd_rawmidi_info(self.0, i.0)).map(|_| i))
+    }
+
+    pub fn status(&self) -> Result<Status> {
+        Status::new().and_then(|i| acheck!(snd_rawmidi_status(self.0, i.0)).map(|_| i))
     }
 
     pub fn drop(&self) -> Result<()> { acheck!(snd_rawmidi_drop(self.0)).map(|_| ()) }
