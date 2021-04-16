@@ -5,4 +5,4 @@ authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 [dependencies]
 sample = "0.7"
-alsa = { path = "..", version = "0.4" }
+alsa = { path = "..", version = "0.5" }
