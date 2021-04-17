@@ -1,12 +1,9 @@
 // A quickly made Hammond organ.
 
-extern crate alsa;
-extern crate sample;
-
 use std::{iter, error};
 use alsa::{seq, pcm};
 use std::ffi::CString;
-use sample::signal;
+use dasp::signal;
 
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
@@ -163,7 +160,7 @@ impl Synth {
 impl Iterator for Synth {
     type Item = SF;
     fn next(&mut self) -> Option<Self::Item> {
-        use sample::{Signal, Sample};
+        use dasp::{signal::Signal, Sample};
 
         // Mono -> Stereo
         if let Some(s) = self.stored_sample.take() { return Some(s) };
@@ -175,7 +172,7 @@ impl Iterator for Synth {
                 let barvalue = self.bar_values[i.baridx];
                 if barvalue > 0.0 {
                     let s = i.sig.next();
-                    z += s[0].mul_amp(i.curvol * barvalue);
+                    z += s.mul_amp(i.curvol * barvalue);
                 }
 
                 // Quick and dirty volume envelope to avoid clicks.
