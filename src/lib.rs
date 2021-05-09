@@ -1,4 +1,4 @@
-//! Thin but safe wrappers for [ALSA](http://http://alsa-project.org).
+//! Thin but safe wrappers for [ALSA](https://alsa-project.org).
 //!
 //! [Github repo](https://github.com/diwic/alsa-rs)
 //!
@@ -8,7 +8,7 @@
 //! functions and structs might be added as requested.
 //!
 //! Most functions map 1-to-1 to alsa-lib functions, e g, `ctl::CardInfo::get_id()` is a wrapper around
-//! `snd_ctl_card_info_get_id` and the [alsa-lib documentation](http://www.alsa-project.org/alsa-doc/alsa-lib/)
+//! `snd_ctl_card_info_get_id` and the [alsa-lib documentation](https://www.alsa-project.org/alsa-doc/alsa-lib/)
 //! can be consulted for additional information.
 //!
 //! Enjoy!
