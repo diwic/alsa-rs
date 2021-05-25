@@ -18,7 +18,7 @@ struct EvExtPacked {
 
 /// [snd_seq_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___sequencer.html) wrapper
 ///
-/// To access the functions ``event_input`, `event_input_pending` and `set_input_buffer_size`,
+/// To access the functions `event_input`, `event_input_pending` and `set_input_buffer_size`,
 /// you first have to obtain an instance of `Input` by calling `input()`. Only one instance of
 /// `Input` may exist at any time for a given `Seq`.
 pub struct Seq(*mut alsa::snd_seq_t, cell::Cell<bool>);
