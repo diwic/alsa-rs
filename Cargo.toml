@@ -11,6 +11,7 @@ license = "Apache-2.0/MIT"
 categories = ["multimedia::audio", "api-bindings"]
 readme = "README.md"
 edition = "2018"
+include = ["README.md", "LICENSE-*", "Cargo.toml", "src/"]
 
 [dependencies]
 libc = "0.2.88"
