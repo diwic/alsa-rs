@@ -32,7 +32,7 @@ impl Mixer {
     pub fn find_selem(&self, id: &SelemId) -> Option<Selem> {
         let selem = unsafe { alsa::snd_mixer_find_selem(self.0, id.as_ptr()) };
 
-        if selem == ptr::null_mut() { None }
+        if selem.is_null() { None }
         else { Some(Selem(Elem {handle: selem, mixer: self})) }
     }
 
@@ -510,7 +510,7 @@ fn print_mixer_of_cards() {
                     print!("Playback = {} - {}", vmin, vmax);
                     print!(" ({} dB - {} dB)", mbmin.to_db(), mbmax.to_db());
                 }
-                println!("");
+                println!();
             }
 
             if selem.is_enumerated() {
@@ -520,7 +520,7 @@ fn print_mixer_of_cards() {
                 for v in SelemChannelId::all().iter().filter_map(|&v| selem.get_enum_item(v).ok()) {
                     print!("{}, ", selem.get_enum_item_name(v).unwrap());
                 }
-                println!("");
+                println!();
             }
 
             if selem.can_capture() {
@@ -528,7 +528,7 @@ fn print_mixer_of_cards() {
                 for channel in SelemChannelId::all() {
                     if selem.has_capture_channel(*channel) { print!("{}, ", channel) };
                 }
-                println!("");
+                println!();
                 print!("\t  Capture volumes: ");
                 for channel in SelemChannelId::all() {
                     if selem.has_capture_channel(*channel) { print!("{}: {} ({} dB), ", channel,
@@ -536,7 +536,7 @@ fn print_mixer_of_cards() {
                         match selem.get_capture_vol_db(*channel) {Ok(v) => format!("{}", v.to_db()), Err(_) => "n/a".to_string()}
                     );}
                 }
-                println!("");
+                println!();
             }
 
             if selem.can_playback() {
@@ -548,7 +548,7 @@ fn print_mixer_of_cards() {
                         if selem.has_playback_channel(*channel) { print!("{}, ", channel) };
                     }
                 }
-                println!("");
+                println!();
                 if selem.has_playback_volume() {
                     print!("\t  Playback volumes: ");
                     for channel in SelemChannelId::all() {
@@ -558,7 +558,7 @@ fn print_mixer_of_cards() {
                             match selem.get_playback_vol_db(*channel) {Ok(v) => format!("{}", v.to_db()), Err(_) => "n/a".to_string()}
                         );}
                     }
-                    println!("");
+                    println!();
                 }
             }
         }

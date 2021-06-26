@@ -1,7 +1,7 @@
 #![macro_use]
 
 use libc::{c_void, c_int, c_char, free};
-use std::{fmt, ptr, str};
+use std::{fmt, str};
 use std::ffi::CStr;
 use std::error::Error as StdError;
 
@@ -25,13 +25,13 @@ macro_rules! acheck {
 }
 
 pub fn from_const<'a>(func: &'static str, s: *const c_char) -> Result<&'a str> {
-    if s == ptr::null() { return Err(invalid_str(func)) };
+    if s.is_null() { return Err(invalid_str(func)) };
     let cc = unsafe { CStr::from_ptr(s) };
     str::from_utf8(cc.to_bytes()).map_err(|_| invalid_str(func))
 }
 
 pub fn from_alloc(func: &'static str, s: *mut c_char) -> Result<String> {
-    if s == ptr::null_mut() { return Err(invalid_str(func)) };
+    if s.is_null() { return Err(invalid_str(func)) };
     let c = unsafe { CStr::from_ptr(s) };
     let ss = str::from_utf8(c.to_bytes()).map_err(|_| {
         unsafe { free(s as *mut c_void); }
