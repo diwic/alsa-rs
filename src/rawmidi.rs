@@ -39,7 +39,7 @@ impl Info {
         };
         unsafe { alsa::snd_rawmidi_info_set_stream(r.0, d) };
         unsafe { alsa::snd_rawmidi_info_set_subdevice(r.0, sub as c_uint) };
-        acheck!(snd_ctl_rawmidi_info(ctl_ptr(&c), r.0)).map(|_| r)
+        acheck!(snd_ctl_rawmidi_info(ctl_ptr(c), r.0)).map(|_| r)
     }
 
     fn subdev_count(c: &Ctl, device: c_int) -> Result<(i32, i32)> {
@@ -95,21 +95,21 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<Result<Info>> {
         if self.current < self.in_count {
             self.current += 1;
-            return Some(Info::from_iter(&self.ctl, self.device, self.current-1, Direction::Capture));
+            return Some(Info::from_iter(self.ctl, self.device, self.current-1, Direction::Capture));
         }
         if self.current - self.in_count < self.out_count {
             self.current += 1;
-            return Some(Info::from_iter(&self.ctl, self.device, self.current-1-self.in_count, Direction::Playback));
+            return Some(Info::from_iter(self.ctl, self.device, self.current-1-self.in_count, Direction::Playback));
         }
 
-        let r = acheck!(snd_ctl_rawmidi_next_device(ctl_ptr(&self.ctl), &mut self.device));
+        let r = acheck!(snd_ctl_rawmidi_next_device(ctl_ptr(self.ctl), &mut self.device));
         match r {
             Err(e) => return Some(Err(e)),
             Ok(_) if self.device == -1 => return None,
             _ => {},
         }
         self.current = 0;
-        match Info::subdev_count(&self.ctl, self.device) {
+        match Info::subdev_count(self.ctl, self.device) {
             Err(e) => Some(Err(e)),
             Ok((oo, ii)) => {
                 self.in_count = ii;
@@ -161,7 +161,7 @@ impl Rawmidi {
         from_const("snd_rawmidi_name", c).map(|s| s.to_string())
     }
 
-    pub fn io<'a>(&'a self) -> IO<'a> { IO(&self) }
+    pub fn io(&self) -> IO { IO(self) }
 }
 
 impl poll::Descriptors for Rawmidi {
