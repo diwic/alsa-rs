@@ -69,8 +69,8 @@ impl Error {
 pub fn invalid_str(func: &'static str) -> Error { Error(func, nix::Error::InvalidUtf8) }
 
 impl StdError for Error {
-    fn description(&self) -> &str { "ALSA error" }
     fn source(&self) -> Option<&(dyn StdError + 'static)> { Some(&self.1) }
+    fn description(&self) -> &str { "ALSA error" }
 }
 
 impl fmt::Display for Error {

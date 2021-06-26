@@ -173,7 +173,7 @@ impl SelemId {
         s
     }
 
-    /// Returns an empty (zeroed) SelemId. This id is not a useable id and need to be initialized
+    /// Returns an empty (zeroed) SelemId. This id is not a usable id and need to be initialized
     /// like `SelemId::new()` does
     pub fn empty() -> SelemId {
         assert!(unsafe { alsa::snd_mixer_selem_id_sizeof() } as usize <= SELEM_ID_SIZE);
@@ -580,7 +580,7 @@ fn get_and_set_playback_volume() {
 
     let old: i64 = selem.get_playback_volume(channel).unwrap();
     let new: i64 = rmax / 2;
-    assert!( new != old );
+    assert_ne!(new, old);
 
     println!("Changing volume of {} from {} to {}", channel, old, new);
     selem.set_playback_volume(channel, new).unwrap();
@@ -608,7 +608,7 @@ fn get_and_set_capture_volume() {
 
     let old: i64 = selem.get_capture_volume(channel).unwrap();
     let new: i64 = rmax / 2;
-    assert!( new != old );
+    assert_ne!(new, old);
 
     println!("Changing volume of {} from {} to {}", channel, old, new);
     selem.set_capture_volume(channel, new).unwrap();

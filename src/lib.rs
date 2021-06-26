@@ -1,6 +1,6 @@
 //! Thin but safe wrappers for [ALSA](https://alsa-project.org).
 //!
-//! [Github repo](https://github.com/diwic/alsa-rs)
+//! [GitHub repo](https://github.com/diwic/alsa-rs)
 //!
 //! [Crates.io](https://crates.io/crates/alsa)
 //!

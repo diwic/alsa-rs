@@ -609,7 +609,7 @@ impl QuerySubscribe {
 }
 
 #[derive(Copy, Clone)]
-/// Iterates over port subscriptions for a givent client:port/type.
+/// Iterates over port subscriptions for a given client:port/type.
 pub struct PortSubscribeIter<'a> {
     seq: &'a Seq,
     addr: Addr,
@@ -663,7 +663,7 @@ impl<'a> Iterator for PortSubscribeIter<'a> {
 /// [snd_seq_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__event__t.html) wrapper
 ///
 /// Fields of the event is not directly exposed. Instead call `Event::new` to set data (which can be, e g, an EvNote).
-/// Use `get_type` and `get_data` to retreive data.
+/// Use `get_type` and `get_data` to retrieve data.
 ///
 /// The lifetime parameter refers to the lifetime of an associated external buffer that might be used for
 /// variable-length messages (e.g. SysEx).
@@ -720,7 +720,7 @@ impl<'a> Event<'a> {
     unsafe fn extract<'any>(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event<'any>> {
         let t = EventType::from_c_int((*z).type_ as c_int, func)?;
         let ext_data = if Event::has_ext_data(t) {
-            assert!((*z).flags & alsa::SND_SEQ_EVENT_LENGTH_MASK != alsa::SND_SEQ_EVENT_LENGTH_FIXED);
+            assert_ne!((*z).flags & alsa::SND_SEQ_EVENT_LENGTH_MASK, alsa::SND_SEQ_EVENT_LENGTH_FIXED);
             Some(Cow::Borrowed({
                 let zz: &EvExtPacked = &*(&(*z).data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _);
                 slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
@@ -853,12 +853,13 @@ impl<'a> fmt::Debug for Event<'a> {
 
 /// Low level methods to set/get data on an Event. Don't use these directly, use generic methods on Event instead.
 pub trait EventData {
+    fn get_data(ev: &Event) -> Self;
     fn has_data(e: EventType) -> bool;
     fn set_data(&self, ev: &mut Event);
-    fn get_data(ev: &Event) -> Self;
 }
 
 impl EventData for () {
+    fn get_data(_: &Event) -> Self {}
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::TuneRequest |
@@ -867,10 +868,14 @@ impl EventData for () {
              EventType::None)
     }
     fn set_data(&self, _: &mut Event) {}
-    fn get_data(_: &Event) -> Self {}
 }
 
 impl EventData for [u8; 12] {
+    fn get_data(ev: &Event) -> Self {
+         let d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &d.raw8 };
+         z.d
+    }
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::Echo |
@@ -890,11 +895,6 @@ impl EventData for [u8; 12] {
          let z = unsafe { &mut ev.0.data.raw8 };
          z.d = *self;
     }
-    fn get_data(ev: &Event) -> Self {
-         let d = unsafe { ptr::read(&ev.0.data) };
-         let z = unsafe { &d.raw8 };
-         z.d
-    }
 }
 
 
@@ -908,16 +908,16 @@ pub struct EvNote {
 }
 
 impl EventData for EvNote {
+    fn get_data(ev: &Event) -> Self {
+         let z: &alsa::snd_seq_ev_note_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         EvNote { channel: z.channel as u8, note: z.note as u8, velocity: z.velocity as u8, off_velocity: z.off_velocity as u8, duration: z.duration as u32 }
+    }
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::Note |
              EventType::Noteon |
              EventType::Noteoff |
              EventType::Keypress)
-    }
-    fn get_data(ev: &Event) -> Self {
-         let z: &alsa::snd_seq_ev_note_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
-         EvNote { channel: z.channel as u8, note: z.note as u8, velocity: z.velocity as u8, off_velocity: z.off_velocity as u8, duration: z.duration as u32 }
     }
     fn set_data(&self, ev: &mut Event) {
          let z: &mut alsa::snd_seq_ev_note_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
@@ -937,6 +937,10 @@ pub struct EvCtrl {
 }
 
 impl EventData for EvCtrl {
+    fn get_data(ev: &Event) -> Self {
+         let z: &alsa::snd_seq_ev_ctrl_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         EvCtrl { channel: z.channel as u8, param: z.param as u32, value: z.value as i32 }
+    }
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::Controller |
@@ -952,10 +956,6 @@ impl EventData for EvCtrl {
              EventType::Timesign |
              EventType::Keysign)
     }
-    fn get_data(ev: &Event) -> Self {
-         let z: &alsa::snd_seq_ev_ctrl_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
-         EvCtrl { channel: z.channel as u8, param: z.param as u32, value: z.value as i32 }
-    }
     fn set_data(&self, ev: &mut Event) {
          let z: &mut alsa::snd_seq_ev_ctrl_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
          z.channel = self.channel as c_uchar;
@@ -965,6 +965,10 @@ impl EventData for EvCtrl {
 }
 
 impl EventData for Addr {
+    fn get_data(ev: &Event) -> Self {
+         let z: &alsa::snd_seq_addr_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         Addr { client: z.client as i32, port: z.port as i32 }
+    }
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::ClientStart |
@@ -973,10 +977,6 @@ impl EventData for Addr {
              EventType::PortStart |
              EventType::PortExit |
              EventType::PortChange)
-    }
-    fn get_data(ev: &Event) -> Self {
-         let z: &alsa::snd_seq_addr_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
-         Addr { client: z.client as i32, port: z.port as i32 }
     }
     fn set_data(&self, ev: &mut Event) {
          let z: &mut alsa::snd_seq_addr_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
@@ -993,11 +993,6 @@ pub struct Connect {
 }
 
 impl EventData for Connect {
-    fn has_data(e: EventType) -> bool {
-         matches!(e,
-             EventType::PortSubscribed |
-             EventType::PortUnsubscribed)
-    }
     fn get_data(ev: &Event) -> Self {
          let d = unsafe { ptr::read(&ev.0.data) };
          let z = unsafe { &d.connect };
@@ -1005,6 +1000,11 @@ impl EventData for Connect {
              sender: Addr { client: z.sender.client as i32, port: z.sender.port as i32 },
              dest: Addr { client: z.dest.client as i32, port: z.dest.port as i32 }
          }
+    }
+    fn has_data(e: EventType) -> bool {
+         matches!(e,
+             EventType::PortSubscribed |
+             EventType::PortUnsubscribed)
     }
     fn set_data(&self, ev: &mut Event) {
          let z = unsafe { &mut ev.0.data.connect };
@@ -1027,6 +1027,11 @@ pub struct EvQueueControl<T> {
 }
 
 impl EventData for EvQueueControl<()> {
+    fn get_data(ev: &Event) -> Self {
+         let d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &d.queue };
+         EvQueueControl { queue: z.queue as i32, value: () }
+    }
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::Start |
@@ -1035,11 +1040,6 @@ impl EventData for EvQueueControl<()> {
              EventType::Clock |
              EventType::QueueSkew)
     }
-    fn get_data(ev: &Event) -> Self {
-         let d = unsafe { ptr::read(&ev.0.data) };
-         let z = unsafe { &d.queue };
-         EvQueueControl { queue: z.queue as i32, value: () }
-    }
     fn set_data(&self, ev: &mut Event) {
          let z = unsafe { &mut ev.0.data.queue };
          z.queue = self.queue as c_uchar;
@@ -1047,15 +1047,15 @@ impl EventData for EvQueueControl<()> {
 }
 
 impl EventData for EvQueueControl<i32> {
-    fn has_data(e: EventType) -> bool {
-         matches!(e,
-             EventType::Tempo)
-    }
     fn get_data(ev: &Event) -> Self { unsafe {
          let mut d = ptr::read(&ev.0.data);
          let z = &mut d.queue;
          EvQueueControl { queue: z.queue as i32, value: z.param.value as i32 }
     } }
+    fn has_data(e: EventType) -> bool {
+         matches!(e,
+             EventType::Tempo)
+    }
     fn set_data(&self, ev: &mut Event) { unsafe {
          let z = &mut ev.0.data.queue;
          z.queue = self.queue as c_uchar;
@@ -1064,17 +1064,17 @@ impl EventData for EvQueueControl<i32> {
 }
 
 impl EventData for EvQueueControl<u32> {
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut d.queue;
+         EvQueueControl { queue: z.queue as i32, value: z.param.position as u32 }
+    } }
     fn has_data(e: EventType) -> bool {
          matches!(e,
              EventType::SyncPos |
              EventType::Tick |
              EventType::SetposTick)
     }
-    fn get_data(ev: &Event) -> Self { unsafe {
-         let mut d = ptr::read(&ev.0.data);
-         let z = &mut d.queue;
-         EvQueueControl { queue: z.queue as i32, value: z.param.position as u32 }
-    } }
     fn set_data(&self, ev: &mut Event) { unsafe {
          let z = &mut ev.0.data.queue;
          z.queue = self.queue as c_uchar;
@@ -1083,16 +1083,16 @@ impl EventData for EvQueueControl<u32> {
 }
 
 impl EventData for EvQueueControl<time::Duration> {
-    fn has_data(e: EventType) -> bool {
-         matches!(e,
-             EventType::SetposTime)
-    }
     fn get_data(ev: &Event) -> Self { unsafe {
          let mut d = ptr::read(&ev.0.data);
          let z = &mut d.queue;
          let t = &mut z.param.time.time;
          EvQueueControl { queue: z.queue as i32, value: time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32) }
     } }
+    fn has_data(e: EventType) -> bool {
+         matches!(e,
+             EventType::SetposTime)
+    }
     fn set_data(&self, ev: &mut Event) { unsafe {
          let z = &mut ev.0.data.queue;
          z.queue = self.queue as c_uchar;
@@ -1112,15 +1112,15 @@ pub struct EvResult {
 }
 
 impl EventData for EvResult {
-    fn has_data(e: EventType) -> bool {
-         matches!(e,
-             EventType::System |
-             EventType::Result)
-    }
     fn get_data(ev: &Event) -> Self {
          let d = unsafe { ptr::read(&ev.0.data) };
          let z = unsafe { &d.result };
          EvResult { event: z.event as i32, result: z.result as i32 }
+    }
+    fn has_data(e: EventType) -> bool {
+         matches!(e,
+             EventType::System |
+             EventType::Result)
     }
     fn set_data(&self, ev: &mut Event) {
          let z = unsafe { &mut ev.0.data.result };
