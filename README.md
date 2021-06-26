@@ -55,3 +55,8 @@ Quickstart guide / API design:
 
  * Many structs implement `poll::Descriptors`, to combine with poll or mio.
    Or just use `wait` if you don't need non-blocking functionality.
+   
+Notes:
+
+ * To run the tests successfully, there must be a "default" sound card configured. This is usually not a problem when running on normal hardware, but some CI systems, docker images etc, might not have that configured by default. 
+
