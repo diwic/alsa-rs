@@ -158,6 +158,9 @@ impl PCM {
     pub fn state(&self) -> State { State::from_c_int(
         unsafe { alsa::snd_pcm_state(self.0) } as c_int, "snd_pcm_state").unwrap() }
 
+    /// Only used for debugging the alsa library. Please use the "state" function instead.
+    pub fn state_raw(&self) -> c_int { unsafe { alsa::snd_pcm_state(self.0) as c_int } }
+
     pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
     pub fn frames_to_bytes(&self, i: Frames) -> isize { unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }}
 
