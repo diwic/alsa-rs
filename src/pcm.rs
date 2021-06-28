@@ -155,10 +155,17 @@ impl PCM {
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
-    pub fn state(&self) -> State { State::from_c_int(
-        unsafe { alsa::snd_pcm_state(self.0) } as c_int, "snd_pcm_state").unwrap() }
+    pub fn state(&self) -> State { 
+        let rawstate = self.state_raw();
+        if let Ok(state) = State::from_c_int(rawstate, "snd_pcm_state") {
+            state
+        }
+        else {
+            panic!("snd_pcm_state returned an invalid value of {}", rawstate);
+        }
+    }
 
-    /// Only used for debugging the alsa library. Please use the "state" function instead.
+    /// Only used internally, and for debugging the alsa library. Please use the "state" function instead.
     pub fn state_raw(&self) -> c_int { unsafe { alsa::snd_pcm_state(self.0) as c_int } }
 
     pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
