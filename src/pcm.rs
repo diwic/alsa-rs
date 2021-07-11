@@ -490,6 +490,9 @@ impl Format {
     #[cfg(target_endian = "little")] pub const fn s24() -> Format { Format::S24LE }
     #[cfg(target_endian = "big")] pub const fn s24() -> Format { Format::S24BE }
 
+    #[cfg(target_endian = "little")] pub const fn s24_3() -> Format { Format::S243LE }
+    #[cfg(target_endian = "big")] pub const fn s24_3() -> Format { Format::S243BE }
+
     #[cfg(target_endian = "little")] pub const fn u24() -> Format { Format::U24LE }
     #[cfg(target_endian = "big")] pub const fn u24() -> Format { Format::U24BE }
 
