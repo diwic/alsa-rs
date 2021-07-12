@@ -499,11 +499,17 @@ impl Format {
     #[cfg(target_endian = "little")] pub const fn u24_3() -> Format { Format::U243LE }
     #[cfg(target_endian = "big")] pub const fn u24_3() -> Format { Format::U243BE }
 
-    #[cfg(target_endian = "little")] pub const fn u20_3() -> Format { Format::S203LE }
-    #[cfg(target_endian = "big")] pub const fn u20_3() -> Format { Format::S203BE }
+    #[cfg(target_endian = "little")] pub const fn s20_3() -> Format { Format::S203LE }
+    #[cfg(target_endian = "big")] pub const fn s20_3() -> Format { Format::S203BE }
+
+    #[cfg(target_endian = "little")] pub const fn u20_3() -> Format { Format::U203LE }
+    #[cfg(target_endian = "big")] pub const fn u20_3() -> Format { Format::U203BE }
 
     #[cfg(target_endian = "little")] pub const fn s18_3() -> Format { Format::S183LE }
     #[cfg(target_endian = "big")] pub const fn s18_3() -> Format { Format::S183BE }
+
+    #[cfg(target_endian = "little")] pub const fn u18_3() -> Format { Format::U183LE }
+    #[cfg(target_endian = "big")] pub const fn u18_3() -> Format { Format::U183BE }
 
     #[cfg(target_endian = "little")] pub const fn dsd_u16() -> Format { Format::DSDU16LE }
     #[cfg(target_endian = "big")] pub const fn dsd_u16() -> Format { Format::DSDU16BE }
