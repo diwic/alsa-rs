@@ -17,7 +17,7 @@ include = ["README.md", "LICENSE-*", "Cargo.toml", "src/"]
 libc = "0.2.88"
 alsa-sys = "0.3.1"
 bitflags = "1.2.1"
-nix = "0.21"
+nix = "0.23"
 
 [badges]
 is-it-maintained-issue-resolution = { repository = "diwic/alsa-rs" }

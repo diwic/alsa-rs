@@ -147,15 +147,13 @@ impl PCM {
     /// Returns Ok if the error was successfully recovered from, or the original
     /// error if the error was unhandled.
     pub fn try_recover(&self, err: Error, silent: bool) -> Result<()> {
-        if let Some(e) = err.errno() {
-            self.recover(e as c_int, silent)
-        } else { Err(err) }
+        self.recover(err.errno() as c_int, silent)
     }
 
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
-    pub fn state(&self) -> State { 
+    pub fn state(&self) -> State {
         let rawstate = self.state_raw();
         if let Ok(state) = State::from_c_int(rawstate, "snd_pcm_state") {
             state

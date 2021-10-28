@@ -49,24 +49,25 @@ pub fn from_code(func: &'static str, r: c_int) -> Result<c_int> {
 impl Error {
     pub fn new(func: &'static str, res: c_int) -> Error {
         let errno = nix::errno::Errno::from_i32(res as i32);
-        Error(func, nix::Error::from_errno(errno))
+        Error(func, errno)
     }
 
     pub fn unsupported(func: &'static str) -> Error {
-        Error(func, nix::Error::UnsupportedOperation)
+        Error(func, nix::Error::ENOTSUP)
     }
 
     /// The function which failed.
     pub fn func(&self) -> &'static str { self.0 }
 
-    /// The errno, if any.
-    pub fn errno(&self) -> Option<nix::errno::Errno> { if let nix::Error::Sys(x) = self.1 { Some(x) } else { None } }
+
+    /// Underlying error
+    pub fn errno(&self) -> nix::Error { self.1 }
 
     /// Underlying error
     pub fn nix_error(&self) -> nix::Error { self.1 }
 }
 
-pub fn invalid_str(func: &'static str) -> Error { Error(func, nix::Error::InvalidUtf8) }
+pub fn invalid_str(func: &'static str) -> Error { Error(func, nix::Error::EILSEQ) }
 
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> { Some(&self.1) }
@@ -89,5 +90,5 @@ fn broken_pcm_name() {
     use std::ffi::CString;
     let e = crate::PCM::open(&*CString::new("this_PCM_does_not_exist").unwrap(), crate::Direction::Playback, false).err().unwrap();
     assert_eq!(e.func(), "snd_pcm_open");
-    assert_eq!(e.errno().unwrap(), nix::errno::Errno::ENOENT);
+    assert_eq!(e.errno(), nix::errno::Errno::ENOENT);
 }
