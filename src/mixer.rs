@@ -33,7 +33,7 @@ impl Mixer {
         let selem = unsafe { alsa::snd_mixer_find_selem(self.0, id.as_ptr()) };
 
         if selem.is_null() { None }
-        else { Some(Selem(Elem {handle: selem, mixer: self})) }
+        else { Some(Selem(Elem {handle: selem, _mixer: self})) }
     }
 
     pub fn open(nonblock: bool) -> Result<Mixer> {
@@ -129,7 +129,7 @@ impl ops::SubAssign for MilliBel {
 #[derive(Copy, Clone, Debug)]
 pub struct Elem<'a>{
     handle: *mut alsa::snd_mixer_elem_t,
-    mixer: &'a Mixer
+    _mixer: &'a Mixer
 }
 
 /// Iterator for all elements of mixer
@@ -153,7 +153,7 @@ impl<'a> Iterator for Iter<'a> {
             None
         } else {
             self.last_handle = elem;
-            Some(Elem { handle: elem, mixer: self.mixer})
+            Some(Elem { handle: elem, _mixer: self.mixer})
         }
     }
 
