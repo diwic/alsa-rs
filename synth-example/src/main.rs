@@ -218,9 +218,7 @@ fn write_samples_io(p: &alsa::PCM, io: &mut alsa::pcm::IO<SF>, synth: &mut Synth
         Ok(n) => n,
         Err(e) => {
             println!("Recovering from {}", e);
-            if let Some(errno) = e.errno() {
-                p.recover(errno as std::os::raw::c_int, true)?;
-            }
+            p.recover(e.errno() as std::os::raw::c_int, true)?;
             p.avail_update()?
         }
     } as usize;
