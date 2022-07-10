@@ -1,11 +1,10 @@
 //! Example that continously reads data and displays its RMS volume.
 
-use std::ffi::CString;
 use alsa::pcm::*;
 use alsa::{Direction, ValueOr, Error};
 
 fn start_capture(device: &str) -> Result<PCM, Error> {
-    let pcm = PCM::open(&*CString::new(device).unwrap(), Direction::Capture, false)?;
+    let pcm = PCM::new(device, Direction::Capture, false)?;
     {
         // For this example, we assume 44100Hz, one channel, 16 bit audio.
         let hwp = HwParams::any(&pcm)?;
@@ -32,7 +31,7 @@ fn rms(buf: &[i16]) -> f64 {
 }
 
 
-fn read_loop(pcm: &PCM) -> Result<Vec<u8>, Error> {
+fn read_loop(pcm: &PCM) -> Result<(), Error> {
     let io = pcm.io_i16()?;
     let mut buf = [0i16; 8192];
     loop {
@@ -47,5 +46,5 @@ fn main() {
     // The "default" device is usually directed to the sound server process,
     // e g PulseAudio or PipeWire.
     let capture = start_capture("default").unwrap();
-    read_loop(&capture);
+    read_loop(&capture).unwrap();
 }
