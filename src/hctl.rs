@@ -66,6 +66,10 @@ impl HCtl {
         if p.is_null() { None } else { Some(Elem(self, p)) }
     }
 
+    pub fn handle_events(&self) -> Result<u32> {
+        acheck!(snd_hctl_handle_events(self.0)).map(|x| x as u32)
+    }
+
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_hctl_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 }
