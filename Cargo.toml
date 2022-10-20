@@ -14,10 +14,10 @@ edition = "2021"
 include = ["README.md", "LICENSE-*", "Cargo.toml", "src/"]
 
 [dependencies]
-libc = "0.2.105"
+libc = "0.2.135"
 alsa-sys = "0.3.1"
 bitflags = "1.3.2"
-nix = { version = "0.24", default-features = false, features = ["ioctl"] }
+nix = { version = "0.25", default-features = false, features = ["ioctl"] }
 
 [badges]
 is-it-maintained-issue-resolution = { repository = "diwic/alsa-rs" }
