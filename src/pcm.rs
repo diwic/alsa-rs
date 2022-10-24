@@ -477,6 +477,62 @@ alsa_enum!(
     DSDU32BE = SND_PCM_FORMAT_DSD_U32_BE,
 );
 
+impl fmt::Display for Format {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Format::*;
+        match *self {
+            S8 => write!(f, "S8"),
+            U8 => write!(f, "U8"),
+            S16LE => write!(f, "S16_LE"),
+            S16BE => write!(f, "S16_BE"),
+            U16LE => write!(f, "U16_LE"),
+            U16BE => write!(f, "U16_BE"),
+            S24LE => write!(f, "S24_LE"),
+            S24BE => write!(f, "S24_BE"),
+            U24LE => write!(f, "U24_LE"),
+            U24BE => write!(f, "U24_BE"),
+            S32LE => write!(f, "S32_LE"),
+            S32BE => write!(f, "S32_BE"),
+            U32LE => write!(f, "U32_LE"),
+            U32BE => write!(f, "U32_BE"),
+            FloatLE => write!(f, "FLOAT_LE"),
+            FloatBE => write!(f, "FLOAT_BE"),
+            Float64LE => write!(f, "FLOAT64_LE"),
+            Float64BE => write!(f, "FLOAT64_BE"),
+            IEC958SubframeLE => write!(f, "IEC958_SUBFRAME_LE"),
+            IEC958SubframeBE => write!(f, "IEC958_SUBFRAME_BE"),
+            MuLaw => write!(f, "MU_LAW"),
+            ALaw => write!(f, "A_LAW"),
+            ImaAdPCM => write!(f, "IMA_ADPCM"),
+            MPEG => write!(f, "MPEG"),
+            GSM => write!(f, "GSM"),
+            Special => write!(f, "SPECIAL"),
+            S243LE => write!(f, "S24_3LE"),
+            S243BE => write!(f, "S24_3BE"),
+            U243LE => write!(f, "U24_3LE"),
+            U243BE => write!(f, "U24_3BE"),
+            S203LE => write!(f, "S20_3LE"),
+            S203BE => write!(f, "S20_3BE"),
+            U203LE => write!(f, "U20_3LE"),
+            U203BE => write!(f, "U20_3BE"),
+            S183LE => write!(f, "S18_3LE"),
+            S183BE => write!(f, "S18_3BE"),
+            U183LE => write!(f, "U18_3LE"),
+            U183BE => write!(f, "U18_3BE"),
+            G72324 => write!(f, "G723_24"),
+            G723241B => write!(f, "G723_24_1B"),
+            G72340 => write!(f, "G723_40"),
+            G723401B => write!(f, "G723_40_1B"),
+            DSDU8 => write!(f, "DSD_U8"),
+            DSDU16LE => write!(f, "DSD_U16_LE"),
+            DSDU32LE => write!(f, "DSD_U32_LE"),
+            DSDU16BE => write!(f, "DSD_U16_BE"),
+            DSDU32BE => write!(f, "DSD_U32_BE"),
+            _ => write!(f, "UNKNOWN"),
+        }
+    }
+}
+
 impl Format {
     pub const fn s16() -> Format { <i16 as IoFormat>::FORMAT }
     pub const fn u16() -> Format { <u16 as IoFormat>::FORMAT }
