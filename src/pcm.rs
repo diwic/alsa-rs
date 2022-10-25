@@ -834,6 +834,11 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_buffer_size_max(self.0, &mut v)).map(|_| v as Frames)
     }
 
+    pub fn get_buffer_time_min(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_buffer_time_min(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
     pub fn get_buffer_time_max(&self) -> Result<u32> {
         let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_buffer_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
