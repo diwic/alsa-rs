@@ -61,9 +61,15 @@ impl Error {
 
 
     /// Underlying error
+    ///
+    /// Match this against the re-export of `nix::Error` in this crate, not against a specific version
+    /// of the nix crate. The nix crate version might be updated with minor updates of this library.
     pub fn errno(&self) -> nix::Error { self.1 }
 
     /// Underlying error
+    ///
+    /// Match this against the re-export of `nix::Error` in this crate, not against a specific version
+    /// of the nix crate. The nix crate version might be updated with minor updates of this library.
     pub fn nix_error(&self) -> nix::Error { self.1 }
 }
 
