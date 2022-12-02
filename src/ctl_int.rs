@@ -65,6 +65,14 @@ impl Ctl {
             .map(|_| m as i64)
     }
 
+    pub fn elem_read(&self, val: &mut ElemValue) -> Result<()> {
+        acheck!(snd_ctl_elem_read(self.0, elem_value_ptr(val))).map(|_| ())
+    }
+
+    pub fn elem_write(&self, val: &ElemValue) -> Result<()> {
+        acheck!(snd_ctl_elem_write(self.0, elem_value_ptr(val))).map(|_| ())
+    }
+
     /// Note: According to alsa-lib documentation, you're also supposed to have functionality for
     /// returning whether or not you are subscribed. This does not work in practice, so I'm not
     /// including that here.
@@ -174,6 +182,10 @@ pub fn elem_value_new(t: ElemType, count: u32) -> Result<ElemValue> {
 }
 
 impl ElemValue {
+
+    pub fn set_id(&mut self, id: &ElemId) {
+        unsafe { alsa::snd_ctl_elem_value_set_id(self.ptr, elem_id_ptr(id)) }
+    }
 
     // Note: The get_bytes hands out a reference to inside the object. Therefore, we can't treat
     // the content as "cell"ed, but must take a "&mut self" (to make sure the reference
