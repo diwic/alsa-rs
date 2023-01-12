@@ -289,6 +289,10 @@ impl<'a> Selem<'a> {
         (MilliBel(min as i64), MilliBel(max as i64))
     }
 
+    pub fn is_capture_mono(&self) -> bool {
+        unsafe { alsa::snd_mixer_selem_is_capture_mono(self.handle) == 1 }
+    }
+
     pub fn is_playback_mono(&self) -> bool {
         unsafe { alsa::snd_mixer_selem_is_playback_mono(self.handle) == 1 }
     }
@@ -533,8 +537,12 @@ fn print_mixer_of_cards() {
 
             if selem.can_capture() {
                 print!("\t  Capture channels: ");
-                for channel in SelemChannelId::all() {
-                    if selem.has_capture_channel(*channel) { print!("{}, ", channel) };
+                if selem.is_capture_mono() {
+                    print!("Mono");
+                } else {
+                    for channel in SelemChannelId::all() {
+                        if selem.has_capture_channel(*channel) { print!("{}, ", channel) };
+                    }
                 }
                 println!();
                 print!("\t  Capture volumes: ");
