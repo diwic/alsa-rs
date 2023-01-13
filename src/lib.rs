@@ -46,6 +46,11 @@ impl $name {
         Self::all().iter().find(|&&x| c == x as ::libc::c_int).map(|&x| x)
             .ok_or_else(|| Error::unsupported(s))
     }
+
+    #[allow(dead_code)]
+    fn to_c_int(&self) -> ::libc::c_int {
+        return *self as ::libc::c_int;
+    }
 }
 
 }
