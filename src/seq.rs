@@ -851,10 +851,15 @@ impl<'a> fmt::Debug for Event<'a> {
     }
 }
 
-/// Low level methods to set/get data on an Event. Don't use these directly, use generic methods on Event instead.
+/// Internal trait implemented for different event type structs (`EvNote`, `EvCtrl`, etc).
+///
+/// Use it through `Event::get_data` and `Event::new`.
 pub trait EventData {
+    #[doc(hidden)]
     fn get_data(ev: &Event) -> Self;
+    #[doc(hidden)]
     fn has_data(e: EventType) -> bool;
+    #[doc(hidden)]
     fn set_data(&self, ev: &mut Event);
 }
 
