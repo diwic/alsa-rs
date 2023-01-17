@@ -573,6 +573,22 @@ impl Format {
 
     #[cfg(target_endian = "little")] pub const fn iec958_subframe() -> Format { Format::IEC958SubframeLE }
     #[cfg(target_endian = "big")] pub const fn iec958_subframe() -> Format { Format::IEC958SubframeBE }
+
+    pub fn physical_width(&self) -> Result<i32> {
+        acheck!(snd_pcm_format_physical_width(self.to_c_int()))
+    }
+
+    pub fn width(&self) -> Result<i32> {
+        acheck!(snd_pcm_format_width(self.to_c_int()))
+    }
+
+    pub fn silence_16(&self) -> u16 {
+        unsafe { alsa::snd_pcm_format_silence_16(self.to_c_int()) }
+    }
+
+    pub fn little_endian(&self) -> Result<bool> {
+        acheck!(snd_pcm_format_little_endian(self.to_c_int())).map(|v| v != 0)
+    }
 }
 
 
