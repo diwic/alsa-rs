@@ -45,9 +45,11 @@
 
 use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
 use crate::alsa;
+use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ffi::{CStr, CString};
+use std::str::FromStr;
 use std::{io, fmt, ptr, cell};
 use super::error::*;
 use super::{Direction, Output, poll, ValueOr, chmap};
@@ -530,6 +532,64 @@ impl fmt::Display for Format {
             DSDU32BE => write!(f, "DSD_U32_BE"),
             _ => write!(f, "UNKNOWN"),
         }
+    }
+}
+
+impl FromStr for Format {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        use Format::*;
+        Ok(match s.to_ascii_uppercase().as_str() {
+            "S8" => S8,
+            "U8" => U8,
+            "S16_LE" => S16LE,
+            "S16_BE" => S16BE,
+            "U16_LE" => U16LE,
+            "U16_BE" => U16BE,
+            "S24_LE" => S24LE,
+            "S24_BE" => S24BE,
+            "U24_LE" => U24LE,
+            "U24_BE" => U24BE,
+            "S32_LE" => S32LE,
+            "S32_BE" => S32BE,
+            "U32_LE" => U32LE,
+            "U32_BE" => U32BE,
+            "FLOAT_LE" => FloatLE,
+            "FLOAT_BE" => FloatBE,
+            "FLOAT64_LE" => Float64LE,
+            "FLOAT64_BE" => Float64BE,
+            "IEC958_SUBFRAME_LE" => IEC958SubframeLE,
+            "IEC958_SUBFRAME_BE" => IEC958SubframeBE,
+            "MU_LAW" => MuLaw,
+            "A_LAW" => ALaw,
+            "IMA_ADPCM" => ImaAdPCM,
+            "MPEG" => MPEG,
+            "GSM" => GSM,
+            "SPECIAL" => Special,
+            "S24_3LE" => S243LE,
+            "S24_3BE" => S243BE,
+            "U24_3LE" => U243LE,
+            "U24_3BE" => U243BE,
+            "S20_3LE" => S203LE,
+            "S20_3BE" => S203BE,
+            "U20_3LE" => U203LE,
+            "U20_3BE" => U203BE,
+            "S18_3LE" => S183LE,
+            "S18_3BE" => S183BE,
+            "U18_3LE" => U183LE,
+            "U18_3BE" => U183BE,
+            "G723_24" => G72324,
+            "G723_24_1B" => G723241B,
+            "G723_40" => G72340,
+            "G723_40_1B" => G723401B,
+            "DSD_U8" => DSDU8,
+            "DSD_U16_LE" => DSDU16LE,
+            "DSD_U32_LE" => DSDU32LE,
+            "DSD_U16_BE" => DSDU16BE,
+            "DSD_U32_BE" => DSDU32BE,
+            _ => Unknown,
+        })
     }
 }
 
@@ -1164,4 +1224,11 @@ fn print_sizeof() {
     println!("Status size: {}", s);
 
     assert!(s <= STATUS_SIZE);
+}
+
+#[test]
+fn format_display_from_str() {
+    for format in ALL_FORMATS {
+        assert_eq!(format, format.to_string().parse().unwrap());
+    }
 }
