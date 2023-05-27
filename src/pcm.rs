@@ -285,7 +285,7 @@ impl PCM {
             acheck!(snd_pcm_info(self.0, info.0)).map(|_| info ))
     }
 
-    pub fn update_info(&self, info: Info) -> Result<()> {
+    pub fn update_info(&self, info: &mut Info) -> Result<()> {
         acheck!(snd_pcm_info(self.0, info.0)).map(|_| ())
     }
 
