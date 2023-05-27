@@ -285,6 +285,10 @@ impl PCM {
             acheck!(snd_pcm_info(self.0, info.0)).map(|_| info ))
     }
 
+    pub fn update_info(&self, info: Info) -> Result<()> {
+        acheck!(snd_pcm_info(self.0, info.0)).map(|_| ())
+    }
+
     pub fn dump(&self, o: &mut Output) -> Result<()> {
         acheck!(snd_pcm_dump(self.0, super::io::output_handle(o))).map(|_| ())
     }
