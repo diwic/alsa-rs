@@ -101,6 +101,30 @@ impl Info {
             n @ _ => panic!("snd_pcm_info_get_stream invalid direction '{}'", n),
         }
     }
+
+    pub fn get_subdevices_count(&self) -> u32 {
+        unsafe { alsa::snd_pcm_info_get_subdevices_count(self.0) }
+    }
+
+    pub fn get_subdevices_avail(&self) -> u32 {
+        unsafe { alsa::snd_pcm_info_get_subdevices_avail(self.0) }
+    }
+
+    pub fn set_device(&mut self, device: u32) {
+        unsafe { alsa::snd_pcm_info_set_device(self.0, device) }
+    }
+
+    pub fn set_stream(&mut self, direction: Direction) {
+        let stream = match direction {
+            Direction::Capture => alsa::SND_PCM_STREAM_CAPTURE,
+            Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK,
+        };
+        unsafe { alsa::snd_pcm_info_set_stream(self.0, stream) }
+    }
+
+    pub fn set_subdevice(&mut self, subdevice: u32) {
+        unsafe { alsa::snd_pcm_info_set_subdevice(self.0, subdevice) }
+    }
 }
 
 impl Drop for Info {

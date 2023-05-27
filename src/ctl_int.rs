@@ -43,6 +43,13 @@ impl Ctl {
     pub fn card_info(&self) -> Result<CardInfo> { CardInfo::new().and_then(|c|
         acheck!(snd_ctl_card_info(self.0, c.0)).map(|_| c)) }
 
+    /// Wrapper around [snd_ctl_pcm_next_device](https://www.alsa-project.org/alsa-doc/alsa-lib/control_8c.html#accbb0be6e5ca7361ffec0ea304ed1b05).
+    pub fn pcm_next_device(&self, device: i32) -> Result<i32> {
+        let mut device: c_int = device as c_int;
+        acheck!(snd_ctl_pcm_next_device(self.0, &mut device as *mut _))
+            .map(|_| device)
+    }
+
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
         acheck!(snd_ctl_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
