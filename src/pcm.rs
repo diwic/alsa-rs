@@ -59,7 +59,7 @@ pub use super::chmap::{Chmap, ChmapPosition, ChmapType, ChmapsQuery};
 /// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
 
-pub struct Info(*mut alsa::snd_pcm_info_t);
+pub struct Info(pub *mut alsa::snd_pcm_info_t);
 
 impl Info {
     pub fn new() -> Result<Info> {
@@ -283,10 +283,6 @@ impl PCM {
     pub fn info(&self) -> Result<Info> {
         Info::new().and_then(|info|
             acheck!(snd_pcm_info(self.0, info.0)).map(|_| info ))
-    }
-
-    pub fn update_info(&self, info: &mut Info) -> Result<()> {
-        acheck!(snd_pcm_info(self.0, info.0)).map(|_| ())
     }
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {

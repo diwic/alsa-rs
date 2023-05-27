@@ -1,5 +1,6 @@
 
 use crate::alsa;
+use super::pcm::Info;
 use std::ffi::{CStr, CString};
 use super::error::*;
 use super::mixer::MilliBel;
@@ -90,6 +91,10 @@ impl Ctl {
     pub fn read(&self) -> Result<Option<Event>> {
         let e = event_new()?;
         acheck!(snd_ctl_read(self.0, e.0)).map(|r| if r == 1 { Some(e) } else { None })
+    }
+
+    pub fn info(&self, info: &mut Info) -> Result<()> {
+        acheck!(snd_ctl_pcm_info(self.0, info.0)).map(|_| ())
     }
 }
 
