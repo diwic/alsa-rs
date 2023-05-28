@@ -59,6 +59,7 @@ pub use super::chmap::{Chmap, ChmapPosition, ChmapType, ChmapsQuery};
 /// [snd_pcm_sframes_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 pub type Frames = alsa::snd_pcm_sframes_t;
 
+/// [snd_pcm_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - PCM generic info container
 pub struct Info(pub(crate) *mut alsa::snd_pcm_info_t);
 
 impl Info {
@@ -110,11 +111,11 @@ impl Info {
         unsafe { alsa::snd_pcm_info_get_subdevices_avail(self.0) }
     }
 
-    pub fn set_device(&mut self, device: u32) {
+    pub(crate) fn set_device(&mut self, device: u32) {
         unsafe { alsa::snd_pcm_info_set_device(self.0, device) }
     }
 
-    pub fn set_stream(&mut self, direction: Direction) {
+    pub(crate) fn set_stream(&mut self, direction: Direction) {
         let stream = match direction {
             Direction::Capture => alsa::SND_PCM_STREAM_CAPTURE,
             Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK,
@@ -122,7 +123,7 @@ impl Info {
         unsafe { alsa::snd_pcm_info_set_stream(self.0, stream) }
     }
 
-    pub fn set_subdevice(&mut self, subdevice: u32) {
+    pub(crate) fn set_subdevice(&mut self, subdevice: u32) {
         unsafe { alsa::snd_pcm_info_set_subdevice(self.0, subdevice) }
     }
 }

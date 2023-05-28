@@ -2,6 +2,7 @@
 use crate::alsa;
 use super::pcm::Info;
 use std::ffi::{CStr, CString};
+use super::Direction;
 use super::error::*;
 use super::mixer::MilliBel;
 use super::Round;
@@ -93,8 +94,13 @@ impl Ctl {
         acheck!(snd_ctl_read(self.0, e.0)).map(|r| if r == 1 { Some(e) } else { None })
     }
 
-    pub fn info(&self, info: &mut Info) -> Result<()> {
-        acheck!(snd_ctl_pcm_info(self.0, info.0)).map(|_| ())
+    pub fn pcm_info(&self, device: u32, subdevice: u32, direction: Direction) -> Result<Info> {
+        Info::new().and_then(|mut info| {
+            info.set_device(device);
+            info.set_subdevice(subdevice);
+            info.set_stream(direction);
+            acheck!(snd_ctl_pcm_info(self.0, info.0)).map(|_| info )
+        })
     }
 }
 
