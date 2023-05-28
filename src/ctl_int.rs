@@ -19,6 +19,28 @@ const ELEM_ID_SIZE: usize = 64;
 // const ELEM_VALUE_SIZE: usize = 1224;
 // const ELEM_INFO_SIZE: usize = 272;
 
+
+/// Iterate over devices of a card.
+pub struct DeviceIter(*mut alsa::snd_ctl_t, c_int);
+
+impl DeviceIter {
+    pub(crate) fn new(ctl: *mut alsa::snd_ctl_t) -> DeviceIter {
+        DeviceIter(ctl, -1)
+    }
+}
+
+impl Iterator for DeviceIter {
+    type Item = c_int;
+
+    fn next(&mut self) -> Option<c_int> {
+        match acheck!(snd_ctl_pcm_next_device(self.0, &mut self.1)) {
+            Ok(_) if self.1 == -1 => None,
+            Ok(_) => Some(self.1),
+            Err(_) => None,
+        }
+    }
+}
+
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct Ctl(*mut alsa::snd_ctl_t);
 
@@ -46,10 +68,8 @@ impl Ctl {
         acheck!(snd_ctl_card_info(self.0, c.0)).map(|_| c)) }
 
     /// Wrapper around [snd_ctl_pcm_next_device](https://www.alsa-project.org/alsa-doc/alsa-lib/control_8c.html#accbb0be6e5ca7361ffec0ea304ed1b05).
-    pub fn pcm_next_device(&self, device: i32) -> Result<i32> {
-        let mut device: c_int = device as c_int;
-        acheck!(snd_ctl_pcm_next_device(self.0, &mut device as *mut _))
-            .map(|_| device)
+    pub fn pcm_next_device(&self) -> DeviceIter {
+        DeviceIter::new(self.0)
     }
 
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
