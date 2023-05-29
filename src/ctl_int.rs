@@ -1,6 +1,8 @@
 
 use crate::alsa;
+use super::pcm::Info;
 use std::ffi::{CStr, CString};
+use super::Direction;
 use super::error::*;
 use super::mixer::MilliBel;
 use super::Round;
@@ -16,6 +18,28 @@ use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 const ELEM_ID_SIZE: usize = 64;
 // const ELEM_VALUE_SIZE: usize = 1224;
 // const ELEM_INFO_SIZE: usize = 272;
+
+/// [snd_ctl_pcm_next_device](https://www.alsa-project.org/alsa-doc/alsa-lib/control_8c.html#accbb0be6e5ca7361ffec0ea304ed1b05) wrapper.
+/// Iterate over devices of a card.
+pub struct DeviceIter<'a>(&'a Ctl, c_int);
+
+impl<'a> DeviceIter<'a>{
+    pub fn new(ctl: &'a Ctl) -> DeviceIter {
+        DeviceIter(ctl, -1)
+    }
+}
+
+impl<'a> Iterator for DeviceIter<'a> {
+    type Item = c_int;
+
+    fn next(&mut self) -> Option<c_int> {
+        match acheck!(snd_ctl_pcm_next_device(self.0.0, &mut self.1)) {
+            Ok(_) if self.1 == -1 => None,
+            Ok(_) => Some(self.1),
+            Err(_) => None,
+        }
+    }
+}
 
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct Ctl(*mut alsa::snd_ctl_t);
@@ -83,6 +107,15 @@ impl Ctl {
     pub fn read(&self) -> Result<Option<Event>> {
         let e = event_new()?;
         acheck!(snd_ctl_read(self.0, e.0)).map(|r| if r == 1 { Some(e) } else { None })
+    }
+
+    pub fn pcm_info(&self, device: u32, subdevice: u32, direction: Direction) -> Result<Info> {
+        Info::new().and_then(|mut info| {
+            info.set_device(device);
+            info.set_subdevice(subdevice);
+            info.set_stream(direction);
+            acheck!(snd_ctl_pcm_info(self.0, info.0)).map(|_| info )
+        })
     }
 }
 
