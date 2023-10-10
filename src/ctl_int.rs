@@ -97,6 +97,14 @@ impl Ctl {
         acheck!(snd_ctl_elem_write(self.0, elem_value_ptr(val))).map(|_| ())
     }
 
+    pub fn elem_lock(&self, id: &ElemId) -> Result<i32> {
+        acheck!(snd_ctl_elem_lock(self.0, elem_id_ptr(id)))
+    }
+
+    pub fn elem_unlock(&self, id: &ElemId) -> Result<i32> {
+        acheck!(snd_ctl_elem_unlock(self.0, elem_id_ptr(id)))
+    }
+
     /// Note: According to alsa-lib documentation, you're also supposed to have functionality for
     /// returning whether or not you are subscribed. This does not work in practice, so I'm not
     /// including that here.
