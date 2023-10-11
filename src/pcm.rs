@@ -234,6 +234,13 @@ impl PCM {
         self.verify_format(S::FORMAT).map(|_| IO::new(self))
     }
 
+    /// Creates IO without checking [`S`] is valid type.
+    ///
+    /// SAFETY: Caller must guarantee [`S`] is valid type for this PCM stream
+    pub unsafe fn io_unchecked<S: IoFormat>(&self) -> IO<S> {
+        IO::new_unchecked(self)
+    }
+
     #[deprecated(note = "renamed to io_bytes")]
     pub fn io(&self) -> IO<u8> { IO::new(self) }
     pub fn io_bytes(&self) -> IO<u8> { IO::new(self) }
@@ -355,6 +362,11 @@ impl<'a, S: Copy> IO<'a, S> {
 
     fn new(a: &'a PCM) -> IO<'a, S> {
         a.check_has_io();
+        a.1.set(true);
+        IO(a, PhantomData)
+    }
+
+    unsafe fn new_unchecked(a: &'a PCM) -> IO<'a, S> {
         a.1.set(true);
         IO(a, PhantomData)
     }
