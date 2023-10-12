@@ -237,6 +237,8 @@ impl PCM {
     /// Creates IO without checking [`S`] is valid type.
     ///
     /// SAFETY: Caller must guarantee [`S`] is valid type for this PCM stream
+    /// and that no other IO objects exist at the same time for the same stream
+    /// (or in some other way guarantee mmap safety)
     pub unsafe fn io_unchecked<S: IoFormat>(&self) -> IO<S> {
         IO::new_unchecked(self)
     }
