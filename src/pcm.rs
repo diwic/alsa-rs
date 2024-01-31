@@ -328,6 +328,12 @@ impl PCM {
     pub fn unlink(&self) -> Result<()> {
         acheck!(snd_pcm_unlink(self.0)).map(|_| ())
     }
+
+    /// Should only be used by APIs that access PCM in a thread-safe manner,
+    /// and provide reference counting, such as wrapping PCM behind an Arc.
+    pub fn unsafe_clone(&self) -> Self {
+         PCM(self.0.clone(), self.1.clone())
+    }
 }
 
 impl Drop for PCM {
