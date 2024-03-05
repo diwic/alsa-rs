@@ -2,6 +2,8 @@
 
 #![allow(non_camel_case_types)]
 
+use cfg_if::cfg_if;
+
 // const SNDRV_PCM_MMAP_OFFSET_DATA: c_uint = 0x00000000;
 pub const SNDRV_PCM_MMAP_OFFSET_STATUS: libc::c_uint = 0x80000000;
 pub const SNDRV_PCM_MMAP_OFFSET_CONTROL: libc::c_uint = 0x81000000;
@@ -71,87 +73,97 @@ pub struct snd_pcm_sync_ptr {
     pub c: snd_pcm_mmap_control_r,
 }
 
-/// See <https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/linux.rs>
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod ioctl_helpers {
-    #[cfg(any(target_os = "android", target_env = "musl"))]
-    pub(super) type ioctl_num_type = libc::c_int;
-    #[cfg(not(any(target_os = "android", target_env = "musl")))]
-    pub(super) type ioctl_num_type = libc::c_ulong;
+cfg_if! {
+    if #[cfg(any(target_os = "linux", target_os = "android"))] {
+        // See <https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/linux.rs>
 
-    pub(super) const READ: ioctl_num_type = 2;
-    #[cfg(not(any(
-        target_arch = "mips",
-        target_arch = "mips32r6",
-        target_arch = "mips64",
-        target_arch = "mips64r6",
-        target_arch = "powerpc",
-        target_arch = "powerpc64",
-        target_arch = "sparc64"
-    )))]
-    pub(super) const WRITE: ioctl_num_type = 1;
-    #[cfg(any(
-        target_arch = "mips",
-        target_arch = "mips32r6",
-        target_arch = "mips64",
-        target_arch = "mips64r6",
-        target_arch = "powerpc",
-        target_arch = "powerpc64",
-        target_arch = "sparc64"
-    ))]
-    pub(super) const WRITE: ioctl_num_type = 4;
+        cfg_if! {
+            if #[cfg(any(target_os = "android", target_env = "musl"))] {
+                pub(super) type ioctl_num_type = libc::c_int;
+            } else {
+                pub(super) type ioctl_num_type = libc::c_ulong;
+            }
+        }
 
-    const NRSHIFT: ioctl_num_type = 0;
-    const TYPESHIFT: ioctl_num_type = NRSHIFT + 8 /* NRBITS */;
-    const SIZESHIFT: ioctl_num_type = TYPESHIFT + 8 /* TYPEBITS */;
-    const DIRSHIFT: ioctl_num_type = SIZESHIFT + 13 /* SIZEBITS */;
+        // The READ dir is consistent across arches
+        pub(super) const READ: ioctl_num_type = 2;
 
-    /// Replication of the [`nix::ioc!`](https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/linux.rs#L78-L96)
-    pub(super) const fn make_request(
-        dir: ioctl_num_type,
-        typ: u8,
-        nr: u8,
-        size: usize,
-    ) -> ioctl_num_type {
-        dir << DIRSHIFT
-            | (typ as ioctl_num_type) << TYPESHIFT
-            | (nr as ioctl_num_type) << NRSHIFT
-            | (size as ioctl_num_type) << SIZESHIFT
-    }
-}
+        // But WRITE is not, as well as having a different number of bits for the SIZEBITS
+        cfg_if!{
+            if #[cfg(any(
+                target_arch = "mips",
+                target_arch = "mips32r6",
+                target_arch = "mips64",
+                target_arch = "mips64r6",
+                target_arch = "powerpc",
+                target_arch = "powerpc64",
+                target_arch = "sparc64"
+            ))] {
+                pub(super) const WRITE: ioctl_num_type = 4;
+                const SIZEBITS: ioctl_num_type = 13;
+            } else {
+                pub(super) const WRITE: ioctl_num_type = 1;
+                const SIZEBITS: ioctl_num_type = 14;
+            }
+        }
 
-/// See <https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/bsd.rs>
-#[cfg(any(
-    target_os = "dragonfly",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "solaris",
-    target_os = "illumos"
-))]
-mod ioctl_helpers {
-    #[cfg(not(any(target_os = "illumos", target_os = "solaris")))]
-    pub(super) type ioctl_num_type = libc::c_ulong;
-    #[cfg(any(target_os = "illumos", target_os = "solaris"))]
-    pub(super) type ioctl_num_type = libc::c_int;
+        const NRSHIFT: ioctl_num_type = 0;
+        const NRBITS: ioctl_num_type = 8;
+        const TYPEBITS: ioctl_num_type = 8;
+        const TYPESHIFT: ioctl_num_type = NRSHIFT + NRBITS;
+        const SIZESHIFT: ioctl_num_type = TYPESHIFT + TYPEBITS;
+        const DIRSHIFT: ioctl_num_type = SIZESHIFT + SIZEBITS;
 
-    #[allow(overflowing_literals)]
-    pub(super) const READ: ioctl_num_type = 0x4000_0000;
-    #[allow(overflowing_literals)]
-    pub(super) const WRITE: ioctl_num_type = 0x8000_0000;
+        /// Replication of the [`nix::ioc!`](https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/linux.rs#L78-L96)
+        pub(super) const fn make_request(
+            dir: ioctl_num_type,
+            typ: u8,
+            nr: u8,
+            size: usize,
+        ) -> ioctl_num_type {
+            dir << DIRSHIFT
+                | (typ as ioctl_num_type) << TYPESHIFT
+                | (nr as ioctl_num_type) << NRSHIFT
+                | (size as ioctl_num_type) << SIZESHIFT
+        }
+    } else if #[cfg(any(
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))] {
+        // See <https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/bsd.rs>
 
-    const IOCPARM_MASK: ioctl_num_type = 0x1fff;
+        cfg_if! {
+            if #[cfg(not(any(target_os = "illumos", target_os = "solaris")))] {
+                pub(super) type ioctl_num_type = libc::c_ulong;
+            } else {
+                pub(super) type ioctl_num_type = libc::c_int;
+            }
+        }
 
-    /// Replication of [`nix::ioc!`](https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/bsd.rs#L31-L42)
-    pub(super) const fn make_request(
-        dir: ioctl_num_type,
-        typ: u8,
-        nr: u8,
-        size: usize,
-    ) -> ioctl_num_type {
-        dir | ((size as ioctl_num_type) & IOCPARM_MASK) << 16
-            | (typ as ioctl_num_type) << 8
-            | nr as ioctl_num_type
+        #[allow(overflowing_literals)]
+        pub(super) const READ: ioctl_num_type = 0x4000_0000;
+        #[allow(overflowing_literals)]
+        pub(super) const WRITE: ioctl_num_type = 0x8000_0000;
+
+        const IOCPARM_MASK: ioctl_num_type = 0x1fff;
+
+        /// Replication of [`nix::ioc!`](https://github.com/nix-rust/nix/blob/197f55b3ccbce3273bf6ce119d1a8541b5df5d66/src/sys/ioctl/bsd.rs#L31-L42)
+        pub(super) const fn make_request(
+            dir: ioctl_num_type,
+            typ: u8,
+            nr: u8,
+            size: usize,
+        ) -> ioctl_num_type {
+            dir | ((size as ioctl_num_type) & IOCPARM_MASK) << 16
+                | (typ as ioctl_num_type) << 8
+                | nr as ioctl_num_type
+        }
+    } else {
+        compile_error!("unknown target platform");
     }
 }
 
@@ -159,8 +171,8 @@ pub(crate) unsafe fn sndrv_pcm_ioctl_channel_info(
     fd: libc::c_int,
     data: *mut snd_pcm_channel_info,
 ) -> Result<(), crate::Error> {
-    const REQUEST: ioctl_helpers::ioctl_num_type = ioctl_helpers::make_request(
-        ioctl_helpers::READ,
+    const REQUEST: ioctl_num_type = make_request(
+        READ,
         b'A',
         0x32,
         std::mem::size_of::<snd_pcm_channel_info>(),
@@ -179,8 +191,8 @@ pub(crate) unsafe fn sndrv_pcm_ioctl_sync_ptr(
     fd: libc::c_int,
     data: *mut snd_pcm_sync_ptr,
 ) -> Result<(), crate::Error> {
-    const REQUEST: ioctl_helpers::ioctl_num_type = ioctl_helpers::make_request(
-        ioctl_helpers::READ | ioctl_helpers::WRITE,
+    const REQUEST: ioctl_num_type = make_request(
+        READ | WRITE,
         b'A',
         0x23,
         std::mem::size_of::<snd_pcm_sync_ptr>(),
