@@ -36,7 +36,6 @@ fn list_devices_for_card(card: &Card, direction: Direction) -> Result<(), Error>
         }
     }
 
-
     Ok(())
 }
 
