@@ -859,6 +859,10 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_test_format((self.1).0, self.0, v as c_int)).map(|_| ())
     }
 
+    pub fn test_access(&self, v: Access) -> Result<()> {
+        acheck!(snd_pcm_hw_params_test_access((self.1).0, self.0, v as c_uint)).map(|_| ())
+    }
+
     pub fn set_access(&self, v: Access) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_access((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
