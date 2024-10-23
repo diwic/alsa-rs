@@ -245,6 +245,10 @@ impl PCM {
 
     #[deprecated(note = "renamed to io_bytes")]
     pub fn io(&self) -> IO<u8> { IO::new(self) }
+
+    /// Call this if you have an unusual format, not supported by the regular access methods
+    /// (io_i16 etc). It will succeed regardless of the sample format, but conversion to and from
+    /// bytes to your format is up to you.
     pub fn io_bytes(&self) -> IO<u8> { IO::new(self) }
 
     /// Read buffers by talking to the kernel directly, bypassing alsa-lib.
