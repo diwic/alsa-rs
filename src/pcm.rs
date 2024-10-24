@@ -225,11 +225,15 @@ impl PCM {
     pub fn io_u8(&self) -> Result<IO<u8>> { self.io_checked() }
     pub fn io_i16(&self) -> Result<IO<i16>> { self.io_checked() }
     pub fn io_u16(&self) -> Result<IO<u16>> { self.io_checked() }
-    pub fn io_s24(&self) -> Result<IO<i32>> { self.verify_format(Format::s24()).map(|_| IO::new(self)) }
     pub fn io_i32(&self) -> Result<IO<i32>> { self.io_checked() }
     pub fn io_u32(&self) -> Result<IO<u32>> { self.io_checked() }
     pub fn io_f32(&self) -> Result<IO<f32>> { self.io_checked() }
     pub fn io_f64(&self) -> Result<IO<f64>> { self.io_checked() }
+
+    /// For the `s24` format, represented by i32
+    pub fn io_i32_s24(&self) -> Result<IO<i32>> { self.verify_format(Format::s24()).map(|_| IO::new(self)) }
+    /// For the `u24` format, represented by u32
+    pub fn io_u32_u24(&self) -> Result<IO<u32>> { self.verify_format(Format::u24()).map(|_| IO::new(self)) }
 
     pub fn io_checked<S: IoFormat>(&self) -> Result<IO<S>> {
         self.verify_format(S::FORMAT).map(|_| IO::new(self))
@@ -1237,7 +1241,7 @@ fn open_s24() {
     hwp.set_access(Access::RWInterleaved).unwrap();
     pcm.hw_params(&hwp).unwrap();
     assert_eq!(Format::s24().physical_width(), Ok(32));
-    let _io = pcm.io_s24().unwrap();
+    let _io = pcm.io_i32_s24().unwrap();
 }
 
 #[test]
