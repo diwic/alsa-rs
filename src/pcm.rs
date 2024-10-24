@@ -225,6 +225,7 @@ impl PCM {
     pub fn io_u8(&self) -> Result<IO<u8>> { self.io_checked() }
     pub fn io_i16(&self) -> Result<IO<i16>> { self.io_checked() }
     pub fn io_u16(&self) -> Result<IO<u16>> { self.io_checked() }
+    pub fn io_s24(&self) -> Result<IO<i32>> { self.verify_format(Format::s24()).map(|_| IO::new(self)) }
     pub fn io_i32(&self) -> Result<IO<i32>> { self.io_checked() }
     pub fn io_u32(&self) -> Result<IO<u32>> { self.io_checked() }
     pub fn io_f32(&self) -> Result<IO<f32>> { self.io_checked() }
@@ -1224,6 +1225,19 @@ fn record_from_default() {
     pcm.start().unwrap();
     let mut buf = [0i16; 1024];
     assert_eq!(pcm.io_i16().unwrap().readi(&mut buf).unwrap(), 1024/2);
+}
+
+#[test]
+fn open_s24() {
+    let pcm = PCM::open(c"default", Direction::Playback, false).unwrap();
+    let hwp = HwParams::any(&pcm).unwrap();
+    hwp.set_channels(1).unwrap();
+    hwp.set_rate(44100, ValueOr::Nearest).unwrap();
+    hwp.set_format(Format::s24()).unwrap();
+    hwp.set_access(Access::RWInterleaved).unwrap();
+    pcm.hw_params(&hwp).unwrap();
+    assert_eq!(Format::s24().physical_width(), Ok(32));
+    let _io = pcm.io_s24().unwrap();
 }
 
 #[test]
