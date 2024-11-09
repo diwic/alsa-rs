@@ -14,7 +14,7 @@ alsa_enum!(
 
 alsa_enum!(
     /// [SND_CHMAP_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    ChmapPosition, ALL_CHMAP_POSITIONS[33],
+    ChmapPosition, ALL_CHMAP_POSITIONS[37],
 
     Unknown = SND_CHMAP_UNKNOWN,
     NA = SND_CHMAP_NA,
@@ -22,6 +22,10 @@ alsa_enum!(
     FL = SND_CHMAP_FL,
     FR = SND_CHMAP_FR,
     RL = SND_CHMAP_RL,
+    RR = SND_CHMAP_RR,
+    FC = SND_CHMAP_FC,
+    LFE = SND_CHMAP_LFE,
+    SL = SND_CHMAP_SL,
     SR = SND_CHMAP_SR,
     RC = SND_CHMAP_RC,
     FLC = SND_CHMAP_FLC,
