@@ -340,7 +340,10 @@ impl PCM {
 }
 
 impl Drop for PCM {
-    fn drop(&mut self) { unsafe { alsa::snd_pcm_close(self.0) }; }
+    fn drop(&mut self) { unsafe {
+        alsa::snd_pcm_close(self.0);
+        alsa::snd_config_update_free_global();
+    }; }
 }
 
 
