@@ -110,6 +110,8 @@ pub use crate::hctl::HCtl as HCtl;
 pub mod pcm;
 pub use crate::pcm::PCM as PCM;
 
+pub mod config;
+
 pub mod rawmidi;
 pub use crate::rawmidi::Rawmidi as Rawmidi;
 
