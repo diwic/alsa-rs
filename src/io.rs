@@ -22,7 +22,7 @@ impl Output {
         let b = unsafe {
             let mut q = ptr::null_mut();
             let s = alsa::snd_output_buffer_string(self.0, &mut q);
-            slice::from_raw_parts(q as *const u8, s as usize)
+            if s == 0 { &[] } else { slice::from_raw_parts(q as *const u8, s as usize) }
         };
         f(b)
     }
