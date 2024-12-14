@@ -105,6 +105,18 @@ impl Ctl {
         acheck!(snd_ctl_elem_unlock(self.0, elem_id_ptr(id)))
     }
 
+    pub fn elem_list(&self) -> Result<ElemList> {
+        // populate an empty list to get the number of elements
+        let empty_list = elem_list_new(0)?;
+        acheck!(snd_ctl_elem_list(self.0, empty_list.0))?;
+        let required_elements = empty_list.get_count();
+
+        // obtain the list of all the elements now that we know how many there are
+        let full_list = elem_list_new(required_elements)?;
+        acheck!(snd_ctl_elem_list(self.0, full_list.0))?;
+        Ok(full_list)
+    }
+
     /// Note: According to alsa-lib documentation, you're also supposed to have functionality for
     /// returning whether or not you are subscribed. This does not work in practice, so I'm not
     /// including that here.
@@ -446,6 +458,57 @@ impl fmt::Debug for ElemId {
         if subdevice > 0 { write!(f, ", subdevice={}", device)? };
         write!(f, ")")
     }
+}
+
+/// [snd_ctl_elem_list_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+pub struct ElemList(*mut alsa::snd_ctl_elem_list_t);
+
+impl Drop for ElemList {
+    fn drop(&mut self) {
+        unsafe { alsa::snd_ctl_elem_list_free_space(self.0) };
+        unsafe { alsa::snd_ctl_elem_list_free(self.0) };
+    }
+}
+
+pub fn elem_list_new(count: u32) -> Result<ElemList> {
+    let mut p = ptr::null_mut();
+    let list = acheck!(snd_ctl_elem_list_malloc(&mut p)).map(|_| ElemList(p))?;
+    if count > 0 {
+        acheck!(snd_ctl_elem_list_alloc_space(list.0, count))?;
+    }
+    Ok(list)
+}
+
+impl ElemList {
+    #[inline]
+    fn ensure_valid_index(&self, index: u32) -> Result<()> {
+        if index >= self.get_used() {
+            Err(Error::new("snd_ctl_elem_list_*", libc::EINVAL))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub(crate) fn get_count(&self) -> u32 { unsafe { alsa::snd_ctl_elem_list_get_count(self.0) } }
+    pub fn get_used(&self) -> u32 { unsafe { alsa::snd_ctl_elem_list_get_used(self.0) } }
+    pub fn get_id(&self, index: u32) -> Result<ElemId> {
+        self.ensure_valid_index(index)?;
+        let elem_id = elem_id_new()?;
+        unsafe { alsa::snd_ctl_elem_list_get_id(self.0, index, elem_id_ptr(&elem_id)) };
+        Ok(elem_id)
+    }
+    pub fn get_numid(&self, index: u32) -> Result<u32> { self.ensure_valid_index(index)?; Ok(unsafe { alsa::snd_ctl_elem_list_get_numid(self.0, index) }) }
+    pub fn get_interface(&self, index: u32) -> Result<ElemIface> {
+        self.ensure_valid_index(index)?;
+        ElemIface::from_c_int(unsafe { alsa::snd_ctl_elem_list_get_interface(self.0, index) } as c_int, "snd_ctl_elem_list_get_interface")
+    }
+    pub fn get_device(&self, index: u32) -> Result<u32> { self.ensure_valid_index(index)?; Ok(unsafe { alsa::snd_ctl_elem_list_get_device(self.0, index) }) }
+    pub fn get_subdevice(&self, index: u32) -> Result<u32> { self.ensure_valid_index(index)?; Ok(unsafe { alsa::snd_ctl_elem_list_get_subdevice(self.0, index) }) }
+    pub fn get_name(&self, index: u32) -> Result<&str> {
+        self.ensure_valid_index(index)?;
+        from_const("snd_ctl_elem_list_get_name", unsafe { alsa::snd_ctl_elem_list_get_name(self.0, index) })
+    }
+    pub fn get_index(&self, index: u32) -> Result<u32> { self.ensure_valid_index(index)?; Ok(unsafe { alsa::snd_ctl_elem_list_get_index(self.0, index) }) }
 }
 
 /// [snd_ctl_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
