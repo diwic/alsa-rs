@@ -18,6 +18,7 @@ use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 const ELEM_ID_SIZE: usize = 64;
 // const ELEM_VALUE_SIZE: usize = 1224;
 // const ELEM_INFO_SIZE: usize = 272;
+const ELEM_LIST_SIZE: usize = 80;
 
 /// [snd_ctl_pcm_next_device](https://www.alsa-project.org/alsa-doc/alsa-lib/control_8c.html#accbb0be6e5ca7361ffec0ea304ed1b05) wrapper.
 /// Iterate over devices of a card.
@@ -106,10 +107,10 @@ impl Ctl {
     }
 
     pub fn elem_list(&self) -> Result<ElemList> {
-        // populate an empty list to get the number of elements
-        let empty_list = elem_list_new(0)?;
-        acheck!(snd_ctl_elem_list(self.0, empty_list.0))?;
-        let required_elements = empty_list.get_count();
+        // initialize an empty list to get the number of elements
+        let empty_list = elem_list_empty_buffer();
+        acheck!(snd_ctl_elem_list(self.0, empty_list.get() as *mut _))?;
+        let required_elements = unsafe { alsa::snd_ctl_elem_list_get_count(empty_list.get() as *const _) };
 
         // obtain the list of all the elements now that we know how many there are
         let full_list = elem_list_new(required_elements)?;
@@ -470,6 +471,11 @@ impl Drop for ElemList {
     }
 }
 
+pub(crate) fn elem_list_empty_buffer() -> UnsafeCell<[u8; ELEM_LIST_SIZE]> {
+    assert!(unsafe { alsa::snd_ctl_elem_list_sizeof() } as usize <= ELEM_LIST_SIZE);
+    UnsafeCell::new(unsafe { mem::zeroed() })
+}
+
 pub fn elem_list_new(count: u32) -> Result<ElemList> {
     let mut p = ptr::null_mut();
     let list = acheck!(snd_ctl_elem_list_malloc(&mut p)).map(|_| ElemList(p))?;
@@ -489,7 +495,6 @@ impl ElemList {
         }
     }
 
-    pub(crate) fn get_count(&self) -> u32 { unsafe { alsa::snd_ctl_elem_list_get_count(self.0) } }
     pub fn get_used(&self) -> u32 { unsafe { alsa::snd_ctl_elem_list_get_used(self.0) } }
     pub fn get_id(&self, index: u32) -> Result<ElemId> {
         self.ensure_valid_index(index)?;
