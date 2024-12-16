@@ -106,15 +106,13 @@ impl Ctl {
     }
 
     pub fn elem_list(&self) -> Result<ElemList> {
-        // populate an empty list to get the number of elements
-        let empty_list = elem_list_new(0)?;
-        acheck!(snd_ctl_elem_list(self.0, empty_list.0))?;
-        let required_elements = empty_list.get_count();
-
         // obtain the list of all the elements now that we know how many there are
-        let full_list = elem_list_new(required_elements)?;
-        acheck!(snd_ctl_elem_list(self.0, full_list.0))?;
-        Ok(full_list)
+        let list = elem_list_new(|list| {
+            acheck!(snd_ctl_elem_list(self.0, list.0))?;
+            Ok(list.get_count())
+        })?;
+        acheck!(snd_ctl_elem_list(self.0, list.0))?;
+        Ok(list)
     }
 
     /// Note: According to alsa-lib documentation, you're also supposed to have functionality for
@@ -470,9 +468,10 @@ impl Drop for ElemList {
     }
 }
 
-pub fn elem_list_new(count: u32) -> Result<ElemList> {
+fn elem_list_new<F: FnOnce(&ElemList) -> Result<u32>>(f: F) -> Result<ElemList> {
     let mut p = ptr::null_mut();
     let list = acheck!(snd_ctl_elem_list_malloc(&mut p)).map(|_| ElemList(p))?;
+    let count = f(&list)?;
     if count > 0 {
         acheck!(snd_ctl_elem_list_alloc_space(list.0, count))?;
     }
