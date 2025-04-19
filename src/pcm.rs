@@ -475,7 +475,7 @@ alsa_enum!(
 alsa_enum!(
     #[non_exhaustive]
     /// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    Format, ALL_FORMATS[48],
+    Format, ALL_FORMATS[52],
 
     Unknown = SND_PCM_FORMAT_UNKNOWN,
     S8 = SND_PCM_FORMAT_S8,
