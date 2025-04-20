@@ -475,7 +475,7 @@ alsa_enum!(
 alsa_enum!(
     #[non_exhaustive]
     /// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    Format, ALL_FORMATS[48],
+    Format, ALL_FORMATS[52],
 
     Unknown = SND_PCM_FORMAT_UNKNOWN,
     S8 = SND_PCM_FORMAT_S8,
@@ -503,6 +503,10 @@ alsa_enum!(
     ImaAdPCM = SND_PCM_FORMAT_IMA_ADPCM,
     MPEG = SND_PCM_FORMAT_MPEG,
     GSM = SND_PCM_FORMAT_GSM,
+    S20LE = SND_PCM_FORMAT_S20_LE,
+    S20BE = SND_PCM_FORMAT_S20_BE,
+    U20LE = SND_PCM_FORMAT_U20_LE,
+    U20BE = SND_PCM_FORMAT_U20_BE,
     Special = SND_PCM_FORMAT_SPECIAL,
     S243LE = SND_PCM_FORMAT_S24_3LE,
     S243BE = SND_PCM_FORMAT_S24_3BE,
@@ -556,6 +560,10 @@ impl fmt::Display for Format {
             ImaAdPCM => write!(f, "IMA_ADPCM"),
             MPEG => write!(f, "MPEG"),
             GSM => write!(f, "GSM"),
+            S20LE => write!(f, "S20_LE"),
+            S20BE => write!(f, "S20_BE"),
+            U20LE => write!(f, "U20_LE"),
+            U20BE => write!(f, "U20_BE"),
             Special => write!(f, "SPECIAL"),
             S243LE => write!(f, "S24_3LE"),
             S243BE => write!(f, "S24_3BE"),
@@ -614,6 +622,10 @@ impl FromStr for Format {
             "IMA_ADPCM" => ImaAdPCM,
             "MPEG" => MPEG,
             "GSM" => GSM,
+            "S20_LE" => S20LE,
+            "S20_BE" => S20BE,
+            "U20_LE" => U20LE,
+            "U20_BE" => U20BE,
             "SPECIAL" => Special,
             "S24_3LE" => S243LE,
             "S24_3BE" => S243BE,
@@ -661,8 +673,14 @@ impl Format {
     #[cfg(target_endian = "little")] pub const fn u24_3() -> Format { Format::U243LE }
     #[cfg(target_endian = "big")] pub const fn u24_3() -> Format { Format::U243BE }
 
+    #[cfg(target_endian = "little")] pub const fn s20() -> Format { Format::S20LE }
+    #[cfg(target_endian = "big")] pub const fn s20() -> Format { Format::S20BE }
+
     #[cfg(target_endian = "little")] pub const fn s20_3() -> Format { Format::S203LE }
     #[cfg(target_endian = "big")] pub const fn s20_3() -> Format { Format::S203BE }
+
+    #[cfg(target_endian = "little")] pub const fn u20() -> Format { Format::U20LE }
+    #[cfg(target_endian = "big")] pub const fn u20() -> Format { Format::U20BE }
 
     #[cfg(target_endian = "little")] pub const fn u20_3() -> Format { Format::U203LE }
     #[cfg(target_endian = "big")] pub const fn u20_3() -> Format { Format::U203BE }
