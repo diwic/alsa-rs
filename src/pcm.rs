@@ -404,6 +404,30 @@ impl<'a, S: Copy> IO<'a, S> {
         acheck!(snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, self.to_frames(buf.len()))).map(|r| r as usize)
     }
 
+    /// Write non-interleaved frames to pcm. On success, returns number of frames written.
+    ///
+    /// # Safety
+    ///
+    /// Caller must ensure that the length of `bufs` is at least the number of
+    /// channels, and that each element of bufs is a valid pointer to an array
+    /// of at least `frames` length.
+    pub unsafe fn writen(&self, bufs: &[*const S], frames: usize) -> Result<usize> {
+        let frames = frames as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_writen((self.0).0, bufs.as_ptr() as *mut *mut c_void, frames)).map(|r| r as usize)
+    }
+
+    /// Read non-interleaved frames to pcm. On success, returns number of frames read.
+    ///
+    /// # Safety
+    ///
+    /// Caller must ensure that the length of `bufs` is at least the number of
+    /// channels, and that each element of bufs is a valid pointer to an array
+    /// of at least `frames` length.
+    pub unsafe fn readn(&self, bufs: &mut [*mut S], frames: usize) -> Result<usize> {
+        let frames = frames as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_readn((self.0).0, bufs.as_mut_ptr() as *mut *mut c_void, frames)).map(|r| r as usize)
+    }
+
     /// Wrapper around snd_pcm_mmap_begin and snd_pcm_mmap_commit.
     ///
     /// You can read/write into the sound card's buffer during the call to the closure.
