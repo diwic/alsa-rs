@@ -1154,12 +1154,13 @@ impl<'a> fmt::Debug for SwParams<'a> {
 const STATUS_SIZE: usize = 152;
 
 /// [snd_pcm_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___status.html) wrapper
-pub struct Status([u8; STATUS_SIZE]);
+#[derive(Debug)]
+pub struct Status([u64; (STATUS_SIZE+7)/8]);
 
 impl Status {
     fn new() -> Status {
         assert!(unsafe { alsa::snd_pcm_status_sizeof() } as usize <= STATUS_SIZE);
-        Status([0; STATUS_SIZE])
+        Status([0; (STATUS_SIZE+7)/8])
     }
 
     fn ptr(&self) -> *mut alsa::snd_pcm_status_t { self.0.as_ptr() as *const _ as *mut alsa::snd_pcm_status_t }
@@ -1218,8 +1219,9 @@ impl StatusBuilder {
         self
     }
 
-    pub fn build(self, pcm: &PCM) -> Result<Status> {
-        acheck!(snd_pcm_status(pcm.0, self.0.ptr())).map(|_| self.0)
+    pub fn build(mut self, pcm: &PCM) -> Result<Status> {
+        let p = self.0.0.as_mut_ptr() as *mut alsa::snd_pcm_status_t;
+        acheck!(snd_pcm_status(pcm.0, p)).map(|_| self.0)
     }
 }
 
