@@ -25,6 +25,14 @@
 //! }
 //! ```
 
+#![allow(dead_code)]
+/* There is a "field is never read" warning for the ElemIter struct. We still need to hold on
+   to the HCtl pointer somehow; to guarantee that the HCtl does not go out of scope while we use
+   ElemIter, which would make the snd_hctl_elem_t pointer invalid. Hence the decision to allow dead code here.
+   I suppose there is a better solution for this but I'm not sure how.
+*/
+
+
 use crate::{alsa, Card};
 use std::ffi::{CStr, CString};
 use super::error::*;

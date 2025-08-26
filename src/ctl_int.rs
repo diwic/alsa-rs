@@ -24,7 +24,7 @@ const ELEM_ID_SIZE: usize = 64;
 pub struct DeviceIter<'a>(&'a Ctl, c_int);
 
 impl<'a> DeviceIter<'a>{
-    pub fn new(ctl: &'a Ctl) -> DeviceIter {
+    pub fn new(ctl: &'a Ctl) -> DeviceIter<'a> {
         DeviceIter(ctl, -1)
     }
 }
