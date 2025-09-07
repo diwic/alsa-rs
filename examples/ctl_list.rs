@@ -1,11 +1,11 @@
 //! Example that enumerates controls for a device.
 
-use alsa::Card;
 use alsa::card::Iter;
 use alsa::ctl::Ctl;
+use alsa::Card;
 use alsa::Error;
 
-fn list_controls_for_card(card: &Card) -> Result<(), Error>{
+fn list_controls_for_card(card: &Card) -> Result<(), Error> {
     // Get a Ctl for the card
     let ctl_id = format!("hw:{}", card.get_index());
     let ctl = Ctl::new(&ctl_id, false)?;
@@ -25,5 +25,9 @@ fn list_controls_for_card(card: &Card) -> Result<(), Error>{
 
 fn main() {
     let cards = Iter::new();
-    cards.for_each(|card| if let Ok(c) = card { list_controls_for_card(&c).unwrap_or_default() });
+    cards.for_each(|card| {
+        if let Ok(c) = card {
+            list_controls_for_card(&c).unwrap_or_default()
+        }
+    });
 }
