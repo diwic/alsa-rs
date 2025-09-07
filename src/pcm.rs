@@ -1264,6 +1264,16 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_periods(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
+    pub fn get_periods_min(&self) -> Result<u32> {
+        let (mut v, mut d) = (0, 0);
+        acheck!(snd_pcm_hw_params_get_periods_min(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    pub fn get_periods_max(&self) -> Result<u32> {
+        let (mut v, mut d) = (0, 0);
+        acheck!(snd_pcm_hw_params_get_periods_max(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
     pub fn set_buffer_size_near(&self, v: Frames) -> Result<Frames> {
         let mut r = v as alsa::snd_pcm_uframes_t;
         acheck!(snd_pcm_hw_params_set_buffer_size_near(
