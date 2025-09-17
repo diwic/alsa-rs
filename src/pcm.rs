@@ -361,18 +361,20 @@ impl poll::Descriptors for PCM {
     }
 }
 
+// Keeping imports/code around for suggestions on handling this case
+#[expect(dead_code, unused_imports)]
 fn catch<F>(mut f: F) -> Result<PCM>
 where
     F: FnMut() -> Result<PCM>,
 {
     use std::fs::File;
-    use std::io::prelude::BufRead;
-    use std::io::BufReader;
+    use std::io::{BufReader, Read}; // Read for read_to_string
     use std::os::unix::io::FromRawFd;
 
     extern "C" {
         fn pipe(fd: *mut i32) -> i32;
         fn close(fd: i32) -> i32;
+        fn dup(fd: i32) -> i32;
         fn dup2(old_fd: i32, new_fd: i32) -> i32;
     }
 
@@ -383,38 +385,59 @@ where
     // Creates a pipe of standard error (2) which writes on a file descriptor that can be read on;
     // returns if unsucessful.
     let mut pipefd = [-1; 2];
-    if unsafe { pipe(&mut pipefd[0]) } == -1 {
-        eprintln!("Unable to create pipe for stderr");
-        panic!();
+    if unsafe { pipe(pipefd.as_mut_ptr()) } == -1 {
+        //Can't create pipe for stdder. just run the function
+        return f();
     }
 
+    // @reviewers: Can do some error handling here. suggestions?
     // Creates a file that reads from the pipe
-    let file = unsafe { File::from_raw_fd(pipefd[PIPE_READ]) };
+    //let file = unsafe { File::from_raw_fd(pipefd[PIPE_READ]) };
 
-    // Redirects the pipe to the file; returns if unsucessful
-    if unsafe { dup2(pipefd[PIPE_WRITE], STDERR_FILENO) } == -1 {
-        eprintln!("Unable to redirect pipe to file");
-        panic!();
+    // Save current stderr, then redirect stderr -> pipe write end
+    let saved_stderr = unsafe { dup(STDERR_FILENO) };
+    if saved_stderr == -1 {
+        // can't save; close write end and just run f
+        unsafe { close(pipefd[PIPE_WRITE]) };
+        return f();
     }
 
-    // Runs the code that writes to stderr
+    // Redirects the pipe to the file
+    if unsafe { dup2(pipefd[PIPE_WRITE], STDERR_FILENO) } == -1 {
+        //redirection failed. close fds and run f;
+        unsafe {
+            close(saved_stderr);
+            close(pipefd[PIPE_WRITE]);
+        }
+        return f();
+    }
+
+    // We no longer need our own copy of pipe write end; FD 2 now points at it.
+    unsafe { close(pipefd[PIPE_WRITE]) };
+
+    // code that writes out to stderr
     let result = f();
 
-    // Prints the first line of the stderr
-    let reader = BufReader::new(file);
-    let line = reader.lines().next().unwrap().unwrap();
-    if line != "" {
-        println!("stderr: {:?}", line);
+    // Restore stderr so the pipe's writer is gone and EOF can be observed.
+    if unsafe { dup2(saved_stderr, STDERR_FILENO) } == -1 {
+        eprintln!("Failed to restore stderr!");
     }
+    unsafe { close(saved_stderr) };
 
-    // Closes stderr
-    unsafe {
-        close(pipefd[PIPE_WRITE]);
-    };
+    // read everything written to the pipe
+    //
+    // @reviewers: Can do some error handling here. suggestions?
+    // let mut reader = BufReader::new(file);
+    // let mut captured = String::new();
+    // // read_to_string returns when writer is closed (EOF) — which we ensured above.
+    // let _ = reader.read_to_string(&mut captured);
+
+    // if !captured.is_empty() {
+    //     eprintln!("captured stderr from call:\n{}", captured.trim_end());
+    // }
 
     result
 }
-
 /// Sample format dependent struct for reading from and writing data to a `PCM`.
 /// Also implements `std::io::Read` and `std::io::Write`.
 ///
