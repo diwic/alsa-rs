@@ -155,7 +155,9 @@ impl PCM {
             Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK
         };
         let flags = if nonblock { alsa::SND_PCM_NONBLOCK } else { 0 };
-        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r, cell::Cell::new(false)))
+        catch(|| {
+            acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r, cell::Cell::new(false)))
+        })
     }
 
     pub fn start(&self) -> Result<()> { acheck!(snd_pcm_start(self.0)).map(|_| ()) }
@@ -357,6 +359,60 @@ impl poll::Descriptors for PCM {
         let z = unsafe { alsa::snd_pcm_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
         from_code("snd_pcm_poll_descriptors_revents", z).map(|_| poll::Flags::from_bits_truncate(r as c_short))
     }
+}
+
+fn catch<F>(mut f: F) -> Result<PCM>
+where
+    F: FnMut() -> Result<PCM>,
+{
+    use std::fs::File;
+    use std::io::prelude::BufRead;
+    use std::io::BufReader;
+    use std::os::unix::io::FromRawFd;
+
+    extern "C" {
+        fn pipe(fd: *mut i32) -> i32;
+        fn close(fd: i32) -> i32;
+        fn dup2(old_fd: i32, new_fd: i32) -> i32;
+    }
+
+    const PIPE_READ: usize = 0;
+    const PIPE_WRITE: usize = 1;
+    const STDERR_FILENO: i32 = 2;
+
+    // Creates a pipe of standard error (2) which writes on a file descriptor that can be read on;
+    // returns if unsucessful.
+    let mut pipefd = [-1; 2];
+    if unsafe { pipe(&mut pipefd[0]) } == -1 {
+        eprintln!("Unable to create pipe for stderr");
+        panic!();
+    }
+
+    // Creates a file that reads from the pipe
+    let file = unsafe { File::from_raw_fd(pipefd[PIPE_READ]) };
+
+    // Redirects the pipe to the file; returns if unsucessful
+    if unsafe { dup2(pipefd[PIPE_WRITE], STDERR_FILENO) } == -1 {
+        eprintln!("Unable to redirect pipe to file");
+        panic!();
+    }
+
+    // Runs the code that writes to stderr
+    let result = f();
+
+    // Prints the first line of the stderr
+    let reader = BufReader::new(file);
+    let line = reader.lines().next().unwrap().unwrap();
+    if line != "" {
+        println!("stderr: {:?}", line);
+    }
+
+    // Closes stderr
+    unsafe {
+        close(pipefd[PIPE_WRITE]);
+    };
+
+    result
 }
 
 /// Sample format dependent struct for reading from and writing data to a `PCM`.
