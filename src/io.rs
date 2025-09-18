@@ -34,6 +34,11 @@ impl Output {
         f(b)
     }
 
+
+    /// Installs a thread local error handler.
+    ///
+    /// Sometimes alsa-lib writes to stderr, but if you prefer, you can write it here instead.
+    /// Should you wish to empty the buffer; just call local_error_handler again and drop the old instance.
     pub fn local_error_handler() -> Result<Rc<RefCell<Output>>> {
         let output = Output::buffer_open()?;
         let r = Rc::new(RefCell::new(output));
