@@ -1,11 +1,18 @@
 use crate::alsa;
 use super::error::*;
 use std::{slice, ptr, fmt};
+use std::cell::RefCell;
+use std::rc::Rc;
+use libc::{c_char, c_int};
 
 /// [snd_output_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___output.html) wrapper
 pub struct Output(*mut alsa::snd_output_t);
 
 unsafe impl Send for Output {}
+
+thread_local! {
+    static ERROR_OUTPUT: RefCell<Option<Rc<RefCell<Output>>>> = RefCell::new(None);
+}
 
 impl Drop for Output {
     fn drop(&mut self) { unsafe { alsa::snd_output_close(self.0) }; }
@@ -25,6 +32,14 @@ impl Output {
             if s == 0 { &[] } else { slice::from_raw_parts(q as *const u8, s as usize) }
         };
         f(b)
+    }
+
+    pub fn local_error_handler() -> Result<Rc<RefCell<Output>>> {
+        let output = Output::buffer_open()?;
+        let r = Rc::new(RefCell::new(output));
+        ERROR_OUTPUT.with_borrow_mut(|e| *e = Some(r.clone()));
+        unsafe { alsa::snd_lib_error_set_local(Some(our_error_handler)); }
+        Ok(r)
     }
 }
 
@@ -47,3 +62,19 @@ impl fmt::Display for Output {
 }
 
 pub fn output_handle(o: &Output) -> *mut alsa::snd_output_t { o.0 }
+
+unsafe extern "C" fn our_error_handler(file: *const c_char,
+    line: c_int,
+    func: *const c_char,
+    err: c_int,
+    fmt: *const c_char,
+    arg: *mut alsa::__va_list_tag,
+) {
+    ERROR_OUTPUT.with_borrow(|e| {
+        let b = e.as_ref().expect("ERROR_OUTPUT not set").borrow_mut();
+        alsa::snd_output_puts(b.0, func);
+        alsa::snd_output_puts(b.0, c": ".as_ptr());
+        alsa::snd_output_vprintf(b.0, fmt, arg);
+        alsa::snd_output_putc(b.0, '\n' as i32);
+    })
+}

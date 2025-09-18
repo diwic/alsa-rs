@@ -139,6 +139,11 @@ fn chmap_for_first_pcm() {
     use super::*;
     use std::ffi::CString;
     use crate::device_name::HintIter;
+
+    use crate::Output;
+
+    let output = Output::local_error_handler().unwrap();
+
     let i = HintIter::new(None, &*CString::new("pcm").unwrap()).unwrap();
     for p in i.map(|n| n.name.unwrap()) {
         println!("Chmaps for {:?}:", p);
@@ -149,4 +154,10 @@ fn chmap_for_first_pcm() {
             Err(a) => println!("  {}", a) // It's okay to have entries in the name hint array that can't be opened
         }
     }
+
+    output.borrow_mut().buffer_string(|buf| {
+        let str = CString::new(buf).unwrap();
+        println!("Errors:\n{}", str.to_str().unwrap());
+    });
+
 }
