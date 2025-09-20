@@ -1,13 +1,13 @@
 //! MIDI sequencer I/O and enumeration
 
+use libc::{c_uint, c_int, c_short, c_uchar, c_void, c_long, size_t, pollfd};
 use super::error::*;
-use super::{poll, Direction};
 use crate::alsa;
-use libc::{c_int, c_long, c_short, c_uchar, c_uint, c_void, pollfd, size_t};
-use std::borrow::Cow;
-use std::ffi::CStr;
+use super::{Direction, poll};
+use std::{ptr, fmt, mem, slice, time, cell};
 use std::str::{FromStr, Split};
-use std::{cell, fmt, mem, ptr, slice, time};
+use std::ffi::CStr;
+use std::borrow::Cow;
 
 // Workaround for improper alignment of snd_seq_ev_ext_t in alsa-sys
 #[repr(packed)]
@@ -26,16 +26,12 @@ pub struct Seq(*mut alsa::snd_seq_t, cell::Cell<bool>);
 unsafe impl Send for Seq {}
 
 impl Drop for Seq {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_seq_close(self.0) };
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_seq_close(self.0) }; }
 }
 
 impl Seq {
     fn check_has_input(&self) {
-        if self.1.get() {
-            panic!("No additional Input object allowed")
-        }
+        if self.1.get() { panic!("No additional Input object allowed")}
     }
 
     /// Opens the sequencer.
@@ -89,13 +85,7 @@ impl Seq {
 
     pub fn get_any_port_info(&self, a: Addr) -> Result<PortInfo> {
         let c = PortInfo::new()?;
-        acheck!(snd_seq_get_any_port_info(
-            self.0,
-            a.client as c_int,
-            a.port as c_int,
-            c.0
-        ))
-        .map(|_| c)
+        acheck!(snd_seq_get_any_port_info(self.0, a.client as c_int, a.port as c_int, c.0)).map(|_| c)
     }
 
     pub fn create_port(&self, port: &PortInfo) -> Result<()> {
@@ -103,13 +93,7 @@ impl Seq {
     }
 
     pub fn create_simple_port(&self, name: &CStr, caps: PortCap, t: PortType) -> Result<i32> {
-        acheck!(snd_seq_create_simple_port(
-            self.0,
-            name.as_ptr(),
-            caps.bits() as c_uint,
-            t.bits() as c_uint
-        ))
-        .map(|q| q as i32)
+        acheck!(snd_seq_create_simple_port(self.0, name.as_ptr(), caps.bits() as c_uint, t.bits() as c_uint)).map(|q| q as i32)
     }
 
     pub fn set_port_info(&self, port: i32, info: &mut PortInfo) -> Result<()> {
@@ -131,27 +115,10 @@ impl Seq {
         acheck!(snd_seq_unsubscribe_port(self.0, z.0)).map(|_| ())
     }
 
-    pub fn control_queue(
-        &self,
-        q: i32,
-        t: EventType,
-        value: i32,
-        e: Option<&mut Event>,
-    ) -> Result<()> {
-        assert!(
-            EvQueueControl::<()>::has_data(t)
-                || EvQueueControl::<i32>::has_data(t)
-                || EvQueueControl::<u32>::has_data(t)
-        );
+    pub fn control_queue(&self, q: i32, t: EventType, value: i32, e: Option<&mut Event>) -> Result<()> {
+        assert!(EvQueueControl::<()>::has_data(t) || EvQueueControl::<i32>::has_data(t) || EvQueueControl::<u32>::has_data(t));
         let p = e.map(|e| &mut e.0 as *mut _).unwrap_or(ptr::null_mut());
-        acheck!(snd_seq_control_queue(
-            self.0,
-            q as c_int,
-            t as c_int,
-            value as c_int,
-            p
-        ))
-        .map(|_| ())
+        acheck!(snd_seq_control_queue(self.0, q as c_int, t as c_int, value as c_int, p)).map(|_| ())
     }
 
     pub fn event_output(&self, e: &mut Event) -> Result<u32> {
@@ -183,12 +150,8 @@ impl Seq {
         acheck!(snd_seq_get_queue_status(self.0, q as c_int, value.0)).map(|_| value)
     }
 
-    pub fn free_queue(&self, q: i32) -> Result<()> {
-        acheck!(snd_seq_free_queue(self.0, q)).map(|_| ())
-    }
-    pub fn alloc_queue(&self) -> Result<i32> {
-        acheck!(snd_seq_alloc_queue(self.0)).map(|q| q as i32)
-    }
+    pub fn free_queue(&self, q: i32) -> Result<()> { acheck!(snd_seq_free_queue(self.0, q)).map(|_| ()) }
+    pub fn alloc_queue(&self) -> Result<i32> { acheck!(snd_seq_alloc_queue(self.0)).map(|q| q as i32) }
     pub fn alloc_named_queue(&self, n: &CStr) -> Result<i32> {
         acheck!(snd_seq_alloc_named_queue(self.0, n.as_ptr())).map(|q| q as i32)
     }
@@ -222,9 +185,7 @@ impl Seq {
 pub struct Input<'a>(&'a Seq);
 
 impl<'a> Drop for Input<'a> {
-    fn drop(&mut self) {
-        (self.0).1.set(false)
-    }
+    fn drop(&mut self) { (self.0).1.set(false) }
 }
 
 impl<'a> Input<'a> {
@@ -241,18 +202,14 @@ impl<'a> Input<'a> {
         // event is alive.
         let mut z = ptr::null_mut();
         acheck!(snd_seq_event_input((self.0).0, &mut z))?;
-        unsafe { Event::extract(&mut *z, "snd_seq_event_input") }
+        unsafe { Event::extract (&mut *z, "snd_seq_event_input") }
     }
 
     pub fn event_input_pending(&self, fetch_sequencer: bool) -> Result<u32> {
-        acheck!(snd_seq_event_input_pending(
-            (self.0).0,
-            if fetch_sequencer { 1 } else { 0 }
-        ))
-        .map(|q| q as u32)
+        acheck!(snd_seq_event_input_pending((self.0).0, if fetch_sequencer {1} else {0})).map(|q| q as u32)
     }
 
-    pub fn set_input_buffer_size(&self, size: u32) -> Result<()> {
+    pub fn set_input_buffer_size(&self, size: u32)  -> Result<()> {
         acheck!(snd_seq_set_input_buffer_size((self.0).0, size as size_t)).map(|_| ())
     }
 
@@ -266,39 +223,24 @@ fn polldir(o: Option<Direction>) -> c_short {
         None => poll::Flags::IN | poll::Flags::OUT,
         Some(Direction::Playback) => poll::Flags::OUT,
         Some(Direction::Capture) => poll::Flags::IN,
-    }
-    .bits()
+    }.bits()
 }
 
 impl<'a> poll::Descriptors for (&'a Seq, Option<Direction>) {
+
     fn count(&self) -> usize {
         unsafe { alsa::snd_seq_poll_descriptors_count((self.0).0, polldir(self.1)) as usize }
     }
 
     fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
-        let z = unsafe {
-            alsa::snd_seq_poll_descriptors(
-                (self.0).0,
-                p.as_mut_ptr(),
-                p.len() as c_uint,
-                polldir(self.1),
-            )
-        };
+        let z = unsafe { alsa::snd_seq_poll_descriptors((self.0).0, p.as_mut_ptr(), p.len() as c_uint, polldir(self.1)) };
         from_code("snd_seq_poll_descriptors", z).map(|_| z as usize)
     }
 
     fn revents(&self, p: &[pollfd]) -> Result<poll::Flags> {
         let mut r = 0;
-        let z = unsafe {
-            alsa::snd_seq_poll_descriptors_revents(
-                (self.0).0,
-                p.as_ptr() as *mut pollfd,
-                p.len() as c_uint,
-                &mut r,
-            )
-        };
-        from_code("snd_seq_poll_descriptors_revents", z)
-            .map(|_| poll::Flags::from_bits_truncate(r as c_short))
+        let z = unsafe { alsa::snd_seq_poll_descriptors_revents((self.0).0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
+        from_code("snd_seq_poll_descriptors_revents", z).map(|_| poll::Flags::from_bits_truncate(r as c_short))
     }
 }
 
@@ -345,9 +287,7 @@ impl fmt::Debug for ClientInfo {
 pub struct ClientIter<'a>(&'a Seq, i32);
 
 impl<'a> ClientIter<'a> {
-    pub fn new(seq: &'a Seq) -> Self {
-        ClientIter(seq, -1)
-    }
+    pub fn new(seq: &'a Seq) -> Self { ClientIter(seq, -1) }
 }
 
 impl<'a> Iterator for ClientIter<'a> {
@@ -356,10 +296,7 @@ impl<'a> Iterator for ClientIter<'a> {
         let z = ClientInfo::new().unwrap();
         z.set_client(self.1);
         let r = unsafe { alsa::snd_seq_query_next_client((self.0).0, z.0) };
-        if r < 0 {
-            self.1 = -1;
-            return None;
-        };
+        if r < 0 { self.1 = -1; return None };
         self.1 = z.get_client();
         Some(z)
     }
@@ -418,9 +355,7 @@ impl PortInfo {
     }
 
     pub fn get_capability(&self) -> PortCap {
-        PortCap::from_bits_truncate(unsafe {
-            alsa::snd_seq_port_info_get_capability(self.0) as u32
-        })
+        PortCap::from_bits_truncate(unsafe { alsa::snd_seq_port_info_get_capability(self.0) as u32 })
     }
 
     pub fn get_type(&self) -> PortType {
@@ -443,66 +378,28 @@ impl PortInfo {
         }
     }
 
-    pub fn get_midi_channels(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_info_get_midi_channels(self.0) as i32 }
-    }
-    pub fn get_midi_voices(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_info_get_midi_voices(self.0) as i32 }
-    }
-    pub fn get_synth_voices(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_info_get_synth_voices(self.0) as i32 }
-    }
-    pub fn get_read_use(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_info_get_read_use(self.0) as i32 }
-    }
-    pub fn get_write_use(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_info_get_write_use(self.0) as i32 }
-    }
-    pub fn get_port_specified(&self) -> bool {
-        unsafe { alsa::snd_seq_port_info_get_port_specified(self.0) == 1 }
-    }
-    pub fn get_timestamping(&self) -> bool {
-        unsafe { alsa::snd_seq_port_info_get_timestamping(self.0) == 1 }
-    }
-    pub fn get_timestamp_real(&self) -> bool {
-        unsafe { alsa::snd_seq_port_info_get_timestamp_real(self.0) == 1 }
-    }
-    pub fn get_timestamp_queue(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_info_get_timestamp_queue(self.0) as i32 }
-    }
+    pub fn get_midi_channels(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_midi_channels(self.0) as i32 } }
+    pub fn get_midi_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_midi_voices(self.0) as i32 } }
+    pub fn get_synth_voices(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_synth_voices(self.0) as i32 } }
+    pub fn get_read_use(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_read_use(self.0) as i32 } }
+    pub fn get_write_use(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_write_use(self.0) as i32 } }
+    pub fn get_port_specified(&self) -> bool { unsafe { alsa::snd_seq_port_info_get_port_specified(self.0) == 1 } }
+    pub fn get_timestamping(&self) -> bool { unsafe { alsa::snd_seq_port_info_get_timestamping(self.0) == 1 } }
+    pub fn get_timestamp_real(&self) -> bool { unsafe { alsa::snd_seq_port_info_get_timestamp_real(self.0) == 1 } }
+    pub fn get_timestamp_queue(&self) -> i32 { unsafe { alsa::snd_seq_port_info_get_timestamp_queue(self.0) as i32 } }
 
-    pub fn set_midi_channels(&self, value: i32) {
-        unsafe { alsa::snd_seq_port_info_set_midi_channels(self.0, value as c_int) }
-    }
-    pub fn set_midi_voices(&self, value: i32) {
-        unsafe { alsa::snd_seq_port_info_set_midi_voices(self.0, value as c_int) }
-    }
-    pub fn set_synth_voices(&self, value: i32) {
-        unsafe { alsa::snd_seq_port_info_set_synth_voices(self.0, value as c_int) }
-    }
-    pub fn set_port_specified(&self, value: bool) {
-        unsafe { alsa::snd_seq_port_info_set_port_specified(self.0, if value { 1 } else { 0 }) }
-    }
-    pub fn set_timestamping(&self, value: bool) {
-        unsafe { alsa::snd_seq_port_info_set_timestamping(self.0, if value { 1 } else { 0 }) }
-    }
-    pub fn set_timestamp_real(&self, value: bool) {
-        unsafe { alsa::snd_seq_port_info_set_timestamp_real(self.0, if value { 1 } else { 0 }) }
-    }
-    pub fn set_timestamp_queue(&self, value: i32) {
-        unsafe { alsa::snd_seq_port_info_set_timestamp_queue(self.0, value as c_int) }
-    }
+    pub fn set_midi_channels(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_midi_channels(self.0, value as c_int) } }
+    pub fn set_midi_voices(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_midi_voices(self.0, value as c_int) } }
+    pub fn set_synth_voices(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_synth_voices(self.0, value as c_int) } }
+    pub fn set_port_specified(&self, value: bool) { unsafe { alsa::snd_seq_port_info_set_port_specified(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_timestamping(&self, value: bool) { unsafe { alsa::snd_seq_port_info_set_timestamping(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_timestamp_real(&self, value: bool) { unsafe { alsa::snd_seq_port_info_set_timestamp_real(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_timestamp_queue(&self, value: i32) { unsafe { alsa::snd_seq_port_info_set_timestamp_queue(self.0, value as c_int) } }
 }
 
 impl fmt::Debug for PortInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "PortInfo({}:{},{:?})",
-            self.get_client(),
-            self.get_port(),
-            self.get_name()
-        )
+        write!(f, "PortInfo({}:{},{:?})", self.get_client(), self.get_port(), self.get_name())
     }
 }
 
@@ -511,9 +408,7 @@ impl fmt::Debug for PortInfo {
 pub struct PortIter<'a>(&'a Seq, i32, i32);
 
 impl<'a> PortIter<'a> {
-    pub fn new(seq: &'a Seq, client: i32) -> Self {
-        PortIter(seq, client, -1)
-    }
+    pub fn new(seq: &'a Seq, client: i32) -> Self { PortIter(seq, client, -1) }
 }
 
 impl<'a> Iterator for PortIter<'a> {
@@ -523,10 +418,7 @@ impl<'a> Iterator for PortIter<'a> {
         z.set_client(self.1);
         z.set_port(self.2);
         let r = unsafe { alsa::snd_seq_query_next_port((self.0).0, z.0) };
-        if r < 0 {
-            self.2 = -1;
-            return None;
-        };
+        if r < 0 { self.2 = -1; return None };
         self.2 = z.get_port();
         Some(z)
     }
@@ -589,6 +481,7 @@ bitflags! {
     }
 }
 
+
 /// [snd_seq_addr_t](http://www.alsa-project.org/alsa-doc/alsa-lib/structsnd__seq__addr__t.html) wrapper
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct Addr {
@@ -601,34 +494,27 @@ impl FromStr for Addr {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let mut split: Split<'_, char> = s.trim().split(':');
-        let client = split.next().ok_or("no client provided")?.parse::<i32>()?;
-        let port = split.next().ok_or("no port provided")?.parse::<i32>()?;
+        let client = split.next()
+                          .ok_or("no client provided")?
+                          .parse::<i32>()?;
+        let port = split.next()
+                        .ok_or("no port provided")?
+                        .parse::<i32>()?;
         match split.next() {
-            Some(_) => Err("too many arguments".into()),
-            None => Ok(Addr { client, port }),
+            Some(_) => {
+                Err("too many arguments".into())
+            },
+            None => {
+                Ok(Addr { client, port })
+            }
         }
     }
 }
 
 impl Addr {
-    pub fn system_timer() -> Addr {
-        Addr {
-            client: alsa::SND_SEQ_CLIENT_SYSTEM as i32,
-            port: alsa::SND_SEQ_PORT_SYSTEM_TIMER as i32,
-        }
-    }
-    pub fn system_announce() -> Addr {
-        Addr {
-            client: alsa::SND_SEQ_CLIENT_SYSTEM as i32,
-            port: alsa::SND_SEQ_PORT_SYSTEM_ANNOUNCE as i32,
-        }
-    }
-    pub fn broadcast() -> Addr {
-        Addr {
-            client: alsa::SND_SEQ_ADDRESS_BROADCAST as i32,
-            port: alsa::SND_SEQ_ADDRESS_BROADCAST as i32,
-        }
-    }
+    pub fn system_timer() -> Addr { Addr { client: alsa::SND_SEQ_CLIENT_SYSTEM as i32, port: alsa::SND_SEQ_PORT_SYSTEM_TIMER as i32 } }
+    pub fn system_announce() -> Addr { Addr { client: alsa::SND_SEQ_CLIENT_SYSTEM as i32, port: alsa::SND_SEQ_PORT_SYSTEM_ANNOUNCE as i32 } }
+    pub fn broadcast() -> Addr { Addr { client: alsa::SND_SEQ_ADDRESS_BROADCAST as i32, port: alsa::SND_SEQ_ADDRESS_BROADCAST as i32 } }
 }
 
 /// [snd_seq_port_subscribe_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
@@ -637,9 +523,7 @@ pub struct PortSubscribe(*mut alsa::snd_seq_port_subscribe_t);
 unsafe impl Send for PortSubscribe {}
 
 impl Drop for PortSubscribe {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_seq_port_subscribe_free(self.0) };
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_seq_port_subscribe_free(self.0) }; }
 }
 
 impl PortSubscribe {
@@ -655,67 +539,36 @@ impl PortSubscribe {
         Ok(z)
     }
 
-    pub fn get_sender(&self) -> Addr {
-        unsafe {
-            let z = alsa::snd_seq_port_subscribe_get_sender(self.0);
-            Addr {
-                client: (*z).client as i32,
-                port: (*z).port as i32,
-            }
-        }
-    }
+    pub fn get_sender(&self) -> Addr { unsafe {
+        let z = alsa::snd_seq_port_subscribe_get_sender(self.0);
+        Addr { client: (*z).client as i32, port: (*z).port as i32 }
+    } }
 
-    pub fn get_dest(&self) -> Addr {
-        unsafe {
-            let z = alsa::snd_seq_port_subscribe_get_dest(self.0);
-            Addr {
-                client: (*z).client as i32,
-                port: (*z).port as i32,
-            }
-        }
-    }
+    pub fn get_dest(&self) -> Addr { unsafe {
+        let z = alsa::snd_seq_port_subscribe_get_dest(self.0);
+        Addr { client: (*z).client as i32, port: (*z).port as i32 }
+    } }
 
-    pub fn get_queue(&self) -> i32 {
-        unsafe { alsa::snd_seq_port_subscribe_get_queue(self.0) as i32 }
-    }
-    pub fn get_exclusive(&self) -> bool {
-        unsafe { alsa::snd_seq_port_subscribe_get_exclusive(self.0) == 1 }
-    }
-    pub fn get_time_update(&self) -> bool {
-        unsafe { alsa::snd_seq_port_subscribe_get_time_update(self.0) == 1 }
-    }
-    pub fn get_time_real(&self) -> bool {
-        unsafe { alsa::snd_seq_port_subscribe_get_time_real(self.0) == 1 }
-    }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_port_subscribe_get_queue(self.0) as i32 } }
+    pub fn get_exclusive(&self) -> bool { unsafe { alsa::snd_seq_port_subscribe_get_exclusive(self.0) == 1 } }
+    pub fn get_time_update(&self) -> bool { unsafe { alsa::snd_seq_port_subscribe_get_time_update(self.0) == 1 } }
+    pub fn get_time_real(&self) -> bool { unsafe { alsa::snd_seq_port_subscribe_get_time_real(self.0) == 1 } }
 
     pub fn set_sender(&self, value: Addr) {
-        let z = alsa::snd_seq_addr_t {
-            client: value.client as c_uchar,
-            port: value.port as c_uchar,
-        };
+        let z = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar };
         unsafe { alsa::snd_seq_port_subscribe_set_sender(self.0, &z) };
     }
 
     pub fn set_dest(&self, value: Addr) {
-        let z = alsa::snd_seq_addr_t {
-            client: value.client as c_uchar,
-            port: value.port as c_uchar,
-        };
+        let z = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar };
         unsafe { alsa::snd_seq_port_subscribe_set_dest(self.0, &z) };
     }
 
-    pub fn set_queue(&self, value: i32) {
-        unsafe { alsa::snd_seq_port_subscribe_set_queue(self.0, value as c_int) }
-    }
-    pub fn set_exclusive(&self, value: bool) {
-        unsafe { alsa::snd_seq_port_subscribe_set_exclusive(self.0, if value { 1 } else { 0 }) }
-    }
-    pub fn set_time_update(&self, value: bool) {
-        unsafe { alsa::snd_seq_port_subscribe_set_time_update(self.0, if value { 1 } else { 0 }) }
-    }
-    pub fn set_time_real(&self, value: bool) {
-        unsafe { alsa::snd_seq_port_subscribe_set_time_real(self.0, if value { 1 } else { 0 }) }
-    }
+    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_port_subscribe_set_queue(self.0, value as c_int) } }
+    pub fn set_exclusive(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_exclusive(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_time_update(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_update(self.0, if value { 1 } else { 0 } ) } }
+    pub fn set_time_real(&self, value: bool) { unsafe { alsa::snd_seq_port_subscribe_set_time_real(self.0, if value { 1 } else { 0 } ) } }
+
 }
 
 /// [snd_seq_query_subs_type_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
@@ -732,9 +585,7 @@ struct QuerySubscribe(*mut alsa::snd_seq_query_subscribe_t);
 unsafe impl Send for QuerySubscribe {}
 
 impl Drop for QuerySubscribe {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_seq_query_subscribe_free(self.0) }
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_seq_query_subscribe_free(self.0) } }
 }
 
 impl QuerySubscribe {
@@ -743,48 +594,24 @@ impl QuerySubscribe {
         acheck!(snd_seq_query_subscribe_malloc(&mut q)).map(|_| QuerySubscribe(q))
     }
 
-    pub fn get_index(&self) -> i32 {
-        unsafe { alsa::snd_seq_query_subscribe_get_index(self.0) as i32 }
-    }
-    pub fn get_addr(&self) -> Addr {
-        unsafe {
-            let a = &(*alsa::snd_seq_query_subscribe_get_addr(self.0));
-            Addr {
-                client: a.client as i32,
-                port: a.port as i32,
-            }
-        }
-    }
-    pub fn get_queue(&self) -> i32 {
-        unsafe { alsa::snd_seq_query_subscribe_get_queue(self.0) as i32 }
-    }
-    pub fn get_exclusive(&self) -> bool {
-        unsafe { alsa::snd_seq_query_subscribe_get_exclusive(self.0) == 1 }
-    }
-    pub fn get_time_update(&self) -> bool {
-        unsafe { alsa::snd_seq_query_subscribe_get_time_update(self.0) == 1 }
-    }
-    pub fn get_time_real(&self) -> bool {
-        unsafe { alsa::snd_seq_query_subscribe_get_time_real(self.0) == 1 }
-    }
+    pub fn get_index(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_index(self.0) as i32 } }
+    pub fn get_addr(&self) -> Addr { unsafe {
+        let a = &(*alsa::snd_seq_query_subscribe_get_addr(self.0));
+        Addr { client: a.client as i32, port: a.port as i32 }
+    } }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_query_subscribe_get_queue(self.0) as i32 } }
+    pub fn get_exclusive(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_exclusive(self.0) == 1 } }
+    pub fn get_time_update(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_time_update(self.0) == 1 } }
+    pub fn get_time_real(&self) -> bool { unsafe { alsa::snd_seq_query_subscribe_get_time_real(self.0) == 1 } }
 
-    pub fn set_root(&self, value: Addr) {
-        unsafe {
-            let a = alsa::snd_seq_addr_t {
-                client: value.client as c_uchar,
-                port: value.port as c_uchar,
-            };
-            alsa::snd_seq_query_subscribe_set_root(self.0, &a);
-        }
-    }
-    pub fn set_type(&self, value: QuerySubsType) {
-        unsafe {
-            alsa::snd_seq_query_subscribe_set_type(self.0, value as alsa::snd_seq_query_subs_type_t)
-        }
-    }
-    pub fn set_index(&self, value: i32) {
-        unsafe { alsa::snd_seq_query_subscribe_set_index(self.0, value as c_int) }
-    }
+    pub fn set_root(&self, value: Addr) { unsafe {
+        let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
+        alsa::snd_seq_query_subscribe_set_root(self.0, &a);
+    } }
+    pub fn set_type(&self, value: QuerySubsType) { unsafe {
+        alsa::snd_seq_query_subscribe_set_type(self.0, value as alsa::snd_seq_query_subs_type_t)
+    } }
+    pub fn set_index(&self, value: i32) { unsafe { alsa::snd_seq_query_subscribe_set_index(self.0, value as c_int) } }
 }
 
 #[derive(Copy, Clone)]
@@ -793,17 +620,12 @@ pub struct PortSubscribeIter<'a> {
     seq: &'a Seq,
     addr: Addr,
     query_subs_type: QuerySubsType,
-    index: i32,
+    index: i32
 }
 
 impl<'a> PortSubscribeIter<'a> {
     pub fn new(seq: &'a Seq, addr: Addr, query_subs_type: QuerySubsType) -> Self {
-        PortSubscribeIter {
-            seq,
-            addr,
-            query_subs_type,
-            index: 0,
-        }
+        PortSubscribeIter {seq, addr, query_subs_type, index: 0 }
     }
 }
 
@@ -829,8 +651,8 @@ impl<'a> Iterator for PortSubscribeIter<'a> {
             QuerySubsType::READ => {
                 vtr.set_sender(self.addr);
                 vtr.set_dest(query.get_addr());
-            }
-            QuerySubsType::WRITE => {
+            },
+            QuerySubsType:: WRITE => {
                 vtr.set_sender(query.get_addr());
                 vtr.set_dest(self.addr);
             }
@@ -858,10 +680,7 @@ unsafe impl<'a> Send for Event<'a> {}
 impl<'a> Event<'a> {
     /// Creates a new event. For events that carry variable-length data (e.g. Sysex), `new_ext` has to be used instead.
     pub fn new<D: EventData>(t: EventType, data: &D) -> Event<'static> {
-        assert!(
-            !Event::has_ext_data(t),
-            "event type must not carry variable-length data"
-        );
+        assert!(!Event::has_ext_data(t), "event type must not carry variable-length data");
         let mut z = Event(unsafe { mem::zeroed() }, t, None);
         (z.0).type_ = t as c_uchar;
         (z.0).flags |= Event::get_length_flag(t);
@@ -872,10 +691,7 @@ impl<'a> Event<'a> {
 
     /// Creates a new event carrying variable-length data. This is required for event types `Sysex`, `Bounce`, and the `UsrVar` types.
     pub fn new_ext<D: Into<Cow<'a, [u8]>>>(t: EventType, data: D) -> Event<'a> {
-        assert!(
-            Event::has_ext_data(t),
-            "event type must carry variable-length data"
-        );
+        assert!(Event::has_ext_data(t), "event type must carry variable-length data");
         let mut z = Event(unsafe { mem::zeroed() }, t, Some(data.into()));
         (z.0).type_ = t as c_uchar;
         (z.0).flags |= Event::get_length_flag(t);
@@ -886,11 +702,7 @@ impl<'a> Event<'a> {
     /// buffer for variable length messages (e.g. SysEx) has been copied into the event.
     /// The returned event has a static lifetime, i e, it's decoupled from the original buffer.
     pub fn into_owned(self) -> Event<'static> {
-        Event(
-            self.0,
-            self.1,
-            self.2.map(|cow| Cow::Owned(cow.into_owned())),
-        )
+        Event(self.0, self.1, self.2.map(|cow| Cow::Owned(cow.into_owned())))
     }
 
     fn get_length_flag(t: EventType) -> u8 {
@@ -902,7 +714,7 @@ impl<'a> Event<'a> {
             EventType::UsrVar2 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
             EventType::UsrVar3 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
             EventType::UsrVar4 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
-            _ => alsa::SND_SEQ_EVENT_LENGTH_FIXED,
+            _ => alsa::SND_SEQ_EVENT_LENGTH_FIXED
         }
     }
 
@@ -911,19 +723,12 @@ impl<'a> Event<'a> {
     }
 
     /// Extracts event type and data. Produces a result with an arbitrary lifetime, hence the unsafety.
-    unsafe fn extract<'any>(
-        z: &mut alsa::snd_seq_event_t,
-        func: &'static str,
-    ) -> Result<Event<'any>> {
+    unsafe fn extract<'any>(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event<'any>> {
         let t = EventType::from_c_int((*z).type_ as c_int, func)?;
         let ext_data = if Event::has_ext_data(t) {
-            assert_ne!(
-                (*z).flags & alsa::SND_SEQ_EVENT_LENGTH_MASK,
-                alsa::SND_SEQ_EVENT_LENGTH_FIXED
-            );
+            assert_ne!((*z).flags & alsa::SND_SEQ_EVENT_LENGTH_MASK, alsa::SND_SEQ_EVENT_LENGTH_FIXED);
             Some(Cow::Borrowed({
-                let zz: &EvExtPacked =
-                    &*(&(*z).data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _);
+                let zz: &EvExtPacked = &*(&(*z).data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _);
                 slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
             }))
         } else {
@@ -935,35 +740,24 @@ impl<'a> Event<'a> {
     /// Ensures that the ev.ext union element points to the correct resize_buffer for events
     /// with variable length content
     fn ensure_buf(&mut self) {
-        if !Event::has_ext_data(self.1) {
-            return;
-        }
+        if !Event::has_ext_data(self.1) { return; }
         let slice: &[u8] = match self.2 {
             Some(Cow::Owned(ref mut vec)) => &vec[..],
             Some(Cow::Borrowed(buf)) => buf,
             // The following case is always a logic error in the program, thus panicking is okay.
-            None => panic!("event type requires variable-length data, but none was provided"),
+            None => panic!("event type requires variable-length data, but none was provided")
         };
-        let z: &mut EvExtPacked =
-            unsafe { &mut *(&mut self.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+        let z: &mut EvExtPacked = unsafe { &mut *(&mut self.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
         z.len = slice.len() as c_uint;
         z.ptr = slice.as_ptr() as *mut c_void;
     }
 
     #[inline]
-    pub fn get_type(&self) -> EventType {
-        self.1
-    }
+    pub fn get_type(&self) -> EventType { self.1 }
 
     /// Extract the event data from an event.
     /// Use `get_ext` instead for events carrying variable-length data.
-    pub fn get_data<D: EventData>(&self) -> Option<D> {
-        if D::has_data(self.1) {
-            Some(D::get_data(self))
-        } else {
-            None
-        }
-    }
+    pub fn get_data<D: EventData>(&self) -> Option<D> { if D::has_data(self.1) { Some(D::get_data(self)) } else { None } }
 
     /// Extract the variable-length data carried by events of type `Sysex`, `Bounce`, or the `UsrVar` types.
     pub fn get_ext(&self) -> Option<&[u8]> {
@@ -972,7 +766,7 @@ impl<'a> Event<'a> {
                 Some(Cow::Owned(ref vec)) => Some(&vec[..]),
                 Some(Cow::Borrowed(buf)) => Some(buf),
                 // The following case is always a logic error in the program, thus panicking is okay.
-                None => panic!("event type requires variable-length data, but none was found"),
+                None => panic!("event type requires variable-length data, but none was found")
             }
         } else {
             None
@@ -984,47 +778,19 @@ impl<'a> Event<'a> {
         self.0.dest.port = alsa::SND_SEQ_ADDRESS_UNKNOWN;
     }
 
-    pub fn set_source(&mut self, p: i32) {
-        self.0.source.port = p as u8
-    }
-    pub fn set_dest(&mut self, d: Addr) {
-        self.0.dest.client = d.client as c_uchar;
-        self.0.dest.port = d.port as c_uchar;
-    }
-    pub fn set_tag(&mut self, t: u8) {
-        self.0.tag = t as c_uchar;
-    }
-    pub fn set_queue(&mut self, q: i32) {
-        self.0.queue = q as c_uchar;
-    }
+    pub fn set_source(&mut self, p: i32) { self.0.source.port = p as u8 }
+    pub fn set_dest(&mut self, d: Addr) { self.0.dest.client = d.client as c_uchar; self.0.dest.port = d.port as c_uchar; }
+    pub fn set_tag(&mut self, t: u8) { self.0.tag = t as c_uchar;  }
+    pub fn set_queue(&mut self, q: i32) { self.0.queue = q as c_uchar;  }
 
-    pub fn get_source(&self) -> Addr {
-        Addr {
-            client: self.0.source.client as i32,
-            port: self.0.source.port as i32,
-        }
-    }
-    pub fn get_dest(&self) -> Addr {
-        Addr {
-            client: self.0.dest.client as i32,
-            port: self.0.dest.port as i32,
-        }
-    }
-    pub fn get_tag(&self) -> u8 {
-        self.0.tag as u8
-    }
-    pub fn get_queue(&self) -> i32 {
-        self.0.queue as i32
-    }
+    pub fn get_source(&self) -> Addr { Addr { client: self.0.source.client as i32, port: self.0.source.port as i32 } }
+    pub fn get_dest(&self) -> Addr { Addr { client: self.0.dest.client as i32, port: self.0.dest.port as i32 } }
+    pub fn get_tag(&self) -> u8 { self.0.tag as u8  }
+    pub fn get_queue(&self) -> i32 { self.0.queue as i32 }
 
     pub fn schedule_real(&mut self, queue: i32, relative: bool, rtime: time::Duration) {
         self.0.flags &= !(alsa::SND_SEQ_TIME_STAMP_MASK | alsa::SND_SEQ_TIME_MODE_MASK);
-        self.0.flags |= alsa::SND_SEQ_TIME_STAMP_REAL
-            | (if relative {
-                alsa::SND_SEQ_TIME_MODE_REL
-            } else {
-                alsa::SND_SEQ_TIME_MODE_ABS
-            });
+        self.0.flags |= alsa::SND_SEQ_TIME_STAMP_REAL | (if relative { alsa::SND_SEQ_TIME_MODE_REL } else { alsa::SND_SEQ_TIME_MODE_ABS });
         self.0.queue = queue as u8;
         let t = unsafe { &mut self.0.time.time };
         t.tv_sec = rtime.as_secs() as c_uint;
@@ -1033,33 +799,22 @@ impl<'a> Event<'a> {
 
     pub fn schedule_tick(&mut self, queue: i32, relative: bool, ttime: u32) {
         self.0.flags &= !(alsa::SND_SEQ_TIME_STAMP_MASK | alsa::SND_SEQ_TIME_MODE_MASK);
-        self.0.flags |= alsa::SND_SEQ_TIME_STAMP_TICK
-            | (if relative {
-                alsa::SND_SEQ_TIME_MODE_REL
-            } else {
-                alsa::SND_SEQ_TIME_MODE_ABS
-            });
+        self.0.flags |= alsa::SND_SEQ_TIME_STAMP_TICK | (if relative { alsa::SND_SEQ_TIME_MODE_REL } else { alsa::SND_SEQ_TIME_MODE_ABS });
         self.0.queue = queue as u8;
         let t = unsafe { &mut self.0.time.tick };
         *t = ttime as c_uint;
     }
 
-    pub fn set_direct(&mut self) {
-        self.0.queue = alsa::SND_SEQ_QUEUE_DIRECT
-    }
+    pub fn set_direct(&mut self) { self.0.queue = alsa::SND_SEQ_QUEUE_DIRECT }
 
-    pub fn get_relative(&self) -> bool {
-        (self.0.flags & alsa::SND_SEQ_TIME_MODE_REL) != 0
-    }
+    pub fn get_relative(&self) -> bool { (self.0.flags & alsa::SND_SEQ_TIME_MODE_REL) != 0 }
 
     pub fn get_time(&self) -> Option<time::Duration> {
         if (self.0.flags & alsa::SND_SEQ_TIME_STAMP_REAL) != 0 {
             let d = self.0.time;
             let t = unsafe { &d.time };
             Some(time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32))
-        } else {
-            None
-        }
+        } else { None }
     }
 
     pub fn get_tick(&self) -> Option<u32> {
@@ -1067,68 +822,37 @@ impl<'a> Event<'a> {
             let d = self.0.time;
             let t = unsafe { &d.tick };
             Some(*t)
-        } else {
-            None
-        }
+        } else { None }
     }
 
     /// Returns true if the message is high priority.
-    pub fn get_priority(&self) -> bool {
-        (self.0.flags & alsa::SND_SEQ_PRIORITY_HIGH) != 0
-    }
+    pub fn get_priority(&self) -> bool { (self.0.flags & alsa::SND_SEQ_PRIORITY_HIGH) != 0 }
 
     pub fn set_priority(&mut self, is_high_prio: bool) {
-        if is_high_prio {
-            self.0.flags |= alsa::SND_SEQ_PRIORITY_HIGH;
-        } else {
-            self.0.flags &= !alsa::SND_SEQ_PRIORITY_HIGH;
-        }
+        if is_high_prio { self.0.flags |= alsa::SND_SEQ_PRIORITY_HIGH; }
+        else { self.0.flags &= !alsa::SND_SEQ_PRIORITY_HIGH; }
     }
 }
 
 impl<'a> Clone for Event<'a> {
-    fn clone(&self) -> Self {
-        Event(unsafe { ptr::read(&self.0) }, self.1, self.2.clone())
-    }
+    fn clone(&self) -> Self { Event(unsafe { ptr::read(&self.0) }, self.1, self.2.clone()) }
 }
 
 impl<'a> fmt::Debug for Event<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut x = f.debug_tuple("Event");
         x.field(&self.1);
-        if let Some(z) = self.get_data::<EvNote>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<EvCtrl>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<Addr>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<Connect>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<EvQueueControl<()>>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<EvQueueControl<i32>>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<EvQueueControl<u32>>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<EvQueueControl<time::Duration>>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<EvResult>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_data::<[u8; 12]>() {
-            x.field(&z);
-        }
-        if let Some(z) = self.get_ext() {
-            x.field(&z);
-        }
+        if let Some(z) = self.get_data::<EvNote>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvCtrl>() { x.field(&z); }
+        if let Some(z) = self.get_data::<Addr>() { x.field(&z); }
+        if let Some(z) = self.get_data::<Connect>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<()>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<i32>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<u32>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvQueueControl<time::Duration>>() { x.field(&z); }
+        if let Some(z) = self.get_data::<EvResult>() { x.field(&z); }
+        if let Some(z) = self.get_data::<[u8; 12]>() { x.field(&z); }
+        if let Some(z) = self.get_ext() { x.field(&z); }
         x.finish()
     }
 }
@@ -1148,42 +872,42 @@ pub trait EventData {
 impl EventData for () {
     fn get_data(_: &Event) -> Self {}
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::TuneRequest | EventType::Reset | EventType::Sensing | EventType::None
-        )
+         matches!(e,
+             EventType::TuneRequest |
+             EventType::Reset |
+             EventType::Sensing |
+             EventType::None)
     }
     fn set_data(&self, _: &mut Event) {}
 }
 
 impl EventData for [u8; 12] {
     fn get_data(ev: &Event) -> Self {
-        let d = unsafe { ptr::read(&ev.0.data) };
-        let z = unsafe { &d.raw8 };
-        z.d
+         let d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &d.raw8 };
+         z.d
     }
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::Echo
-                | EventType::Oss
-                | EventType::Usr0
-                | EventType::Usr1
-                | EventType::Usr2
-                | EventType::Usr3
-                | EventType::Usr4
-                | EventType::Usr5
-                | EventType::Usr6
-                | EventType::Usr7
-                | EventType::Usr8
-                | EventType::Usr9
-        )
+         matches!(e,
+             EventType::Echo |
+             EventType::Oss |
+             EventType::Usr0 |
+             EventType::Usr1 |
+             EventType::Usr2 |
+             EventType::Usr3 |
+             EventType::Usr4 |
+             EventType::Usr5 |
+             EventType::Usr6 |
+             EventType::Usr7 |
+             EventType::Usr8 |
+             EventType::Usr9)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z = unsafe { &mut ev.0.data.raw8 };
-        z.d = *self;
+         let z = unsafe { &mut ev.0.data.raw8 };
+         z.d = *self;
     }
 }
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 pub struct EvNote {
@@ -1196,30 +920,23 @@ pub struct EvNote {
 
 impl EventData for EvNote {
     fn get_data(ev: &Event) -> Self {
-        let z: &alsa::snd_seq_ev_note_t =
-            unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
-        EvNote {
-            channel: z.channel as u8,
-            note: z.note as u8,
-            velocity: z.velocity as u8,
-            off_velocity: z.off_velocity as u8,
-            duration: z.duration as u32,
-        }
+         let z: &alsa::snd_seq_ev_note_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         EvNote { channel: z.channel as u8, note: z.note as u8, velocity: z.velocity as u8, off_velocity: z.off_velocity as u8, duration: z.duration as u32 }
     }
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::Note | EventType::Noteon | EventType::Noteoff | EventType::Keypress
-        )
+         matches!(e,
+             EventType::Note |
+             EventType::Noteon |
+             EventType::Noteoff |
+             EventType::Keypress)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z: &mut alsa::snd_seq_ev_note_t =
-            unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
-        z.channel = self.channel as c_uchar;
-        z.note = self.note as c_uchar;
-        z.velocity = self.velocity as c_uchar;
-        z.off_velocity = self.off_velocity as c_uchar;
-        z.duration = self.duration as c_uint;
+         let z: &mut alsa::snd_seq_ev_note_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+         z.channel = self.channel as c_uchar;
+         z.note = self.note as c_uchar;
+         z.velocity = self.velocity as c_uchar;
+         z.off_velocity = self.off_velocity as c_uchar;
+         z.duration = self.duration as c_uint;
     }
 }
 
@@ -1232,65 +949,50 @@ pub struct EvCtrl {
 
 impl EventData for EvCtrl {
     fn get_data(ev: &Event) -> Self {
-        let z: &alsa::snd_seq_ev_ctrl_t =
-            unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
-        EvCtrl {
-            channel: z.channel as u8,
-            param: z.param as u32,
-            value: z.value as i32,
-        }
+         let z: &alsa::snd_seq_ev_ctrl_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         EvCtrl { channel: z.channel as u8, param: z.param as u32, value: z.value as i32 }
     }
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::Controller
-                | EventType::Pgmchange
-                | EventType::Chanpress
-                | EventType::Pitchbend
-                | EventType::Control14
-                | EventType::Nonregparam
-                | EventType::Regparam
-                | EventType::Songpos
-                | EventType::Songsel
-                | EventType::Qframe
-                | EventType::Timesign
-                | EventType::Keysign
-        )
+         matches!(e,
+             EventType::Controller |
+             EventType::Pgmchange |
+             EventType::Chanpress |
+             EventType::Pitchbend |
+             EventType::Control14 |
+             EventType::Nonregparam |
+             EventType::Regparam |
+             EventType::Songpos |
+             EventType::Songsel |
+             EventType::Qframe |
+             EventType::Timesign |
+             EventType::Keysign)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z: &mut alsa::snd_seq_ev_ctrl_t =
-            unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
-        z.channel = self.channel as c_uchar;
-        z.param = self.param as c_uint;
-        z.value = self.value as c_int;
+         let z: &mut alsa::snd_seq_ev_ctrl_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+         z.channel = self.channel as c_uchar;
+         z.param = self.param as c_uint;
+         z.value = self.value as c_int;
     }
 }
 
 impl EventData for Addr {
     fn get_data(ev: &Event) -> Self {
-        let z: &alsa::snd_seq_addr_t =
-            unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
-        Addr {
-            client: z.client as i32,
-            port: z.port as i32,
-        }
+         let z: &alsa::snd_seq_addr_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         Addr { client: z.client as i32, port: z.port as i32 }
     }
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::ClientStart
-                | EventType::ClientExit
-                | EventType::ClientChange
-                | EventType::PortStart
-                | EventType::PortExit
-                | EventType::PortChange
-        )
+         matches!(e,
+             EventType::ClientStart |
+             EventType::ClientExit |
+             EventType::ClientChange |
+             EventType::PortStart |
+             EventType::PortExit |
+             EventType::PortChange)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z: &mut alsa::snd_seq_addr_t =
-            unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
-        z.client = self.client as c_uchar;
-        z.port = self.port as c_uchar;
+         let z: &mut alsa::snd_seq_addr_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+         z.client = self.client as c_uchar;
+         z.port = self.port as c_uchar;
     }
 }
 
@@ -1303,28 +1005,24 @@ pub struct Connect {
 
 impl EventData for Connect {
     fn get_data(ev: &Event) -> Self {
-        let d = unsafe { ptr::read(&ev.0.data) };
-        let z = unsafe { &d.connect };
-        Connect {
-            sender: Addr {
-                client: z.sender.client as i32,
-                port: z.sender.port as i32,
-            },
-            dest: Addr {
-                client: z.dest.client as i32,
-                port: z.dest.port as i32,
-            },
-        }
+         let d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &d.connect };
+         Connect {
+             sender: Addr { client: z.sender.client as i32, port: z.sender.port as i32 },
+             dest: Addr { client: z.dest.client as i32, port: z.dest.port as i32 }
+         }
     }
     fn has_data(e: EventType) -> bool {
-        matches!(e, EventType::PortSubscribed | EventType::PortUnsubscribed)
+         matches!(e,
+             EventType::PortSubscribed |
+             EventType::PortUnsubscribed)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z = unsafe { &mut ev.0.data.connect };
-        z.sender.client = self.sender.client as c_uchar;
-        z.sender.port = self.sender.port as c_uchar;
-        z.dest.client = self.dest.client as c_uchar;
-        z.dest.port = self.dest.port as c_uchar;
+         let z = unsafe { &mut ev.0.data.connect };
+         z.sender.client = self.sender.client as c_uchar;
+         z.sender.port = self.sender.port as c_uchar;
+         z.dest.client = self.dest.client as c_uchar;
+         z.dest.port = self.dest.port as c_uchar;
     }
 }
 
@@ -1341,102 +1039,78 @@ pub struct EvQueueControl<T> {
 
 impl EventData for EvQueueControl<()> {
     fn get_data(ev: &Event) -> Self {
-        let d = unsafe { ptr::read(&ev.0.data) };
-        let z = unsafe { &d.queue };
-        EvQueueControl {
-            queue: z.queue as i32,
-            value: (),
-        }
+         let d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &d.queue };
+         EvQueueControl { queue: z.queue as i32, value: () }
     }
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::Start
-                | EventType::Continue
-                | EventType::Stop
-                | EventType::Clock
-                | EventType::QueueSkew
-        )
+         matches!(e,
+             EventType::Start |
+             EventType::Continue |
+             EventType::Stop |
+             EventType::Clock |
+             EventType::QueueSkew)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z = unsafe { &mut ev.0.data.queue };
-        z.queue = self.queue as c_uchar;
+         let z = unsafe { &mut ev.0.data.queue };
+         z.queue = self.queue as c_uchar;
     }
 }
 
 impl EventData for EvQueueControl<i32> {
-    fn get_data(ev: &Event) -> Self {
-        unsafe {
-            let mut d = ptr::read(&ev.0.data);
-            let z = &mut d.queue;
-            EvQueueControl {
-                queue: z.queue as i32,
-                value: z.param.value as i32,
-            }
-        }
-    }
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut d.queue;
+         EvQueueControl { queue: z.queue as i32, value: z.param.value as i32 }
+    } }
     fn has_data(e: EventType) -> bool {
-        matches!(e, EventType::Tempo)
+         matches!(e,
+             EventType::Tempo)
     }
-    fn set_data(&self, ev: &mut Event) {
-        unsafe {
-            let z = &mut ev.0.data.queue;
-            z.queue = self.queue as c_uchar;
-            z.param.value = self.value as c_int;
-        }
-    }
+    fn set_data(&self, ev: &mut Event) { unsafe {
+         let z = &mut ev.0.data.queue;
+         z.queue = self.queue as c_uchar;
+         z.param.value = self.value as c_int;
+    } }
 }
 
 impl EventData for EvQueueControl<u32> {
-    fn get_data(ev: &Event) -> Self {
-        unsafe {
-            let mut d = ptr::read(&ev.0.data);
-            let z = &mut d.queue;
-            EvQueueControl {
-                queue: z.queue as i32,
-                value: z.param.position as u32,
-            }
-        }
-    }
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut d.queue;
+         EvQueueControl { queue: z.queue as i32, value: z.param.position as u32 }
+    } }
     fn has_data(e: EventType) -> bool {
-        matches!(
-            e,
-            EventType::SyncPos | EventType::Tick | EventType::SetposTick
-        )
+         matches!(e,
+             EventType::SyncPos |
+             EventType::Tick |
+             EventType::SetposTick)
     }
-    fn set_data(&self, ev: &mut Event) {
-        unsafe {
-            let z = &mut ev.0.data.queue;
-            z.queue = self.queue as c_uchar;
-            z.param.position = self.value as c_uint;
-        }
-    }
+    fn set_data(&self, ev: &mut Event) { unsafe {
+         let z = &mut ev.0.data.queue;
+         z.queue = self.queue as c_uchar;
+         z.param.position = self.value as c_uint;
+    } }
 }
 
 impl EventData for EvQueueControl<time::Duration> {
-    fn get_data(ev: &Event) -> Self {
-        unsafe {
-            let mut d = ptr::read(&ev.0.data);
-            let z = &mut d.queue;
-            let t = &mut z.param.time.time;
-            EvQueueControl {
-                queue: z.queue as i32,
-                value: time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32),
-            }
-        }
-    }
+    fn get_data(ev: &Event) -> Self { unsafe {
+         let mut d = ptr::read(&ev.0.data);
+         let z = &mut d.queue;
+         let t = &mut z.param.time.time;
+         EvQueueControl { queue: z.queue as i32, value: time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32) }
+    } }
     fn has_data(e: EventType) -> bool {
-        matches!(e, EventType::SetposTime)
+         matches!(e,
+             EventType::SetposTime)
     }
-    fn set_data(&self, ev: &mut Event) {
-        unsafe {
-            let z = &mut ev.0.data.queue;
-            z.queue = self.queue as c_uchar;
-            let t = &mut z.param.time.time;
-            t.tv_sec = self.value.as_secs() as c_uint;
-            t.tv_nsec = self.value.subsec_nanos() as c_uint;
-        }
-    }
+    fn set_data(&self, ev: &mut Event) { unsafe {
+         let z = &mut ev.0.data.queue;
+         z.queue = self.queue as c_uchar;
+         let t = &mut z.param.time.time;
+         t.tv_sec = self.value.as_secs() as c_uint;
+         t.tv_nsec = self.value.subsec_nanos() as c_uint;
+    } }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
@@ -1450,22 +1124,23 @@ pub struct EvResult {
 
 impl EventData for EvResult {
     fn get_data(ev: &Event) -> Self {
-        let d = unsafe { ptr::read(&ev.0.data) };
-        let z = unsafe { &d.result };
-        EvResult {
-            event: z.event as i32,
-            result: z.result as i32,
-        }
+         let d = unsafe { ptr::read(&ev.0.data) };
+         let z = unsafe { &d.result };
+         EvResult { event: z.event as i32, result: z.result as i32 }
     }
     fn has_data(e: EventType) -> bool {
-        matches!(e, EventType::System | EventType::Result)
+         matches!(e,
+             EventType::System |
+             EventType::Result)
     }
     fn set_data(&self, ev: &mut Event) {
-        let z = unsafe { &mut ev.0.data.result };
-        z.event = self.event as c_int;
-        z.result = self.result as c_int;
+         let z = unsafe { &mut ev.0.data.result };
+         z.event = self.event as c_int;
+         z.result = self.result as c_int;
     }
 }
+
+
 
 alsa_enum!(
     /// [SND_SEQ_EVENT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_events.html) constants
@@ -1539,9 +1214,7 @@ pub struct QueueTempo(*mut alsa::snd_seq_queue_tempo_t);
 unsafe impl Send for QueueTempo {}
 
 impl Drop for QueueTempo {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_seq_queue_tempo_free(self.0) }
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_seq_queue_tempo_free(self.0) } }
 }
 
 impl QueueTempo {
@@ -1557,35 +1230,17 @@ impl QueueTempo {
         Ok(q)
     }
 
-    pub fn get_queue(&self) -> i32 {
-        unsafe { alsa::snd_seq_queue_tempo_get_queue(self.0) as i32 }
-    }
-    pub fn get_tempo(&self) -> u32 {
-        unsafe { alsa::snd_seq_queue_tempo_get_tempo(self.0) as u32 }
-    }
-    pub fn get_ppq(&self) -> i32 {
-        unsafe { alsa::snd_seq_queue_tempo_get_ppq(self.0) as i32 }
-    }
-    pub fn get_skew(&self) -> u32 {
-        unsafe { alsa::snd_seq_queue_tempo_get_skew(self.0) as u32 }
-    }
-    pub fn get_skew_base(&self) -> u32 {
-        unsafe { alsa::snd_seq_queue_tempo_get_skew_base(self.0) as u32 }
-    }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_queue_tempo_get_queue(self.0) as i32 } }
+    pub fn get_tempo(&self) -> u32 { unsafe { alsa::snd_seq_queue_tempo_get_tempo(self.0) as u32 } }
+    pub fn get_ppq(&self) -> i32 { unsafe { alsa::snd_seq_queue_tempo_get_ppq(self.0) as i32 } }
+    pub fn get_skew(&self) -> u32 { unsafe { alsa::snd_seq_queue_tempo_get_skew(self.0) as u32 } }
+    pub fn get_skew_base(&self) -> u32 { unsafe { alsa::snd_seq_queue_tempo_get_skew_base(self.0) as u32 } }
 
-    //    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_queue(self.0, value as c_int) } }
-    pub fn set_tempo(&self, value: u32) {
-        unsafe { alsa::snd_seq_queue_tempo_set_tempo(self.0, value as c_uint) }
-    }
-    pub fn set_ppq(&self, value: i32) {
-        unsafe { alsa::snd_seq_queue_tempo_set_ppq(self.0, value as c_int) }
-    }
-    pub fn set_skew(&self, value: u32) {
-        unsafe { alsa::snd_seq_queue_tempo_set_skew(self.0, value as c_uint) }
-    }
-    pub fn set_skew_base(&self, value: u32) {
-        unsafe { alsa::snd_seq_queue_tempo_set_skew_base(self.0, value as c_uint) }
-    }
+//    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_queue(self.0, value as c_int) } }
+    pub fn set_tempo(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_tempo(self.0, value as c_uint) } }
+    pub fn set_ppq(&self, value: i32) { unsafe { alsa::snd_seq_queue_tempo_set_ppq(self.0, value as c_int) } }
+    pub fn set_skew(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew(self.0, value as c_uint) } }
+    pub fn set_skew_base(&self, value: u32) { unsafe { alsa::snd_seq_queue_tempo_set_skew_base(self.0, value as c_uint) } }
 }
 
 /// [snd_seq_queue_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_queue.html) wrapper
@@ -1594,9 +1249,7 @@ pub struct QueueStatus(*mut alsa::snd_seq_queue_status_t);
 unsafe impl Send for QueueStatus {}
 
 impl Drop for QueueStatus {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_seq_queue_status_free(self.0) }
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_seq_queue_status_free(self.0) } }
 }
 
 impl QueueStatus {
@@ -1612,24 +1265,14 @@ impl QueueStatus {
         Ok(q)
     }
 
-    pub fn get_queue(&self) -> i32 {
-        unsafe { alsa::snd_seq_queue_status_get_queue(self.0) as i32 }
-    }
-    pub fn get_events(&self) -> i32 {
-        unsafe { alsa::snd_seq_queue_status_get_events(self.0) as i32 }
-    }
-    pub fn get_tick_time(&self) -> u32 {
-        unsafe { alsa::snd_seq_queue_status_get_tick_time(self.0) as u32 }
-    }
-    pub fn get_real_time(&self) -> time::Duration {
-        unsafe {
-            let t = &(*alsa::snd_seq_queue_status_get_real_time(self.0));
-            time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
-        }
-    }
-    pub fn get_status(&self) -> u32 {
-        unsafe { alsa::snd_seq_queue_status_get_status(self.0) as u32 }
-    }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_queue_status_get_queue(self.0) as i32 } }
+    pub fn get_events(&self) -> i32 { unsafe { alsa::snd_seq_queue_status_get_events(self.0) as i32 } }
+    pub fn get_tick_time(&self) -> u32 { unsafe {alsa::snd_seq_queue_status_get_tick_time(self.0) as u32 } }
+    pub fn get_real_time(&self) -> time::Duration { unsafe {
+        let t = &(*alsa::snd_seq_queue_status_get_real_time(self.0));
+        time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    } }
+    pub fn get_status(&self) -> u32 { unsafe { alsa::snd_seq_queue_status_get_status(self.0) as u32 } }
 }
 
 /// [snd_seq_remove_events_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) wrapper
@@ -1638,9 +1281,7 @@ pub struct RemoveEvents(*mut alsa::snd_seq_remove_events_t);
 unsafe impl Send for RemoveEvents {}
 
 impl Drop for RemoveEvents {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_seq_remove_events_free(self.0) }
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_seq_remove_events_free(self.0) } }
 }
 
 impl RemoveEvents {
@@ -1649,87 +1290,49 @@ impl RemoveEvents {
         acheck!(snd_seq_remove_events_malloc(&mut q)).map(|_| RemoveEvents(q))
     }
 
-    pub fn get_condition(&self) -> Remove {
-        unsafe {
-            Remove::from_bits_truncate(alsa::snd_seq_remove_events_get_condition(self.0) as u32)
-        }
-    }
-    pub fn get_queue(&self) -> i32 {
-        unsafe { alsa::snd_seq_remove_events_get_queue(self.0) as i32 }
-    }
-    pub fn get_time(&self) -> time::Duration {
-        unsafe {
-            let d = ptr::read(alsa::snd_seq_remove_events_get_time(self.0));
-            let t = &d.time;
+    pub fn get_condition(&self) -> Remove { unsafe {
+        Remove::from_bits_truncate(alsa::snd_seq_remove_events_get_condition(self.0) as u32)
+    } }
+    pub fn get_queue(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_queue(self.0) as i32 } }
+    pub fn get_time(&self) -> time::Duration { unsafe {
+        let d = ptr::read(alsa::snd_seq_remove_events_get_time(self.0));
+        let t = &d.time;
 
-            time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
-        }
-    }
-    pub fn get_dest(&self) -> Addr {
-        unsafe {
-            let a = &(*alsa::snd_seq_remove_events_get_dest(self.0));
+        time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    } }
+    pub fn get_dest(&self) -> Addr { unsafe {
+        let a = &(*alsa::snd_seq_remove_events_get_dest(self.0));
 
-            Addr {
-                client: a.client as i32,
-                port: a.port as i32,
-            }
-        }
-    }
-    pub fn get_channel(&self) -> i32 {
-        unsafe { alsa::snd_seq_remove_events_get_channel(self.0) as i32 }
-    }
-    pub fn get_event_type(&self) -> Result<EventType> {
-        unsafe {
-            EventType::from_c_int(
-                alsa::snd_seq_remove_events_get_event_type(self.0),
-                "snd_seq_remove_events_get_event_type",
-            )
-        }
-    }
-    pub fn get_tag(&self) -> u8 {
-        unsafe { alsa::snd_seq_remove_events_get_tag(self.0) as u8 }
-    }
+        Addr { client: a.client as i32, port: a.port as i32 }
+    } }
+    pub fn get_channel(&self) -> i32 { unsafe { alsa::snd_seq_remove_events_get_channel(self.0) as i32 } }
+    pub fn get_event_type(&self) -> Result<EventType> { unsafe {
+        EventType::from_c_int(alsa::snd_seq_remove_events_get_event_type(self.0), "snd_seq_remove_events_get_event_type")
+    } }
+    pub fn get_tag(&self) -> u8 { unsafe { alsa::snd_seq_remove_events_get_tag(self.0) as u8 } }
 
-    pub fn set_condition(&self, value: Remove) {
-        unsafe {
-            alsa::snd_seq_remove_events_set_condition(self.0, value.bits() as c_uint);
-        }
-    }
-    pub fn set_queue(&self, value: i32) {
-        unsafe { alsa::snd_seq_remove_events_set_queue(self.0, value as c_int) }
-    }
-    pub fn set_time(&self, value: time::Duration) {
-        unsafe {
-            let mut d: alsa::snd_seq_timestamp_t = mem::zeroed();
-            let t = &mut d.time;
 
-            t.tv_sec = value.as_secs() as c_uint;
-            t.tv_nsec = value.subsec_nanos() as c_uint;
+    pub fn set_condition(&self, value: Remove) { unsafe {
+        alsa::snd_seq_remove_events_set_condition(self.0, value.bits() as c_uint);
+    } }
+    pub fn set_queue(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_queue(self.0, value as c_int) } }
+    pub fn set_time(&self, value: time::Duration) { unsafe {
+        let mut d: alsa::snd_seq_timestamp_t = mem::zeroed();
+        let t = &mut d.time;
 
-            alsa::snd_seq_remove_events_set_time(self.0, &d);
-        }
-    }
-    pub fn set_dest(&self, value: Addr) {
-        unsafe {
-            let a = alsa::snd_seq_addr_t {
-                client: value.client as c_uchar,
-                port: value.port as c_uchar,
-            };
+        t.tv_sec = value.as_secs() as c_uint;
+        t.tv_nsec = value.subsec_nanos() as c_uint;
 
-            alsa::snd_seq_remove_events_set_dest(self.0, &a);
-        }
-    }
-    pub fn set_channel(&self, value: i32) {
-        unsafe { alsa::snd_seq_remove_events_set_channel(self.0, value as c_int) }
-    }
-    pub fn set_event_type(&self, value: EventType) {
-        unsafe {
-            alsa::snd_seq_remove_events_set_event_type(self.0, value as i32);
-        }
-    }
-    pub fn set_tag(&self, value: u8) {
-        unsafe { alsa::snd_seq_remove_events_set_tag(self.0, value as c_int) }
-    }
+        alsa::snd_seq_remove_events_set_time(self.0, &d);
+    } }
+    pub fn set_dest(&self, value: Addr) { unsafe {
+        let a = alsa::snd_seq_addr_t { client: value.client as c_uchar, port: value.port as c_uchar};
+
+        alsa::snd_seq_remove_events_set_dest(self.0, &a);
+    } }
+    pub fn set_channel(&self, value: i32) { unsafe { alsa::snd_seq_remove_events_set_channel(self.0, value as c_int) } }
+    pub fn set_event_type(&self, value: EventType) { unsafe { alsa::snd_seq_remove_events_set_event_type(self.0, value as i32); } }
+    pub fn set_tag(&self, value: u8) { unsafe { alsa::snd_seq_remove_events_set_tag(self.0, value as c_int) } }
 }
 
 /// [snd_midi_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___m_i_d_i___event.html) Wrapper
@@ -1738,9 +1341,7 @@ impl RemoveEvents {
 pub struct MidiEvent(*mut alsa::snd_midi_event_t);
 
 impl Drop for MidiEvent {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_midi_event_free(self.0) }
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_midi_event_free(self.0) } }
 }
 
 impl MidiEvent {
@@ -1749,39 +1350,23 @@ impl MidiEvent {
         acheck!(snd_midi_event_new(bufsize as size_t, &mut q)).map(|_| MidiEvent(q))
     }
 
-    pub fn resize_buffer(&self, bufsize: u32) -> Result<()> {
-        acheck!(snd_midi_event_resize_buffer(self.0, bufsize as size_t)).map(|_| ())
-    }
+    pub fn resize_buffer(&self, bufsize: u32) -> Result<()> { acheck!(snd_midi_event_resize_buffer(self.0, bufsize as size_t)).map(|_| ()) }
 
     /// Note: this corresponds to snd_midi_event_no_status, but on and off are switched.
     ///
     /// Alsa-lib is a bit confusing here. Anyhow, set "enable" to true to enable running status.
-    pub fn enable_running_status(&self, enable: bool) {
-        unsafe { alsa::snd_midi_event_no_status(self.0, if enable { 0 } else { 1 }) }
-    }
+    pub fn enable_running_status(&self, enable: bool) { unsafe { alsa::snd_midi_event_no_status(self.0, if enable {0} else {1}) } }
 
     /// Resets both encoder and decoder
-    pub fn init(&self) {
-        unsafe { alsa::snd_midi_event_init(self.0) }
-    }
+    pub fn init(&self) { unsafe { alsa::snd_midi_event_init(self.0) } }
 
-    pub fn reset_encode(&self) {
-        unsafe { alsa::snd_midi_event_reset_encode(self.0) }
-    }
+    pub fn reset_encode(&self) { unsafe { alsa::snd_midi_event_reset_encode(self.0) } }
 
-    pub fn reset_decode(&self) {
-        unsafe { alsa::snd_midi_event_reset_decode(self.0) }
-    }
+    pub fn reset_decode(&self) { unsafe { alsa::snd_midi_event_reset_decode(self.0) } }
 
     pub fn decode(&self, buf: &mut [u8], ev: &mut Event) -> Result<usize> {
         ev.ensure_buf();
-        acheck!(snd_midi_event_decode(
-            self.0,
-            buf.as_mut_ptr() as *mut c_uchar,
-            buf.len() as c_long,
-            &ev.0
-        ))
-        .map(|r| r as usize)
+        acheck!(snd_midi_event_decode(self.0, buf.as_mut_ptr() as *mut c_uchar, buf.len() as c_long, &ev.0)).map(|r| r as usize)
     }
 
     /// In case of success, returns a tuple of (bytes consumed from buf, found Event).
@@ -1791,17 +1376,12 @@ impl MidiEvent {
         // buffer). We make this safe by taking self by unique reference and coupling it to
         // the event's lifetime.
         let mut ev = unsafe { mem::zeroed() };
-        let r = acheck!(snd_midi_event_encode(
-            self.0,
-            buf.as_ptr() as *const c_uchar,
-            buf.len() as c_long,
-            &mut ev
-        ))?;
+        let r = acheck!(snd_midi_event_encode(self.0, buf.as_ptr() as *const c_uchar, buf.len() as c_long, &mut ev))?;
         let e = if ev.type_ == alsa::SND_SEQ_EVENT_NONE as u8 {
-            None
-        } else {
-            Some(unsafe { Event::extract(&mut ev, "snd_midi_event_encode") }?)
-        };
+                None
+            } else {
+                Some(unsafe { Event::extract(&mut ev, "snd_midi_event_encode") }?)
+            };
         Ok((r as usize, e))
     }
 }
@@ -1810,8 +1390,7 @@ impl MidiEvent {
 fn print_seqs() {
     use std::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
-    s.set_client_name(&CString::new("rust_test_print_seqs").unwrap())
-        .unwrap();
+    s.set_client_name(&CString::new("rust_test_print_seqs").unwrap()).unwrap();
     let clients: Vec<_> = ClientIter::new(&s).collect();
     for a in &clients {
         let ports: Vec<_> = PortIter::new(&s, a.get_client()).collect();
@@ -1823,18 +1402,14 @@ fn print_seqs() {
 fn seq_subscribe() {
     use std::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
-    s.set_client_name(&CString::new("rust_test_seq_subscribe").unwrap())
-        .unwrap();
+    s.set_client_name(&CString::new("rust_test_seq_subscribe").unwrap()).unwrap();
     let timer_info = s.get_any_port_info(Addr { client: 0, port: 0 }).unwrap();
     assert_eq!(timer_info.get_name().unwrap(), "Timer");
     let info = PortInfo::empty().unwrap();
     let _port = s.create_port(&info);
     let subs = PortSubscribe::empty().unwrap();
     subs.set_sender(Addr { client: 0, port: 0 });
-    subs.set_dest(Addr {
-        client: s.client_id().unwrap(),
-        port: info.get_port(),
-    });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: info.get_port() });
     s.subscribe_port(&subs).unwrap();
 }
 
@@ -1842,8 +1417,7 @@ fn seq_subscribe() {
 fn seq_loopback() {
     use std::ffi::CString;
     let s = super::Seq::open(Some(&CString::new("default").unwrap()), None, false).unwrap();
-    s.set_client_name(&CString::new("rust_test_seq_loopback").unwrap())
-        .unwrap();
+    s.set_client_name(&CString::new("rust_test_seq_loopback").unwrap()).unwrap();
 
     // Create ports
     let sinfo = PortInfo::empty().unwrap();
@@ -1859,25 +1433,13 @@ fn seq_loopback() {
 
     // Connect them
     let subs = PortSubscribe::empty().unwrap();
-    subs.set_sender(Addr {
-        client: s.client_id().unwrap(),
-        port: sport,
-    });
-    subs.set_dest(Addr {
-        client: s.client_id().unwrap(),
-        port: dport,
-    });
+    subs.set_sender(Addr { client: s.client_id().unwrap(), port: sport });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: dport });
     s.subscribe_port(&subs).unwrap();
     println!("Connected {:?} to {:?}", subs.get_sender(), subs.get_dest());
 
     // Send a note!
-    let note = EvNote {
-        channel: 0,
-        note: 64,
-        duration: 100,
-        velocity: 100,
-        off_velocity: 64,
-    };
+    let note = EvNote { channel: 0, note: 64, duration: 100, velocity: 100, off_velocity: 64 };
     let mut e = Event::new(EventType::Noteon, &note);
     e.set_subs();
     e.set_direct();
@@ -1920,8 +1482,7 @@ fn seq_decode_sysex() {
 fn seq_get_input_twice() {
     use std::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
-    s.set_client_name(&CString::new("rust_test_seq_get_input_twice").unwrap())
-        .unwrap();
+    s.set_client_name(&CString::new("rust_test_seq_get_input_twice").unwrap()).unwrap();
     let input1 = s.input();
     let input2 = s.input(); // this should panic
     let _ = (input1, input2);
@@ -1932,45 +1493,19 @@ fn seq_has_data() {
     for v in EventType::all() {
         let v = *v;
         let mut i = 0;
-        if <() as EventData>::has_data(v) {
-            i += 1;
-        }
-        if <[u8; 12] as EventData>::has_data(v) {
-            i += 1;
-        }
-        if Event::has_ext_data(v) {
-            i += 1;
-        }
-        if EvNote::has_data(v) {
-            i += 1;
-        }
-        if EvCtrl::has_data(v) {
-            i += 1;
-        }
-        if Addr::has_data(v) {
-            i += 1;
-        }
-        if Connect::has_data(v) {
-            i += 1;
-        }
-        if EvResult::has_data(v) {
-            i += 1;
-        }
-        if EvQueueControl::<()>::has_data(v) {
-            i += 1;
-        }
-        if EvQueueControl::<u32>::has_data(v) {
-            i += 1;
-        }
-        if EvQueueControl::<i32>::has_data(v) {
-            i += 1;
-        }
-        if EvQueueControl::<time::Duration>::has_data(v) {
-            i += 1;
-        }
-        if i != 1 {
-            panic!("{:?}: {} has_data", v, i)
-        }
+        if <() as EventData>::has_data(v) { i += 1; }
+        if <[u8; 12] as EventData>::has_data(v) { i += 1; }
+        if Event::has_ext_data(v) { i += 1; }
+        if EvNote::has_data(v) { i += 1; }
+        if EvCtrl::has_data(v) { i += 1; }
+        if Addr::has_data(v) { i += 1; }
+        if Connect::has_data(v) { i += 1; }
+        if EvResult::has_data(v) { i += 1; }
+        if EvQueueControl::<()>::has_data(v) { i += 1; }
+        if EvQueueControl::<u32>::has_data(v) { i += 1; }
+        if EvQueueControl::<i32>::has_data(v) { i += 1; }
+        if EvQueueControl::<time::Duration>::has_data(v) { i += 1; }
+        if i != 1 { panic!("{:?}: {} has_data", v, i) }
     }
 }
 
@@ -1978,30 +1513,19 @@ fn seq_has_data() {
 fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let info = RemoveEvents::new()?;
 
+
     info.set_condition(Remove::INPUT | Remove::DEST | Remove::TIME_BEFORE | Remove::TAG_MATCH);
     info.set_queue(123);
     info.set_time(time::Duration::new(456, 789));
-    info.set_dest(Addr {
-        client: 212,
-        port: 121,
-    });
+    info.set_dest(Addr { client: 212, port: 121 });
     info.set_channel(15);
     info.set_event_type(EventType::Noteon);
     info.set_tag(213);
 
-    assert_eq!(
-        info.get_condition(),
-        Remove::INPUT | Remove::DEST | Remove::TIME_BEFORE | Remove::TAG_MATCH
-    );
+    assert_eq!(info.get_condition(), Remove::INPUT | Remove::DEST | Remove::TIME_BEFORE | Remove::TAG_MATCH);
     assert_eq!(info.get_queue(), 123);
     assert_eq!(info.get_time(), time::Duration::new(456, 789));
-    assert_eq!(
-        info.get_dest(),
-        Addr {
-            client: 212,
-            port: 121
-        }
-    );
+    assert_eq!(info.get_dest(), Addr { client: 212, port: 121 });
     assert_eq!(info.get_channel(), 15);
     assert_eq!(info.get_event_type()?, EventType::Noteon);
     assert_eq!(info.get_tag(), 213);
@@ -2027,51 +1551,27 @@ fn seq_portsubscribeiter() {
 
     // Connect them
     let subs = PortSubscribe::empty().unwrap();
-    subs.set_sender(Addr {
-        client: s.client_id().unwrap(),
-        port: sport,
-    });
-    subs.set_dest(Addr {
-        client: s.client_id().unwrap(),
-        port: dport,
-    });
+    subs.set_sender(Addr { client: s.client_id().unwrap(), port: sport });
+    subs.set_dest(Addr { client: s.client_id().unwrap(), port: dport });
     s.subscribe_port(&subs).unwrap();
 
     // Query READ subs from sport's point of view
-    let read_subs: Vec<PortSubscribe> = PortSubscribeIter::new(
-        &s,
-        Addr {
-            client: s.client_id().unwrap(),
-            port: sport,
-        },
-        QuerySubsType::READ,
-    )
-    .collect();
+    let read_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: sport },
+                        QuerySubsType::READ).collect();
     assert_eq!(read_subs.len(), 1);
     assert_eq!(read_subs[0].get_sender(), subs.get_sender());
     assert_eq!(read_subs[0].get_dest(), subs.get_dest());
 
-    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(
-        &s,
-        Addr {
-            client: s.client_id().unwrap(),
-            port: sport,
-        },
-        QuerySubsType::WRITE,
-    )
-    .collect();
+    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: sport },
+                        QuerySubsType::WRITE).collect();
     assert_eq!(write_subs.len(), 0);
 
     // Now query WRITE subs from dport's point of view
-    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(
-        &s,
-        Addr {
-            client: s.client_id().unwrap(),
-            port: dport,
-        },
-        QuerySubsType::WRITE,
-    )
-    .collect();
+    let write_subs: Vec<PortSubscribe> = PortSubscribeIter::new(&s,
+                        Addr {client: s.client_id().unwrap(), port: dport },
+                        QuerySubsType::WRITE).collect();
     assert_eq!(write_subs.len(), 1);
     assert_eq!(write_subs[0].get_sender(), subs.get_sender());
     assert_eq!(write_subs[0].get_dest(), subs.get_dest());

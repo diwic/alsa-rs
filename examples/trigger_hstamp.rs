@@ -41,7 +41,7 @@ fn main() -> Result<()> {
 
         // I've also tried to construct the status object just once outside the loop but nothing changes
         let status = pcm.status()?;
-
+        
         dbg!(&status);
 
         // The following "htstamp" functions all wrongly return a timespec struct with 0 seconds and 0 nanoseconds

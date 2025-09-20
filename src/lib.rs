@@ -59,17 +59,13 @@ impl $name {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Direction {
     Playback,
-    Capture,
+    Capture
 }
 impl Direction {
     #[inline]
-    pub fn input() -> Direction {
-        Direction::Capture
-    }
+    pub fn input() -> Direction { Direction::Capture }
     #[inline]
-    pub fn output() -> Direction {
-        Direction::Playback
-    }
+    pub fn output() -> Direction { Direction::Playback }
 }
 
 /// Used to restrict hw parameters. In case the submitted
@@ -98,28 +94,26 @@ mod error;
 pub use crate::error::{Error, Result};
 
 pub mod card;
-pub use crate::card::Card;
+pub use crate::card::Card as Card;
 
 mod ctl_int;
 pub mod ctl {
     //! Control device API
-    pub use super::ctl_int::{
-        CardInfo, Ctl, DeviceIter, ElemId, ElemIface, ElemInfo, ElemList, ElemType, ElemValue,
-    };
+    pub use super::ctl_int::{Ctl, CardInfo, DeviceIter, ElemIface, ElemId, ElemList, ElemType, ElemValue, ElemInfo};
 }
 
-pub use crate::ctl::Ctl;
+pub use crate::ctl::Ctl as Ctl;
 
 pub mod hctl;
-pub use crate::hctl::HCtl;
+pub use crate::hctl::HCtl as HCtl;
 
 pub mod pcm;
-pub use crate::pcm::PCM;
+pub use crate::pcm::PCM as PCM;
 
 pub mod config;
 
 pub mod rawmidi;
-pub use crate::rawmidi::Rawmidi;
+pub use crate::rawmidi::Rawmidi as Rawmidi;
 
 pub mod device_name;
 
@@ -127,10 +121,10 @@ pub mod poll;
 pub use crate::poll::Descriptors as PollDescriptors;
 
 pub mod mixer;
-pub use crate::mixer::Mixer;
+pub use crate::mixer::Mixer as Mixer;
 
 pub mod seq;
-pub use crate::seq::Seq;
+pub use crate::seq::Seq as Seq;
 
 mod io;
 pub use crate::io::Output;

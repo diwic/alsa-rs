@@ -42,16 +42,17 @@
 //! pcm.drain().unwrap();
 //! ```
 
-use super::error::*;
-use super::{chmap, poll, Direction, Output, ValueOr};
+
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
 use crate::alsa;
-use libc::{c_int, c_short, c_uint, c_void, pollfd, ssize_t, timespec};
 use std::convert::Infallible;
-use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::ffi::{CStr, CString};
 use std::str::FromStr;
-use std::{cell, fmt, io, ptr};
+use std::{io, fmt, ptr, cell};
+use super::error::*;
+use super::{Direction, Output, poll, ValueOr, chmap};
 
 pub use super::chmap::{Chmap, ChmapPosition, ChmapType, ChmapsQuery};
 
@@ -128,9 +129,7 @@ impl Info {
 }
 
 impl Drop for Info {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_pcm_info_free(self.0) };
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_pcm_info_free(self.0) }; }
 }
 
 /// [snd_pcm_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - start here for audio playback and recording
@@ -140,9 +139,7 @@ unsafe impl Send for PCM {}
 
 impl PCM {
     fn check_has_io(&self) {
-        if self.1.get() {
-            panic!("No hw_params call or additional IO objects allowed")
-        }
+        if self.1.get() { panic!("No hw_params call or additional IO objects allowed") }
     }
 
     /// Wrapper around open that takes a &str instead of a &CStr
@@ -155,37 +152,22 @@ impl PCM {
         let mut r = ptr::null_mut();
         let stream = match dir {
             Direction::Capture => alsa::SND_PCM_STREAM_CAPTURE,
-            Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK,
+            Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK
         };
         let flags = if nonblock { alsa::SND_PCM_NONBLOCK } else { 0 };
-        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags))
-            .map(|_| PCM(r, cell::Cell::new(false)))
+        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r, cell::Cell::new(false)))
     }
 
-    pub fn start(&self) -> Result<()> {
-        acheck!(snd_pcm_start(self.0)).map(|_| ())
-    }
-    pub fn drop(&self) -> Result<()> {
-        acheck!(snd_pcm_drop(self.0)).map(|_| ())
-    }
+    pub fn start(&self) -> Result<()> { acheck!(snd_pcm_start(self.0)).map(|_| ()) }
+    pub fn drop(&self) -> Result<()> { acheck!(snd_pcm_drop(self.0)).map(|_| ()) }
     pub fn pause(&self, pause: bool) -> Result<()> {
-        acheck!(snd_pcm_pause(self.0, if pause { 1 } else { 0 })).map(|_| ())
-    }
-    pub fn resume(&self) -> Result<()> {
-        acheck!(snd_pcm_resume(self.0)).map(|_| ())
-    }
-    pub fn drain(&self) -> Result<()> {
-        acheck!(snd_pcm_drain(self.0)).map(|_| ())
-    }
-    pub fn prepare(&self) -> Result<()> {
-        acheck!(snd_pcm_prepare(self.0)).map(|_| ())
-    }
-    pub fn reset(&self) -> Result<()> {
-        acheck!(snd_pcm_reset(self.0)).map(|_| ())
-    }
+        acheck!(snd_pcm_pause(self.0, if pause { 1 } else { 0 })).map(|_| ()) }
+    pub fn resume(&self) -> Result<()> { acheck!(snd_pcm_resume(self.0)).map(|_| ()) }
+    pub fn drain(&self) -> Result<()> { acheck!(snd_pcm_drain(self.0)).map(|_| ()) }
+    pub fn prepare(&self) -> Result<()> { acheck!(snd_pcm_prepare(self.0)).map(|_| ()) }
+    pub fn reset(&self) -> Result<()> { acheck!(snd_pcm_reset(self.0)).map(|_| ()) }
     pub fn recover(&self, err: c_int, silent: bool) -> Result<()> {
-        acheck!(snd_pcm_recover(self.0, err, if silent { 1 } else { 0 })).map(|_| ())
-    }
+        acheck!(snd_pcm_recover(self.0, err, if silent { 1 } else { 0 })).map(|_| ()) }
 
     /// Wrapper around snd_pcm_recover.
     ///
@@ -196,40 +178,26 @@ impl PCM {
     }
 
     pub fn wait(&self, timeout_ms: Option<u32>) -> Result<bool> {
-        acheck!(snd_pcm_wait(
-            self.0,
-            timeout_ms.map(|x| x as c_int).unwrap_or(-1)
-        ))
-        .map(|i| i == 1)
-    }
+        acheck!(snd_pcm_wait(self.0, timeout_ms.map(|x| x as c_int).unwrap_or(-1))).map(|i| i == 1) }
 
     pub fn state(&self) -> State {
         let rawstate = self.state_raw();
         if let Ok(state) = State::from_c_int(rawstate, "snd_pcm_state") {
             state
-        } else {
+        }
+        else {
             panic!("snd_pcm_state returned an invalid value of {}", rawstate);
         }
     }
 
     /// Only used internally, and for debugging the alsa library. Please use the "state" function instead.
-    pub fn state_raw(&self) -> c_int {
-        unsafe { alsa::snd_pcm_state(self.0) as c_int }
-    }
+    pub fn state_raw(&self) -> c_int { unsafe { alsa::snd_pcm_state(self.0) as c_int } }
 
-    pub fn bytes_to_frames(&self, i: isize) -> Frames {
-        unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }
-    }
-    pub fn frames_to_bytes(&self, i: Frames) -> isize {
-        unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }
-    }
+    pub fn bytes_to_frames(&self, i: isize) -> Frames { unsafe { alsa::snd_pcm_bytes_to_frames(self.0, i as ssize_t) }}
+    pub fn frames_to_bytes(&self, i: Frames) -> isize { unsafe { alsa::snd_pcm_frames_to_bytes(self.0, i) as isize }}
 
-    pub fn avail_update(&self) -> Result<Frames> {
-        acheck!(snd_pcm_avail_update(self.0))
-    }
-    pub fn avail(&self) -> Result<Frames> {
-        acheck!(snd_pcm_avail(self.0))
-    }
+    pub fn avail_update(&self) -> Result<Frames> { acheck!(snd_pcm_avail_update(self.0)) }
+    pub fn avail(&self) -> Result<Frames> { acheck!(snd_pcm_avail(self.0)) }
 
     pub fn avail_delay(&self) -> Result<(Frames, Frames)> {
         let (mut a, mut d) = (0, 0);
@@ -246,47 +214,26 @@ impl PCM {
 
     fn verify_format(&self, f: Format) -> Result<()> {
         let ff = self.hw_params_current().and_then(|h| h.get_format())?;
-        if ff == f {
-            Ok(())
-        } else {
+        if ff == f { Ok(()) }
+        else {
             // let s = format!("Invalid sample format ({:?}, expected {:?})", ff, f);
             Err(Error::unsupported("io_xx"))
         }
     }
 
-    pub fn io_i8(&self) -> Result<IO<i8>> {
-        self.io_checked()
-    }
-    pub fn io_u8(&self) -> Result<IO<u8>> {
-        self.io_checked()
-    }
-    pub fn io_i16(&self) -> Result<IO<i16>> {
-        self.io_checked()
-    }
-    pub fn io_u16(&self) -> Result<IO<u16>> {
-        self.io_checked()
-    }
-    pub fn io_i32(&self) -> Result<IO<i32>> {
-        self.io_checked()
-    }
-    pub fn io_u32(&self) -> Result<IO<u32>> {
-        self.io_checked()
-    }
-    pub fn io_f32(&self) -> Result<IO<f32>> {
-        self.io_checked()
-    }
-    pub fn io_f64(&self) -> Result<IO<f64>> {
-        self.io_checked()
-    }
+    pub fn io_i8(&self) -> Result<IO<i8>> { self.io_checked() }
+    pub fn io_u8(&self) -> Result<IO<u8>> { self.io_checked() }
+    pub fn io_i16(&self) -> Result<IO<i16>> { self.io_checked() }
+    pub fn io_u16(&self) -> Result<IO<u16>> { self.io_checked() }
+    pub fn io_i32(&self) -> Result<IO<i32>> { self.io_checked() }
+    pub fn io_u32(&self) -> Result<IO<u32>> { self.io_checked() }
+    pub fn io_f32(&self) -> Result<IO<f32>> { self.io_checked() }
+    pub fn io_f64(&self) -> Result<IO<f64>> { self.io_checked() }
 
     /// For the `s24` format, represented by i32
-    pub fn io_i32_s24(&self) -> Result<IO<i32>> {
-        self.verify_format(Format::s24()).map(|_| IO::new(self))
-    }
+    pub fn io_i32_s24(&self) -> Result<IO<i32>> { self.verify_format(Format::s24()).map(|_| IO::new(self)) }
     /// For the `u24` format, represented by u32
-    pub fn io_u32_u24(&self) -> Result<IO<u32>> {
-        self.verify_format(Format::u24()).map(|_| IO::new(self))
-    }
+    pub fn io_u32_u24(&self) -> Result<IO<u32>> { self.verify_format(Format::u24()).map(|_| IO::new(self)) }
 
     pub fn io_checked<S: IoFormat>(&self) -> Result<IO<S>> {
         self.verify_format(S::FORMAT).map(|_| IO::new(self))
@@ -302,16 +249,12 @@ impl PCM {
     }
 
     #[deprecated(note = "renamed to io_bytes")]
-    pub fn io(&self) -> IO<u8> {
-        IO::new(self)
-    }
+    pub fn io(&self) -> IO<u8> { IO::new(self) }
 
     /// Call this if you have an unusual format, not supported by the regular access methods
     /// (io_i16 etc). It will succeed regardless of the sample format, but conversion to and from
     /// bytes to your format is up to you.
-    pub fn io_bytes(&self) -> IO<u8> {
-        IO::new(self)
-    }
+    pub fn io_bytes(&self) -> IO<u8> { IO::new(self) }
 
     /// Read buffers by talking to the kernel directly, bypassing alsa-lib.
     pub fn direct_mmap_capture<S>(&self) -> Result<crate::direct::pcm::MmapCapture<S>> {
@@ -334,7 +277,8 @@ impl PCM {
 
     /// Retreive current PCM hardware configuration.
     pub fn hw_params_current(&self) -> Result<HwParams> {
-        HwParams::new(self).and_then(|h| acheck!(snd_pcm_hw_params_current(self.0, h.0)).map(|_| h))
+        HwParams::new(self).and_then(|h|
+            acheck!(snd_pcm_hw_params_current(self.0, h.0)).map(|_| h))
     }
 
     pub fn sw_params(&self, h: &SwParams) -> Result<()> {
@@ -342,23 +286,22 @@ impl PCM {
     }
 
     pub fn sw_params_current(&self) -> Result<SwParams> {
-        SwParams::new(self).and_then(|h| acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
+        SwParams::new(self).and_then(|h|
+            acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
     }
 
     /// Wraps `snd_pcm_get_params`, returns `(buffer_size, period_size)`.
     pub fn get_params(&self) -> Result<(u64, u64)> {
         let mut buffer_size = 0;
         let mut period_size = 0;
-        acheck!(snd_pcm_get_params(
-            self.0,
-            &mut buffer_size,
-            &mut period_size
-        ))
-        .map(|_| (buffer_size as u64, period_size as u64))
+        acheck!(snd_pcm_get_params(self.0, &mut buffer_size, &mut period_size))
+            .map(|_| (buffer_size as u64, period_size as u64))
+
     }
 
     pub fn info(&self) -> Result<Info> {
-        Info::new().and_then(|info| acheck!(snd_pcm_info(self.0, info.0)).map(|_| info))
+        Info::new().and_then(|info|
+            acheck!(snd_pcm_info(self.0, info.0)).map(|_| info ))
     }
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
@@ -383,11 +326,8 @@ impl PCM {
 
     pub fn get_chmap(&self) -> Result<Chmap> {
         let p = unsafe { alsa::snd_pcm_get_chmap(self.0) };
-        if p.is_null() {
-            Err(Error::unsupported("snd_pcm_get_chmap"))
-        } else {
-            Ok(chmap::chmap_new(p))
-        }
+        if p.is_null() { Err(Error::unsupported("snd_pcm_get_chmap")) }
+        else { Ok(chmap::chmap_new(p)) }
     }
 
     pub fn link(&self, other: &PCM) -> Result<()> {
@@ -400,32 +340,22 @@ impl PCM {
 }
 
 impl Drop for PCM {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_pcm_close(self.0) };
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_pcm_close(self.0) }; }
 }
+
 
 impl poll::Descriptors for PCM {
     fn count(&self) -> usize {
         unsafe { alsa::snd_pcm_poll_descriptors_count(self.0) as usize }
     }
     fn fill(&self, p: &mut [pollfd]) -> Result<usize> {
-        let z =
-            unsafe { alsa::snd_pcm_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
+        let z = unsafe { alsa::snd_pcm_poll_descriptors(self.0, p.as_mut_ptr(), p.len() as c_uint) };
         from_code("snd_pcm_poll_descriptors", z).map(|_| z as usize)
     }
     fn revents(&self, p: &[pollfd]) -> Result<poll::Flags> {
         let mut r = 0;
-        let z = unsafe {
-            alsa::snd_pcm_poll_descriptors_revents(
-                self.0,
-                p.as_ptr() as *mut pollfd,
-                p.len() as c_uint,
-                &mut r,
-            )
-        };
-        from_code("snd_pcm_poll_descriptors_revents", z)
-            .map(|_| poll::Flags::from_bits_truncate(r as c_short))
+        let z = unsafe { alsa::snd_pcm_poll_descriptors_revents(self.0, p.as_ptr() as *mut pollfd, p.len() as c_uint, &mut r) };
+        from_code("snd_pcm_poll_descriptors_revents", z).map(|_| poll::Flags::from_bits_truncate(r as c_short))
     }
 }
 
@@ -436,12 +366,11 @@ impl poll::Descriptors for PCM {
 pub struct IO<'a, S: Copy>(&'a PCM, PhantomData<S>);
 
 impl<'a, S: Copy> Drop for IO<'a, S> {
-    fn drop(&mut self) {
-        (self.0).1.set(false)
-    }
+    fn drop(&mut self) { (self.0).1.set(false) }
 }
 
 impl<'a, S: Copy> IO<'a, S> {
+
     fn new(a: &'a PCM) -> IO<'a, S> {
         a.check_has_io();
         a.1.set(true);
@@ -466,23 +395,13 @@ impl<'a, S: Copy> IO<'a, S> {
     /// On success, returns number of *frames* written.
     /// (Multiply with number of channels to get number of items in buf successfully written.)
     pub fn writei(&self, buf: &[S]) -> Result<usize> {
-        acheck!(snd_pcm_writei(
-            (self.0).0,
-            buf.as_ptr() as *const c_void,
-            self.to_frames(buf.len())
-        ))
-        .map(|r| r as usize)
+        acheck!(snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, self.to_frames(buf.len()))).map(|r| r as usize)
     }
 
     /// On success, returns number of *frames* read.
     /// (Multiply with number of channels to get number of items in buf successfully read.)
     pub fn readi(&self, buf: &mut [S]) -> Result<usize> {
-        acheck!(snd_pcm_readi(
-            (self.0).0,
-            buf.as_mut_ptr() as *mut c_void,
-            self.to_frames(buf.len())
-        ))
-        .map(|r| r as usize)
+        acheck!(snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, self.to_frames(buf.len()))).map(|r| r as usize)
     }
 
     /// Write non-interleaved frames to pcm. On success, returns number of frames written.
@@ -494,12 +413,7 @@ impl<'a, S: Copy> IO<'a, S> {
     /// of at least `frames` length.
     pub unsafe fn writen(&self, bufs: &[*const S], frames: usize) -> Result<usize> {
         let frames = frames as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_writen(
-            (self.0).0,
-            bufs.as_ptr() as *mut *mut c_void,
-            frames
-        ))
-        .map(|r| r as usize)
+        acheck!(snd_pcm_writen((self.0).0, bufs.as_ptr() as *mut *mut c_void, frames)).map(|r| r as usize)
     }
 
     /// Read non-interleaved frames to pcm. On success, returns number of frames read.
@@ -511,12 +425,7 @@ impl<'a, S: Copy> IO<'a, S> {
     /// of at least `frames` length.
     pub unsafe fn readn(&self, bufs: &mut [*mut S], frames: usize) -> Result<usize> {
         let frames = frames as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_readn(
-            (self.0).0,
-            bufs.as_mut_ptr() as *mut *mut c_void,
-            frames
-        ))
-        .map(|r| r as usize)
+        acheck!(snd_pcm_readn((self.0).0, bufs.as_mut_ptr() as *mut *mut c_void, frames)).map(|r| r as usize)
     }
 
     /// Wrapper around snd_pcm_mmap_begin and snd_pcm_mmap_commit.
@@ -533,12 +442,7 @@ impl<'a, S: Copy> IO<'a, S> {
         let mut f = frames as alsa::snd_pcm_uframes_t;
         let mut offs: alsa::snd_pcm_uframes_t = 0;
         let mut areas = ptr::null();
-        acheck!(snd_pcm_mmap_begin(
-            (self.0).0,
-            &mut areas,
-            &mut offs,
-            &mut f
-        ))?;
+        acheck!(snd_pcm_mmap_begin((self.0).0, &mut areas, &mut offs, &mut f))?;
 
         let (first, step) = unsafe { ((*areas).first, (*areas).step) };
         if first != 0 || step as isize != self.0.frames_to_bytes(1) * 8 {
@@ -553,12 +457,7 @@ impl<'a, S: Copy> IO<'a, S> {
         };
         let fres = func(buf);
         debug_assert!(fres <= f as usize);
-        acheck!(snd_pcm_mmap_commit(
-            (self.0).0,
-            offs,
-            fres as alsa::snd_pcm_uframes_t
-        ))
-        .map(|r| r as usize)
+        acheck!(snd_pcm_mmap_commit((self.0).0, offs, fres as alsa::snd_pcm_uframes_t)).map(|r| r as usize)
     }
 }
 
@@ -566,11 +465,8 @@ impl<'a, S: Copy> io::Read for IO<'a, S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
-        if r < 0 {
-            Err(io::Error::from_raw_os_error(r as i32))
-        } else {
-            Ok(self.0.frames_to_bytes(r) as usize)
-        }
+        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        else { Ok(self.0.frames_to_bytes(r) as usize) }
     }
 }
 
@@ -578,16 +474,12 @@ impl<'a, S: Copy> io::Write for IO<'a, S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size) };
-        if r < 0 {
-            Err(io::Error::from_raw_os_error(r as i32))
-        } else {
-            Ok(self.0.frames_to_bytes(r) as usize)
-        }
+        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        else { Ok(self.0.frames_to_bytes(r) as usize) }
     }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
+
 
 alsa_enum!(
     /// [SND_PCM_STATE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
@@ -607,8 +499,8 @@ alsa_enum!(
 alsa_enum!(
     #[non_exhaustive]
     /// [SND_PCM_FORMAT_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    Format,
-    ALL_FORMATS[52],
+    Format, ALL_FORMATS[52],
+
     Unknown = SND_PCM_FORMAT_UNKNOWN,
     S8 = SND_PCM_FORMAT_S8,
     U8 = SND_PCM_FORMAT_U8,
@@ -786,141 +678,51 @@ impl FromStr for Format {
 }
 
 impl Format {
-    pub const fn s16() -> Format {
-        <i16 as IoFormat>::FORMAT
-    }
-    pub const fn u16() -> Format {
-        <u16 as IoFormat>::FORMAT
-    }
-    pub const fn s32() -> Format {
-        <i32 as IoFormat>::FORMAT
-    }
-    pub const fn u32() -> Format {
-        <u32 as IoFormat>::FORMAT
-    }
-    pub const fn float() -> Format {
-        <f32 as IoFormat>::FORMAT
-    }
-    pub const fn float64() -> Format {
-        <f64 as IoFormat>::FORMAT
-    }
+    pub const fn s16() -> Format { <i16 as IoFormat>::FORMAT }
+    pub const fn u16() -> Format { <u16 as IoFormat>::FORMAT }
+    pub const fn s32() -> Format { <i32 as IoFormat>::FORMAT }
+    pub const fn u32() -> Format { <u32 as IoFormat>::FORMAT }
+    pub const fn float() -> Format { <f32 as IoFormat>::FORMAT }
+    pub const fn float64() -> Format { <f64 as IoFormat>::FORMAT }
 
-    #[cfg(target_endian = "little")]
-    pub const fn s24() -> Format {
-        Format::S24LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn s24() -> Format {
-        Format::S24BE
-    }
+    #[cfg(target_endian = "little")] pub const fn s24() -> Format { Format::S24LE }
+    #[cfg(target_endian = "big")] pub const fn s24() -> Format { Format::S24BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn s24_3() -> Format {
-        Format::S243LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn s24_3() -> Format {
-        Format::S243BE
-    }
+    #[cfg(target_endian = "little")] pub const fn s24_3() -> Format { Format::S243LE }
+    #[cfg(target_endian = "big")] pub const fn s24_3() -> Format { Format::S243BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn u24() -> Format {
-        Format::U24LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn u24() -> Format {
-        Format::U24BE
-    }
+    #[cfg(target_endian = "little")] pub const fn u24() -> Format { Format::U24LE }
+    #[cfg(target_endian = "big")] pub const fn u24() -> Format { Format::U24BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn u24_3() -> Format {
-        Format::U243LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn u24_3() -> Format {
-        Format::U243BE
-    }
+    #[cfg(target_endian = "little")] pub const fn u24_3() -> Format { Format::U243LE }
+    #[cfg(target_endian = "big")] pub const fn u24_3() -> Format { Format::U243BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn s20() -> Format {
-        Format::S20LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn s20() -> Format {
-        Format::S20BE
-    }
+    #[cfg(target_endian = "little")] pub const fn s20() -> Format { Format::S20LE }
+    #[cfg(target_endian = "big")] pub const fn s20() -> Format { Format::S20BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn s20_3() -> Format {
-        Format::S203LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn s20_3() -> Format {
-        Format::S203BE
-    }
+    #[cfg(target_endian = "little")] pub const fn s20_3() -> Format { Format::S203LE }
+    #[cfg(target_endian = "big")] pub const fn s20_3() -> Format { Format::S203BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn u20() -> Format {
-        Format::U20LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn u20() -> Format {
-        Format::U20BE
-    }
+    #[cfg(target_endian = "little")] pub const fn u20() -> Format { Format::U20LE }
+    #[cfg(target_endian = "big")] pub const fn u20() -> Format { Format::U20BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn u20_3() -> Format {
-        Format::U203LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn u20_3() -> Format {
-        Format::U203BE
-    }
+    #[cfg(target_endian = "little")] pub const fn u20_3() -> Format { Format::U203LE }
+    #[cfg(target_endian = "big")] pub const fn u20_3() -> Format { Format::U203BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn s18_3() -> Format {
-        Format::S183LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn s18_3() -> Format {
-        Format::S183BE
-    }
+    #[cfg(target_endian = "little")] pub const fn s18_3() -> Format { Format::S183LE }
+    #[cfg(target_endian = "big")] pub const fn s18_3() -> Format { Format::S183BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn u18_3() -> Format {
-        Format::U183LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn u18_3() -> Format {
-        Format::U183BE
-    }
+    #[cfg(target_endian = "little")] pub const fn u18_3() -> Format { Format::U183LE }
+    #[cfg(target_endian = "big")] pub const fn u18_3() -> Format { Format::U183BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn dsd_u16() -> Format {
-        Format::DSDU16LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn dsd_u16() -> Format {
-        Format::DSDU16BE
-    }
+    #[cfg(target_endian = "little")] pub const fn dsd_u16() -> Format { Format::DSDU16LE }
+    #[cfg(target_endian = "big")] pub const fn dsd_u16() -> Format { Format::DSDU16BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn dsd_u32() -> Format {
-        Format::DSDU32LE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn dsd_u32() -> Format {
-        Format::DSDU32BE
-    }
+    #[cfg(target_endian = "little")] pub const fn dsd_u32() -> Format { Format::DSDU32LE }
+    #[cfg(target_endian = "big")] pub const fn dsd_u32() -> Format { Format::DSDU32BE }
 
-    #[cfg(target_endian = "little")]
-    pub const fn iec958_subframe() -> Format {
-        Format::IEC958SubframeLE
-    }
-    #[cfg(target_endian = "big")]
-    pub const fn iec958_subframe() -> Format {
-        Format::IEC958SubframeBE
-    }
+    #[cfg(target_endian = "little")] pub const fn iec958_subframe() -> Format { Format::IEC958SubframeLE }
+    #[cfg(target_endian = "big")] pub const fn iec958_subframe() -> Format { Format::IEC958SubframeBE }
 
     pub fn physical_width(&self) -> Result<i32> {
         acheck!(snd_pcm_format_physical_width(self.to_c_int()))
@@ -939,16 +741,13 @@ impl Format {
     }
 }
 
+
 pub trait IoFormat: Copy {
     const FORMAT: Format;
 }
 
-impl IoFormat for i8 {
-    const FORMAT: Format = Format::S8;
-}
-impl IoFormat for u8 {
-    const FORMAT: Format = Format::U8;
-}
+impl IoFormat for i8 { const FORMAT: Format = Format::S8; }
+impl IoFormat for u8 { const FORMAT: Format = Format::U8; }
 
 impl IoFormat for i16 {
     #[cfg(target_endian = "little")]
@@ -987,6 +786,7 @@ impl IoFormat for f64 {
     const FORMAT: Format = Format::Float64BE;
 }
 
+
 alsa_enum!(
     /// [SND_PCM_ACCESS_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
     Access, ALL_ACCESSES[5],
@@ -1011,9 +811,7 @@ alsa_enum!(
 pub struct HwParams<'a>(*mut alsa::snd_pcm_hw_params_t, &'a PCM);
 
 impl<'a> Drop for HwParams<'a> {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_pcm_hw_params_free(self.0) };
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_pcm_hw_params_free(self.0) }; }
 }
 
 impl<'a> HwParams<'a> {
@@ -1022,46 +820,26 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_malloc(&mut p)).map(|_| HwParams(p, a))
     }
 
-    pub fn any(a: &'a PCM) -> Result<HwParams<'a>> {
-        HwParams::new(a).and_then(|p| acheck!(snd_pcm_hw_params_any(a.0, p.0)).map(|_| p))
-    }
+    pub fn any(a: &'a PCM) -> Result<HwParams<'a>> { HwParams::new(a).and_then(|p|
+        acheck!(snd_pcm_hw_params_any(a.0, p.0)).map(|_| p)
+    )}
 
     pub fn get_rate_resample(&self) -> Result<bool> {
         let mut v = 0;
-        acheck!(snd_pcm_hw_params_get_rate_resample(
-            (self.1).0,
-            self.0,
-            &mut v
-        ))
-        .map(|_| v != 0)
+        acheck!(snd_pcm_hw_params_get_rate_resample((self.1).0, self.0, &mut v)).map(|_| v != 0)
     }
 
     pub fn set_rate_resample(&self, resample: bool) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_rate_resample(
-            (self.1).0,
-            self.0,
-            if resample { 1 } else { 0 }
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_rate_resample((self.1).0, self.0, if resample {1} else {0})).map(|_| ())
     }
 
     pub fn set_channels_near(&self, v: u32) -> Result<u32> {
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_channels_near(
-            (self.1).0,
-            self.0,
-            &mut r
-        ))
-        .map(|_| r)
+        acheck!(snd_pcm_hw_params_set_channels_near((self.1).0, self.0, &mut r)).map(|_| r)
     }
 
     pub fn set_channels(&self, v: u32) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_channels(
-            (self.1).0,
-            self.0,
-            v as c_uint
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_channels((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn get_channels(&self) -> Result<u32> {
@@ -1080,38 +858,21 @@ impl<'a> HwParams<'a> {
     }
 
     pub fn test_channels(&self, v: u32) -> Result<()> {
-        acheck!(snd_pcm_hw_params_test_channels(
-            (self.1).0,
-            self.0,
-            v as c_uint
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_test_channels((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn set_rate_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_rate_near(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r)
+        acheck!(snd_pcm_hw_params_set_rate_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r)
     }
 
     pub fn set_rate(&self, v: u32, dir: ValueOr) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_rate(
-            (self.1).0,
-            self.0,
-            v as c_uint,
-            dir as c_int
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_rate((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn get_rate(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_rate(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
@@ -1121,34 +882,18 @@ impl<'a> HwParams<'a> {
         // -1 if the suprenum is not in the set (i.e. it's an open range), 0 otherwise. This could
         // be returned along with the value, but it's safe to pass a null ptr in, in which case the
         // pointer is not dereferenced.
-        acheck!(snd_pcm_hw_params_get_rate_max(
-            self.0,
-            &mut v,
-            ptr::null_mut()
-        ))
-        .map(|_| v as u32)
+        acheck!(snd_pcm_hw_params_get_rate_max(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
     }
 
     pub fn get_rate_min(&self) -> Result<u32> {
         let mut v = 0;
         // Note on the null ptr: see get_rate_max but read +1 and infinum instead of -1 and
         // suprenum.
-        acheck!(snd_pcm_hw_params_get_rate_min(
-            self.0,
-            &mut v,
-            ptr::null_mut()
-        ))
-        .map(|_| v as u32)
+        acheck!(snd_pcm_hw_params_get_rate_min(self.0, &mut v, ptr::null_mut())).map(|_| v as u32)
     }
 
     pub fn test_rate(&self, rate: u32) -> Result<()> {
-        acheck!(snd_pcm_hw_params_test_rate(
-            (self.1).0,
-            self.0,
-            rate as c_uint,
-            0
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_test_rate((self.1).0, self.0, rate as c_uint, 0)).map(|_| ())
     }
 
     pub fn set_format(&self, v: Format) -> Result<()> {
@@ -1162,30 +907,15 @@ impl<'a> HwParams<'a> {
     }
 
     pub fn test_format(&self, v: Format) -> Result<()> {
-        acheck!(snd_pcm_hw_params_test_format(
-            (self.1).0,
-            self.0,
-            v as c_int
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_test_format((self.1).0, self.0, v as c_int)).map(|_| ())
     }
 
     pub fn test_access(&self, v: Access) -> Result<()> {
-        acheck!(snd_pcm_hw_params_test_access(
-            (self.1).0,
-            self.0,
-            v as c_uint
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_test_access((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn set_access(&self, v: Access) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_access(
-            (self.1).0,
-            self.0,
-            v as c_uint
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_access((self.1).0, self.0, v as c_uint)).map(|_| ())
     }
 
     pub fn get_access(&self) -> Result<Access> {
@@ -1197,281 +927,153 @@ impl<'a> HwParams<'a> {
     pub fn set_period_size_near(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
         let mut d = dir as c_int;
         let mut r = v as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_hw_params_set_period_size_near(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as Frames)
+        acheck!(snd_pcm_hw_params_set_period_size_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as Frames)
     }
 
     pub fn set_period_size(&self, v: Frames, dir: ValueOr) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_period_size(
-            (self.1).0,
-            self.0,
-            v as alsa::snd_pcm_uframes_t,
-            dir as c_int
-        ))
-        .map(|_| ())
-    }
-
-    pub fn set_period_size_min(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
-        let mut d = dir as c_int;
-        let mut r = v as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_hw_params_set_period_size_min(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as Frames)
-    }
-
-    pub fn set_period_size_max(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
-        let mut d = dir as c_int;
-        let mut r = v as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_hw_params_set_period_size_max(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as Frames)
+        acheck!(snd_pcm_hw_params_set_period_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t, dir as c_int)).map(|_| ())
     }
 
     pub fn set_period_time_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_period_time_near(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_period_time_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
+    pub fn set_period_size_min(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
+        let mut d = dir as c_int;
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_period_size_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as Frames)
+    }
+
+    pub fn set_period_size_max(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
+        let mut d = dir as c_int;
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_period_size_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as Frames)
     }
 
     pub fn set_period_time(&self, v: u32, dir: ValueOr) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_period_time(
-            (self.1).0,
-            self.0,
-            v as c_uint,
-            dir as c_int
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_period_time((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn set_period_time_min(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_period_time_min(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_period_time_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn set_period_time_max(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_period_time_max(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_period_time_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn get_period_time(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_period_time(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_period_time_min(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
-        acheck!(snd_pcm_hw_params_get_period_time_min(
-            self.0, &mut v, &mut d
-        ))
-        .map(|_| v as u32)
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_time_min(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_period_time_max(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
-        acheck!(snd_pcm_hw_params_get_period_time_max(
-            self.0, &mut v, &mut d
-        ))
-        .map(|_| v as u32)
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_period_size(&self) -> Result<Frames> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
     pub fn get_period_size_min(&self) -> Result<Frames> {
-        let (mut v, mut d) = (0, 0);
-        acheck!(snd_pcm_hw_params_get_period_size_min(
-            self.0, &mut v, &mut d
-        ))
-        .map(|_| v as Frames)
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_size_min(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
     pub fn get_period_size_max(&self) -> Result<Frames> {
-        let (mut v, mut d) = (0, 0);
-        acheck!(snd_pcm_hw_params_get_period_size_max(
-            self.0, &mut v, &mut d
-        ))
-        .map(|_| v as Frames)
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_size_max(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
     pub fn set_periods_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_periods_near(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_periods_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn set_periods(&self, v: u32, dir: ValueOr) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_periods(
-            (self.1).0,
-            self.0,
-            v as c_uint,
-            dir as c_int
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_periods((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn set_periods_min(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_periods_min(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_periods_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn set_periods_max(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_periods_max(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_periods_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn get_periods(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_periods(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_periods_min(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_periods_min(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_periods_max(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_periods_max(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn set_buffer_size_near(&self, v: Frames) -> Result<Frames> {
         let mut r = v as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_hw_params_set_buffer_size_near(
-            (self.1).0,
-            self.0,
-            &mut r
-        ))
-        .map(|_| r as Frames)
+        acheck!(snd_pcm_hw_params_set_buffer_size_near((self.1).0, self.0, &mut r)).map(|_| r as Frames)
     }
 
     pub fn set_buffer_size_max(&self, v: Frames) -> Result<Frames> {
         let mut r = v as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_hw_params_set_buffer_size_max(
-            (self.1).0,
-            self.0,
-            &mut r
-        ))
-        .map(|_| r as Frames)
+        acheck!(snd_pcm_hw_params_set_buffer_size_max((self.1).0, self.0, &mut r)).map(|_| r as Frames)
     }
 
     pub fn set_buffer_size_min(&self, v: Frames) -> Result<Frames> {
         let mut r = v as alsa::snd_pcm_uframes_t;
-        acheck!(snd_pcm_hw_params_set_buffer_size_min(
-            (self.1).0,
-            self.0,
-            &mut r
-        ))
-        .map(|_| r as Frames)
+        acheck!(snd_pcm_hw_params_set_buffer_size_min((self.1).0, self.0, &mut r)).map(|_| r as Frames)
     }
 
     pub fn set_buffer_size(&self, v: Frames) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_buffer_size(
-            (self.1).0,
-            self.0,
-            v as alsa::snd_pcm_uframes_t
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_buffer_size((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn set_buffer_time_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_buffer_time_near(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_buffer_time_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn set_buffer_time(&self, v: u32, dir: ValueOr) -> Result<()> {
-        acheck!(snd_pcm_hw_params_set_buffer_time(
-            (self.1).0,
-            self.0,
-            v as c_uint,
-            dir as c_int
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_hw_params_set_buffer_time((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
     }
 
     pub fn set_buffer_time_min(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_buffer_time_min(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_buffer_time_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn set_buffer_time_max(&self, v: u32, dir: ValueOr) -> Result<u32> {
         let mut d = dir as c_int;
         let mut r = v as c_uint;
-        acheck!(snd_pcm_hw_params_set_buffer_time_max(
-            (self.1).0,
-            self.0,
-            &mut r,
-            &mut d
-        ))
-        .map(|_| r as u32)
+        acheck!(snd_pcm_hw_params_set_buffer_time_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn get_buffer_size(&self) -> Result<Frames> {
@@ -1490,24 +1092,18 @@ impl<'a> HwParams<'a> {
     }
 
     pub fn get_buffer_time(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
+        let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_buffer_time(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_buffer_time_min(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
-        acheck!(snd_pcm_hw_params_get_buffer_time_min(
-            self.0, &mut v, &mut d
-        ))
-        .map(|_| v as u32)
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_buffer_time_min(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_buffer_time_max(&self) -> Result<u32> {
-        let (mut v, mut d) = (0, 0);
-        acheck!(snd_pcm_hw_params_get_buffer_time_max(
-            self.0, &mut v, &mut d
-        ))
-        .map(|_| v as u32)
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_buffer_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     /// Returns true if the alsa stream can be paused, false if not.
@@ -1562,14 +1158,8 @@ impl<'a> fmt::Debug for HwParams<'a> {
             .field("rate", &format!("{:?} Hz", self.get_rate()))
             .field("format", &self.get_format())
             .field("access", &self.get_access())
-            .field(
-                "period_size",
-                &format!("{:?} frames", self.get_period_size()),
-            )
-            .field(
-                "buffer_size",
-                &format!("{:?} frames", self.get_buffer_size()),
-            )
+            .field("period_size", &format!("{:?} frames", self.get_period_size()))
+            .field("buffer_size", &format!("{:?} frames", self.get_buffer_size()))
             .finish()
     }
 }
@@ -1578,24 +1168,18 @@ impl<'a> fmt::Debug for HwParams<'a> {
 pub struct SwParams<'a>(*mut alsa::snd_pcm_sw_params_t, &'a PCM);
 
 impl<'a> Drop for SwParams<'a> {
-    fn drop(&mut self) {
-        unsafe { alsa::snd_pcm_sw_params_free(self.0) };
-    }
+    fn drop(&mut self) { unsafe { alsa::snd_pcm_sw_params_free(self.0) }; }
 }
 
 impl<'a> SwParams<'a> {
+
     fn new(a: &'a PCM) -> Result<SwParams<'a>> {
         let mut p = ptr::null_mut();
         acheck!(snd_pcm_sw_params_malloc(&mut p)).map(|_| SwParams(p, a))
     }
 
     pub fn set_avail_min(&self, v: Frames) -> Result<()> {
-        acheck!(snd_pcm_sw_params_set_avail_min(
-            (self.1).0,
-            self.0,
-            v as alsa::snd_pcm_uframes_t
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_sw_params_set_avail_min((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_avail_min(&self) -> Result<Frames> {
@@ -1609,12 +1193,7 @@ impl<'a> SwParams<'a> {
     }
 
     pub fn set_start_threshold(&self, v: Frames) -> Result<()> {
-        acheck!(snd_pcm_sw_params_set_start_threshold(
-            (self.1).0,
-            self.0,
-            v as alsa::snd_pcm_uframes_t
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_sw_params_set_start_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_start_threshold(&self) -> Result<Frames> {
@@ -1623,12 +1202,7 @@ impl<'a> SwParams<'a> {
     }
 
     pub fn set_stop_threshold(&self, v: Frames) -> Result<()> {
-        acheck!(snd_pcm_sw_params_set_stop_threshold(
-            (self.1).0,
-            self.0,
-            v as alsa::snd_pcm_uframes_t
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_sw_params_set_stop_threshold((self.1).0, self.0, v as alsa::snd_pcm_uframes_t)).map(|_| ())
     }
 
     pub fn get_stop_threshold(&self) -> Result<Frames> {
@@ -1637,11 +1211,7 @@ impl<'a> SwParams<'a> {
     }
 
     pub fn set_tstamp_mode(&self, v: bool) -> Result<()> {
-        let z = if v {
-            alsa::SND_PCM_TSTAMP_ENABLE
-        } else {
-            alsa::SND_PCM_TSTAMP_NONE
-        };
+        let z = if v { alsa::SND_PCM_TSTAMP_ENABLE } else { alsa::SND_PCM_TSTAMP_NONE };
         acheck!(snd_pcm_sw_params_set_tstamp_mode((self.1).0, self.0, z)).map(|_| ())
     }
 
@@ -1651,12 +1221,7 @@ impl<'a> SwParams<'a> {
     }
 
     pub fn set_tstamp_type(&self, v: TstampType) -> Result<()> {
-        acheck!(snd_pcm_sw_params_set_tstamp_type(
-            (self.1).0,
-            self.0,
-            v as u32
-        ))
-        .map(|_| ())
+        acheck!(snd_pcm_sw_params_set_tstamp_type((self.1).0, self.0, v as u32)).map(|_| ())
     }
 
     pub fn get_tstamp_type(&self) -> Result<TstampType> {
@@ -1682,65 +1247,41 @@ const STATUS_SIZE: usize = 152;
 
 /// [snd_pcm_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___status.html) wrapper
 #[derive(Debug)]
-pub struct Status([u64; (STATUS_SIZE + 7) / 8]);
+pub struct Status([u64; (STATUS_SIZE+7)/8]);
 
 impl Status {
     fn new() -> Status {
         assert!(unsafe { alsa::snd_pcm_status_sizeof() } as usize <= STATUS_SIZE);
-        Status([0; (STATUS_SIZE + 7) / 8])
+        Status([0; (STATUS_SIZE+7)/8])
     }
 
-    fn ptr(&self) -> *mut alsa::snd_pcm_status_t {
-        self.0.as_ptr() as *const _ as *mut alsa::snd_pcm_status_t
-    }
+    fn ptr(&self) -> *mut alsa::snd_pcm_status_t { self.0.as_ptr() as *const _ as *mut alsa::snd_pcm_status_t }
 
     pub fn get_htstamp(&self) -> timespec {
-        let mut h = timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
+        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
         unsafe { alsa::snd_pcm_status_get_htstamp(self.ptr(), &mut h) };
         h
     }
 
     pub fn get_trigger_htstamp(&self) -> timespec {
-        let mut h = timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
+        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
         unsafe { alsa::snd_pcm_status_get_trigger_htstamp(self.ptr(), &mut h) };
         h
     }
 
     pub fn get_audio_htstamp(&self) -> timespec {
-        let mut h = timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
+        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
         unsafe { alsa::snd_pcm_status_get_audio_htstamp(self.ptr(), &mut h) };
         h
     }
 
-    pub fn get_state(&self) -> State {
-        State::from_c_int(
-            unsafe { alsa::snd_pcm_status_get_state(self.ptr()) } as c_int,
-            "snd_pcm_status_get_state",
-        )
-        .unwrap()
-    }
+    pub fn get_state(&self) -> State { State::from_c_int(
+        unsafe { alsa::snd_pcm_status_get_state(self.ptr()) } as c_int, "snd_pcm_status_get_state").unwrap() }
 
-    pub fn get_avail(&self) -> Frames {
-        unsafe { alsa::snd_pcm_status_get_avail(self.ptr()) as Frames }
-    }
-    pub fn get_delay(&self) -> Frames {
-        unsafe { alsa::snd_pcm_status_get_delay(self.ptr()) }
-    }
-    pub fn get_avail_max(&self) -> Frames {
-        unsafe { alsa::snd_pcm_status_get_avail_max(self.ptr()) as Frames }
-    }
-    pub fn get_overrange(&self) -> Frames {
-        unsafe { alsa::snd_pcm_status_get_overrange(self.ptr()) as Frames }
-    }
+    pub fn get_avail(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_avail(self.ptr()) as Frames }}
+    pub fn get_delay(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_delay(self.ptr()) }}
+    pub fn get_avail_max(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_avail_max(self.ptr()) as Frames }}
+    pub fn get_overrange(&self) -> Frames { unsafe { alsa::snd_pcm_status_get_overrange(self.ptr()) as Frames }}
 
     pub fn dump(&self, o: &mut Output) -> Result<()> {
         acheck!(snd_pcm_status_dump(self.ptr(), super::io::output_handle(o))).map(|_| ())
@@ -1758,7 +1299,11 @@ impl StatusBuilder {
         StatusBuilder(Status::new())
     }
 
-    pub fn audio_htstamp_config(self, type_requested: AudioTstampType, report_delay: bool) -> Self {
+    pub fn audio_htstamp_config(
+        self,
+        type_requested: AudioTstampType,
+        report_delay: bool,
+    ) -> Self {
         let mut cfg: alsa::snd_pcm_audio_tstamp_config_t = unsafe { std::mem::zeroed() };
         cfg.set_type_requested(type_requested as _);
         cfg.set_report_delay(report_delay as _);
@@ -1767,7 +1312,7 @@ impl StatusBuilder {
     }
 
     pub fn build(mut self, pcm: &PCM) -> Result<Status> {
-        let p = self.0 .0.as_mut_ptr() as *mut alsa::snd_pcm_status_t;
+        let p = self.0.0.as_mut_ptr() as *mut alsa::snd_pcm_status_t;
         acheck!(snd_pcm_status(pcm.0, p)).map(|_| self.0)
     }
 }
@@ -1775,8 +1320,8 @@ impl StatusBuilder {
 alsa_enum!(
     #[non_exhaustive]
     /// [SND_PCM_AUDIO_TSTAMP_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
-    AudioTstampType,
-    ALL_AUDIO_TSTAMP_TYPES[6],
+    AudioTstampType, ALL_AUDIO_TSTAMP_TYPES[6],
+
     Compat = SND_PCM_AUDIO_TSTAMP_TYPE_COMPAT,
     Default = SND_PCM_AUDIO_TSTAMP_TYPE_DEFAULT,
     Link = SND_PCM_AUDIO_TSTAMP_TYPE_LINK,
@@ -1788,12 +1333,7 @@ alsa_enum!(
 #[test]
 fn info_from_default() {
     use std::ffi::CString;
-    let pcm = PCM::open(
-        &*CString::new("default").unwrap(),
-        Direction::Capture,
-        false,
-    )
-    .unwrap();
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     let info = pcm.info().unwrap();
     println!("PCM Info:");
     println!("\tCard: {}", info.get_card());
@@ -1807,12 +1347,7 @@ fn info_from_default() {
 #[test]
 fn drop() {
     use std::ffi::CString;
-    let pcm = PCM::open(
-        &*CString::new("default").unwrap(),
-        Direction::Capture,
-        false,
-    )
-    .unwrap();
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     // Verify that this does not cause a naming conflict (issue #14)
     let _ = pcm.drop();
 }
@@ -1820,12 +1355,7 @@ fn drop() {
 #[test]
 fn record_from_default() {
     use std::ffi::CString;
-    let pcm = PCM::open(
-        &*CString::new("default").unwrap(),
-        Direction::Capture,
-        false,
-    )
-    .unwrap();
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(2).unwrap();
     hwp.set_rate(44100, ValueOr::Nearest).unwrap();
@@ -1834,7 +1364,7 @@ fn record_from_default() {
     pcm.hw_params(&hwp).unwrap();
     pcm.start().unwrap();
     let mut buf = [0i16; 1024];
-    assert_eq!(pcm.io_i16().unwrap().readi(&mut buf).unwrap(), 1024 / 2);
+    assert_eq!(pcm.io_i16().unwrap().readi(&mut buf).unwrap(), 1024/2);
 }
 
 #[test]
@@ -1853,12 +1383,7 @@ fn open_s24() {
 #[test]
 fn playback_to_default() {
     use std::ffi::CString;
-    let pcm = PCM::open(
-        &*CString::new("default").unwrap(),
-        Direction::Playback,
-        false,
-    )
-    .unwrap();
+    let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
     hwp.set_channels(1).unwrap();
     hwp.set_rate(44100, ValueOr::Nearest).unwrap();
@@ -1868,15 +1393,10 @@ fn playback_to_default() {
 
     let hwp = pcm.hw_params_current().unwrap();
     let swp = pcm.sw_params_current().unwrap();
-    swp.set_start_threshold(hwp.get_buffer_size().unwrap())
-        .unwrap();
+    swp.set_start_threshold(hwp.get_buffer_size().unwrap()).unwrap();
     pcm.sw_params(&swp).unwrap();
 
-    println!(
-        "PCM status: {:?}, {:?}",
-        pcm.state(),
-        pcm.hw_params_current().unwrap()
-    );
+    println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
     let mut outp = Output::buffer_open().unwrap();
     pcm.dump(&mut outp).unwrap();
     println!("== PCM dump ==\n{}", outp);
@@ -1886,14 +1406,11 @@ fn playback_to_default() {
         *a = ((i as f32 * 2.0 * ::std::f32::consts::PI / 128.0).sin() * 8192.0) as i16
     }
     let io = pcm.io_i16().unwrap();
-    for _ in 0..2 * 44100 / 1024 {
-        // 2 seconds of playback
+    for _ in 0..2*44100/1024 { // 2 seconds of playback
         println!("PCM state: {:?}", pcm.state());
         assert_eq!(io.writei(&buf[..]).unwrap(), 1024);
     }
-    if pcm.state() != State::Running {
-        pcm.start().unwrap()
-    };
+    if pcm.state() != State::Running { pcm.start().unwrap() };
 
     let mut outp2 = Output::buffer_open().unwrap();
     pcm.status().unwrap().dump(&mut outp2).unwrap();
