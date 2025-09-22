@@ -1,7 +1,8 @@
 //! Mixer API - Simple Mixer API for mixer control
 //!
-use std::ffi::{CStr, CString};
-use std::{ptr, mem, fmt, ops};
+use core::ffi::CStr;
+use ::alloc::ffi::CString;
+use core::{ptr, mem, fmt, ops};
 use libc::{c_long, c_int, c_uint, c_short, pollfd};
 use crate::poll;
 

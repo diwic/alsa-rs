@@ -6,7 +6,7 @@
 use crate::{alsa};
 use super::error::*;
 use super::Output;
-use std::ptr;
+use core::ptr;
 
 pub fn update() -> Result<bool> {
 	acheck!(snd_config_update()).map(|x| x != 0)

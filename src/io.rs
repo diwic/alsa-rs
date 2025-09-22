@@ -1,8 +1,8 @@
 use crate::alsa;
 use super::error::*;
-use std::{slice, ptr, fmt};
-use std::cell::RefCell;
-use std::rc::Rc;
+use core::{slice, ptr, fmt};
+use core::cell::RefCell;
+use ::alloc::rc::Rc;
 use libc::{c_char, c_int};
 
 /// [snd_output_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___output.html) wrapper

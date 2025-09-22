@@ -5,7 +5,7 @@
 //!
 //! ```
 //! for a in ::alsa::card::Iter::new().map(|x| x.unwrap()) {
-//!     use std::ffi::CString;
+//!     use ::alloc::ffi::CString;
 //!     use alsa::hctl::HCtl;
 //!     let h = HCtl::open(&CString::new(format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
 //!     h.load().unwrap();
@@ -34,9 +34,10 @@
 
 
 use crate::{alsa, Card};
-use std::ffi::{CStr, CString};
+use core::ffi::CStr;
+use ::alloc::ffi::CString;
 use super::error::*;
-use std::ptr;
+use core::ptr;
 use super::{ctl_int, poll};
 use libc::{c_short, c_uint, c_int, pollfd};
 
@@ -144,7 +145,7 @@ impl<'a> Elem<'a> {
 #[test]
 fn print_hctls() {
     for a in super::card::Iter::new().map(|x| x.unwrap()) {
-        use std::ffi::CString;
+        use ::alloc::ffi::CString;
         let h = HCtl::open(&CString::new(format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
         h.load().unwrap();
         println!("Card {}:", a.get_name().unwrap());
@@ -157,7 +158,7 @@ fn print_hctls() {
 #[test]
 fn print_jacks() {
     for a in super::card::Iter::new().map(|x| x.unwrap()) {
-        use std::ffi::CString;
+        use ::alloc::ffi::CString;
         let h = HCtl::open(&CString::new(format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
         h.load().unwrap();
         for b in h.elem_iter() {

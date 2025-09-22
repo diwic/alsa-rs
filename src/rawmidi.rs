@@ -5,8 +5,10 @@ use super::ctl_int::{ctl_ptr, Ctl};
 use super::{Direction, poll};
 use super::error::*;
 use crate::alsa;
-use std::{ptr, io};
-use std::ffi::{CStr, CString};
+use ::alloc::ffi::CString;
+use core::ptr;
+use core::ffi::CStr;
+use std::io;
 
 /// Iterator over [Rawmidi](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) devices and subdevices
 pub struct Iter<'a> {

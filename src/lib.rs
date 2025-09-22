@@ -17,6 +17,7 @@
 #![warn(clippy::correctness, clippy::suspicious, clippy::perf)]
 
 extern crate alsa_sys as alsa;
+extern crate alloc;
 extern crate libc;
 #[macro_use]
 extern crate bitflags;

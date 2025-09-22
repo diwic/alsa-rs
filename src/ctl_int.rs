@@ -1,14 +1,15 @@
 
 use crate::alsa;
 use super::pcm::Info;
-use std::ffi::{CStr, CString};
+use core::ffi::CStr;
+use ::alloc::ffi::CString;
 use super::Direction;
 use super::error::*;
 use super::mixer::MilliBel;
 use super::Round;
-use std::{ptr, mem, fmt, cmp};
+use core::{ptr, mem, fmt, cmp};
 use crate::{Card, poll};
-use std::cell::UnsafeCell;
+use core::cell::UnsafeCell;
 use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 
 /// We prefer not to allocate for every ElemId, ElemInfo or ElemValue.
@@ -294,7 +295,7 @@ impl ElemValue {
 
     pub fn get_bytes(&self) -> Option<&[u8]> {
         if self.etype != ElemType::Bytes { None }
-        else { Some( unsafe { ::std::slice::from_raw_parts(
+        else { Some( unsafe { ::core::slice::from_raw_parts(
             alsa::snd_ctl_elem_value_get_bytes(self.ptr) as *const u8, self.count as usize) } ) }
     }
 

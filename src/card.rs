@@ -2,7 +2,7 @@
 use libc::{c_int, c_char};
 use super::error::*;
 use crate::alsa;
-use std::ffi::CStr;
+use core::ffi::CStr;
 
 /// An ALSA sound card, uniquely identified by its index.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -33,12 +33,12 @@ impl Card {
         acheck!(snd_card_get_index(s.as_ptr())).map(Card)
     }
     pub fn get_name(&self) -> Result<String> {
-        let mut c: *mut c_char = ::std::ptr::null_mut();
+        let mut c: *mut c_char = ::core::ptr::null_mut();
         acheck!(snd_card_get_name(self.0, &mut c))
             .and_then(|_| from_alloc("snd_card_get_name", c)) 
     }
     pub fn get_longname(&self) -> Result<String> {
-        let mut c: *mut c_char = ::std::ptr::null_mut();
+        let mut c: *mut c_char = ::core::ptr::null_mut();
         acheck!(snd_card_get_longname(self.0, &mut c))
             .and_then(|_| from_alloc("snd_card_get_longname", c)) 
     }

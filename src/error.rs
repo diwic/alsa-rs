@@ -1,9 +1,9 @@
 #![macro_use]
 
 use libc::{c_char, c_int, c_void, free};
-use std::error::Error as StdError;
-use std::ffi::CStr;
-use std::{fmt, str};
+use core::error::Error as StdError;
+use core::ffi::CStr;
+use core::{fmt, str};
 
 /// ALSA error
 ///
@@ -14,7 +14,7 @@ use std::{fmt, str};
 #[derive(Clone, PartialEq, Copy)]
 pub struct Error(&'static str, i32);
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T> = ::core::result::Result<T, Error>;
 
 macro_rules! acheck {
     ($f: ident ( $($x: expr),* ) ) => {{
@@ -207,7 +207,7 @@ impl From<Error> for fmt::Error {
 
 #[test]
 fn broken_pcm_name() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let e = crate::PCM::open(
         &*CString::new("this_PCM_does_not_exist").unwrap(),
         crate::Direction::Playback,

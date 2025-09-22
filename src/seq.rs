@@ -4,10 +4,10 @@ use libc::{c_uint, c_int, c_short, c_uchar, c_void, c_long, size_t, pollfd};
 use super::error::*;
 use crate::alsa;
 use super::{Direction, poll};
-use std::{ptr, fmt, mem, slice, time, cell};
-use std::str::{FromStr, Split};
-use std::ffi::CStr;
-use std::borrow::Cow;
+use core::{ptr, fmt, mem, slice, time, cell};
+use core::str::{FromStr, Split};
+use core::ffi::CStr;
+use ::alloc::borrow::Cow;
 
 // Workaround for improper alignment of snd_seq_ev_ext_t in alsa-sys
 #[repr(packed)]
@@ -490,9 +490,9 @@ pub struct Addr {
 }
 
 impl FromStr for Addr {
-    type Err = Box<dyn std::error::Error>;
+    type Err = Box<dyn core::error::Error>;
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
         let mut split: Split<'_, char> = s.trim().split(':');
         let client = split.next()
                           .ok_or("no client provided")?
@@ -1388,7 +1388,7 @@ impl MidiEvent {
 
 #[test]
 fn print_seqs() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_print_seqs").unwrap()).unwrap();
     let clients: Vec<_> = ClientIter::new(&s).collect();
@@ -1400,7 +1400,7 @@ fn print_seqs() {
 
 #[test]
 fn seq_subscribe() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_subscribe").unwrap()).unwrap();
     let timer_info = s.get_any_port_info(Addr { client: 0, port: 0 }).unwrap();
@@ -1415,7 +1415,7 @@ fn seq_subscribe() {
 
 #[test]
 fn seq_loopback() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(Some(&CString::new("default").unwrap()), None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_loopback").unwrap()).unwrap();
 
@@ -1480,7 +1480,7 @@ fn seq_decode_sysex() {
 #[test]
 #[should_panic]
 fn seq_get_input_twice() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_get_input_twice").unwrap()).unwrap();
     let input1 = s.input();
@@ -1510,7 +1510,7 @@ fn seq_has_data() {
 }
 
 #[test]
-fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn seq_remove_events() -> core::result::Result<(), Box<dyn core::error::Error>> {
     let info = RemoveEvents::new()?;
 
 

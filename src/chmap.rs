@@ -1,5 +1,5 @@
 use crate::alsa;
-use std::{fmt, mem, slice};
+use core::{fmt, mem, slice};
 use super::error::*;
 
 alsa_enum!(
@@ -137,7 +137,7 @@ impl Iterator for ChmapsQuery {
 #[test]
 fn chmap_for_first_pcm() {
     use super::*;
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     use crate::device_name::HintIter;
 
     use crate::Output;
