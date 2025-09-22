@@ -61,7 +61,7 @@ impl Ctl {
     }
 
     pub fn from_card(c: &Card, nonblock: bool) -> Result<Ctl> {
-        let s = format!("hw:{}", c.get_index());
+        let s = ::alloc::format!("hw:{}", c.get_index());
         Ctl::open(&CString::new(s).unwrap(), nonblock)
     }
 
@@ -547,6 +547,7 @@ impl EventMask {
 
 #[test]
 fn print_sizeof() {
+    extern crate std;
     let elemid = unsafe { alsa::snd_ctl_elem_id_sizeof() } as usize;
     let elemvalue = unsafe { alsa::snd_ctl_elem_value_sizeof() } as usize;
     let eleminfo = unsafe { alsa::snd_ctl_elem_info_sizeof() } as usize;
@@ -555,5 +556,5 @@ fn print_sizeof() {
 //    assert!(elemvalue <= ELEM_VALUE_SIZE);
 //    assert!(eleminfo <= ELEM_INFO_SIZE);
 
-    println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
+    std::println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
 }

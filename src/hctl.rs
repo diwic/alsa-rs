@@ -68,7 +68,7 @@ impl HCtl {
 
     /// Wrapper around open. You probably want to call `load` afterwards.
     pub fn from_card(c: &Card, nonblock: bool) -> Result<HCtl> {
-        let s = format!("hw:{}", c.get_index());
+        let s = ::alloc::format!("hw:{}", c.get_index());
         HCtl::new(&s, nonblock)
     }
 
@@ -144,22 +144,24 @@ impl<'a> Elem<'a> {
 
 #[test]
 fn print_hctls() {
+    extern crate std;
     for a in super::card::Iter::new().map(|x| x.unwrap()) {
         use ::alloc::ffi::CString;
-        let h = HCtl::open(&CString::new(format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
+        let h = HCtl::open(&CString::new(::alloc::format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
         h.load().unwrap();
-        println!("Card {}:", a.get_name().unwrap());
+        std::println!("Card {}:", a.get_name().unwrap());
         for b in h.elem_iter() {
-            println!("  {:?} - {:?}", b.get_id().unwrap(), b.read().unwrap());
+            std::println!("  {:?} - {:?}", b.get_id().unwrap(), b.read().unwrap());
         }
     }
 }
 
 #[test]
 fn print_jacks() {
+    extern crate std;
     for a in super::card::Iter::new().map(|x| x.unwrap()) {
         use ::alloc::ffi::CString;
-        let h = HCtl::open(&CString::new(format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
+        let h = HCtl::open(&CString::new(::alloc::format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
         h.load().unwrap();
         for b in h.elem_iter() {
             let id = b.get_id().unwrap();
@@ -167,9 +169,9 @@ fn print_jacks() {
             let name = id.get_name().unwrap();
             if !name.ends_with(" Jack") { continue; }
             if name.ends_with(" Phantom Jack") {
-                println!("{} is always present", &name[..name.len()-13])
+                std::println!("{} is always present", &name[..name.len()-13])
             }
-            else { println!("{} is {}", &name[..name.len()-5],
+            else { std::println!("{} is {}", &name[..name.len()-5],
                 if b.read().unwrap().get_boolean(0).unwrap() { "plugged in" } else { "unplugged" })
             }
         }

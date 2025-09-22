@@ -2,6 +2,7 @@
 //!
 use core::ffi::CStr;
 use ::alloc::ffi::CString;
+use ::alloc::string::String;
 use core::{ptr, mem, fmt, ops};
 use libc::{c_long, c_int, c_uint, c_short, pollfd};
 use crate::poll;
@@ -516,6 +517,10 @@ impl fmt::Display for SelemChannelId {
 
 #[test]
 fn print_mixer_of_cards() {
+    extern crate std;
+    use std::{println, print};
+    use ::alloc::format;
+    use ::alloc::string::ToString;
     use super::card;
 
     for card in card::Iter::new().map(|c| c.unwrap()) {
@@ -603,6 +608,8 @@ fn print_mixer_of_cards() {
 #[test]
 #[ignore]
 fn get_and_set_playback_volume() {
+    extern crate std;
+
     let mixer = Mixer::new("hw:1", false).unwrap();
     let selem = mixer.find_selem(&SelemId::new("Master", 0)).unwrap();
 
@@ -611,13 +618,13 @@ fn get_and_set_playback_volume() {
     for c in SelemChannelId::all().iter() {
         if selem.has_playback_channel(*c) { channel = *c; break }
     }
-    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), rmin, rmax, channel);
+    std::println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), rmin, rmax, channel);
 
     let old: i64 = selem.get_playback_volume(channel).unwrap();
     let new: i64 = rmax / 2;
     assert_ne!(new, old);
 
-    println!("Changing volume of {} from {} to {}", channel, old, new);
+    std::println!("Changing volume of {} from {} to {}", channel, old, new);
     selem.set_playback_volume(channel, new).unwrap();
     let mut result: i64 = selem.get_playback_volume(channel).unwrap();
     assert_eq!(new, result);
@@ -631,6 +638,8 @@ fn get_and_set_playback_volume() {
 #[test]
 #[ignore]
 fn get_and_set_capture_volume() {
+    extern crate std;
+
     let mixer = Mixer::new("hw:1", false).unwrap();
     let selem = mixer.find_selem(&SelemId::new("Capture", 0)).unwrap();
 
@@ -639,13 +648,13 @@ fn get_and_set_capture_volume() {
     for c in SelemChannelId::all().iter() {
         if selem.has_playback_channel(*c) { channel = *c; break }
     }
-    println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), rmin, rmax, channel);
+    std::println!("Testing on {} with limits {}-{} on channel {}", selem.get_id().get_name().unwrap(), rmin, rmax, channel);
 
     let old: i64 = selem.get_capture_volume(channel).unwrap();
     let new: i64 = rmax / 2;
     assert_ne!(new, old);
 
-    println!("Changing volume of {} from {} to {}", channel, old, new);
+    std::println!("Changing volume of {} from {} to {}", channel, old, new);
     selem.set_capture_volume(channel, new).unwrap();
     let mut result: i64 = selem.get_capture_volume(channel).unwrap();
     assert_eq!(new, result);
@@ -659,8 +668,9 @@ fn get_and_set_capture_volume() {
 
 #[test]
 fn print_sizeof() {
+    extern crate std;
     let selemid = unsafe { alsa::snd_mixer_selem_id_sizeof() } as usize;
 
     assert!(selemid <= SELEM_ID_SIZE);
-    println!("Selem id: {}", selemid);
+    std::println!("Selem id: {}", selemid);
 }

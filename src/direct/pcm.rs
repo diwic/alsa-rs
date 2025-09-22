@@ -518,6 +518,7 @@ impl<'a, S: 'static> Drop for CaptureIter<'a, S> {
 #[test]
 #[ignore] // Not everyone has a recording device on plughw:1. So let's ignore this test by default.
 fn record_from_plughw_rw() {
+    extern crate std;
     use crate::pcm::*;
     use crate::{ValueOr, Direction};
     use ::alloc::ffi::CString;
@@ -539,7 +540,7 @@ fn record_from_plughw_rw() {
     assert_eq!(ss.state(), State::Prepared);
     pcm.start().unwrap();
     assert_eq!(c.appl_ptr(), 0);
-    println!("{:?}, {:?}", ss, c);
+    std::println!("{:?}, {:?}", ss, c);
     let mut buf = [0i16; 512*2];
     assert_eq!(pcm.io_i16().unwrap().readi(&mut buf).unwrap(), 512);
     assert_eq!(c.appl_ptr(), 512);
@@ -554,10 +555,12 @@ fn record_from_plughw_rw() {
 #[test]
 #[ignore] // Not everyone has a record device on plughw:1. So let's ignore this test by default.
 fn record_from_plughw_mmap() {
+    extern crate std;
     use crate::pcm::*;
     use crate::{ValueOr, Direction};
     use ::alloc::ffi::CString;
-    use std::{thread, time};
+    use ::alloc::vec::Vec;
+    use std::{thread, time, println};
 
     let pcm = PCM::open(&*CString::new("plughw:1").unwrap(), Direction::Capture, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
@@ -598,6 +601,7 @@ fn record_from_plughw_mmap() {
 #[test]
 #[ignore]
 fn playback_to_plughw_mmap() {
+    extern crate std;
     use crate::pcm::*;
     use crate::{ValueOr, Direction};
     use ::alloc::ffi::CString;
@@ -615,7 +619,7 @@ fn playback_to_plughw_mmap() {
     assert_eq!(m.appl_ptr(), 0);
     assert_eq!(m.hw_ptr(), 0);
 
-    println!("{:?}", m);
+    std::println!("{:?}", m);
     let mut i = (0..(m.buffer_size() * 2)).map(|i|
         (((i / 2) as f32 * 2.0 * ::core::f32::consts::PI / 128.0).sin() * 8192.0) as i16);
     m.write(&mut i);

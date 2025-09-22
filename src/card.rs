@@ -3,6 +3,7 @@ use libc::{c_int, c_char};
 use super::error::*;
 use crate::alsa;
 use core::ffi::CStr;
+use ::alloc::string::String;
 
 /// An ALSA sound card, uniquely identified by its index.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -48,7 +49,8 @@ impl Card {
 
 #[test]
 fn print_cards() {
+    extern crate std;
     for a in Iter::new().map(|a| a.unwrap()) {
-        println!("Card #{}: {} ({})", a.get_index(), a.get_name().unwrap(), a.get_longname().unwrap())
+        std::println!("Card #{}: {} ({})", a.get_index(), a.get_name().unwrap(), a.get_longname().unwrap())
     }
 }

@@ -36,8 +36,9 @@ impl Config {
 
 #[test]
 fn config_save() {
+    extern crate std;
 	let c = update_ref().unwrap();
     let mut outp = Output::buffer_open().unwrap();
 	c.save(&mut outp).unwrap();
-    println!("== Config save ==\n{}", outp);
+    std::println!("== Config save ==\n{}", outp);
 }

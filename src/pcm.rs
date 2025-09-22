@@ -49,9 +49,9 @@ use core::convert::Infallible;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ffi::CStr;
-use ::alloc::ffi::CString;
 use core::str::FromStr;
-use std::io;
+use ::alloc::ffi::CString;
+use ::alloc::format;
 use core::{fmt, ptr, cell};
 use super::error::*;
 use super::{Direction, Output, poll, ValueOr, chmap};
@@ -463,23 +463,25 @@ impl<'a, S: Copy> IO<'a, S> {
     }
 }
 
-impl<'a, S: Copy> io::Read for IO<'a, S> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+#[cfg(feature = "std")]
+impl<'a, S: Copy> std::io::Read for IO<'a, S> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
-        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        if r < 0 { Err(std::io::Error::from_raw_os_error(r as i32)) }
         else { Ok(self.0.frames_to_bytes(r) as usize) }
     }
 }
 
-impl<'a, S: Copy> io::Write for IO<'a, S> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+#[cfg(feature = "std")]
+impl<'a, S: Copy> std::io::Write for IO<'a, S> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_writei((self.0).0, buf.as_ptr() as *const c_void, size) };
-        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        if r < 0 { Err(std::io::Error::from_raw_os_error(r as i32)) }
         else { Ok(self.0.frames_to_bytes(r) as usize) }
     }
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 
@@ -1334,16 +1336,17 @@ alsa_enum!(
 
 #[test]
 fn info_from_default() {
+    extern crate std;
     use ::alloc::ffi::CString;
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Capture, false).unwrap();
     let info = pcm.info().unwrap();
-    println!("PCM Info:");
-    println!("\tCard: {}", info.get_card());
-    println!("\tDevice: {}", info.get_device());
-    println!("\tSubdevice: {}", info.get_subdevice());
-    println!("\tId: {}", info.get_id().unwrap());
-    println!("\tName: {}", info.get_name().unwrap());
-    println!("\tSubdevice Name: {}", info.get_subdevice_name().unwrap());
+    std::println!("PCM Info:");
+    std::println!("\tCard: {}", info.get_card());
+    std::println!("\tDevice: {}", info.get_device());
+    std::println!("\tSubdevice: {}", info.get_subdevice());
+    std::println!("\tId: {}", info.get_id().unwrap());
+    std::println!("\tName: {}", info.get_name().unwrap());
+    std::println!("\tSubdevice Name: {}", info.get_subdevice_name().unwrap());
 }
 
 #[test]
@@ -1384,6 +1387,8 @@ fn open_s24() {
 
 #[test]
 fn playback_to_default() {
+    extern crate std;
+
     use ::alloc::ffi::CString;
     let pcm = PCM::open(&*CString::new("default").unwrap(), Direction::Playback, false).unwrap();
     let hwp = HwParams::any(&pcm).unwrap();
@@ -1398,10 +1403,10 @@ fn playback_to_default() {
     swp.set_start_threshold(hwp.get_buffer_size().unwrap()).unwrap();
     pcm.sw_params(&swp).unwrap();
 
-    println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
+    std::println!("PCM status: {:?}, {:?}", pcm.state(), pcm.hw_params_current().unwrap());
     let mut outp = Output::buffer_open().unwrap();
     pcm.dump(&mut outp).unwrap();
-    println!("== PCM dump ==\n{}", outp);
+    std::println!("== PCM dump ==\n{}", outp);
 
     let mut buf = [0i16; 1024];
     for (i, a) in buf.iter_mut().enumerate() {
@@ -1409,28 +1414,32 @@ fn playback_to_default() {
     }
     let io = pcm.io_i16().unwrap();
     for _ in 0..2*44100/1024 { // 2 seconds of playback
-        println!("PCM state: {:?}", pcm.state());
+        std::println!("PCM state: {:?}", pcm.state());
         assert_eq!(io.writei(&buf[..]).unwrap(), 1024);
     }
     if pcm.state() != State::Running { pcm.start().unwrap() };
 
     let mut outp2 = Output::buffer_open().unwrap();
     pcm.status().unwrap().dump(&mut outp2).unwrap();
-    println!("== PCM status dump ==\n{}", outp2);
+    std::println!("== PCM status dump ==\n{}", outp2);
 
     pcm.drain().unwrap();
 }
 
 #[test]
 fn print_sizeof() {
+    extern crate std;
+
     let s = unsafe { alsa::snd_pcm_status_sizeof() } as usize;
-    println!("Status size: {}", s);
+    std::println!("Status size: {}", s);
 
     assert!(s <= STATUS_SIZE);
 }
 
 #[test]
 fn format_display_from_str() {
+    use ::alloc::string::ToString;
+
     for format in ALL_FORMATS {
         assert_eq!(format, format.to_string().parse().unwrap());
     }
