@@ -24,5 +24,7 @@ jobs:
       run: sudo apt-get install --no-install-recommends -y libasound2-dev      
     - name: Build
       run: cargo check --verbose --all
+    - name: Build no-std
+      run: cargo check --no-default-features --verbose --all
     # - name: Run tests
     #  run: cargo test --verbose --all
