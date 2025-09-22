@@ -940,6 +940,49 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_set_period_time_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
+    pub fn set_period_size_min(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
+        let mut d = dir as c_int;
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_period_size_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as Frames)
+    }
+
+    pub fn set_period_size_max(&self, v: Frames, dir: ValueOr) -> Result<Frames> {
+        let mut d = dir as c_int;
+        let mut r = v as alsa::snd_pcm_uframes_t;
+        acheck!(snd_pcm_hw_params_set_period_size_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as Frames)
+    }
+
+    pub fn set_period_time(&self, v: u32, dir: ValueOr) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_period_time((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
+    }
+
+    pub fn set_period_time_min(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_period_time_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
+    pub fn set_period_time_max(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_period_time_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
+    pub fn get_period_time(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_time(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    pub fn get_period_time_min(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_time_min(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    pub fn get_period_time_max(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_period_time_max(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
     pub fn get_period_size(&self) -> Result<Frames> {
         let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_period_size(self.0, &mut v, &mut d)).map(|_| v as Frames)
@@ -955,13 +998,41 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_get_period_size_max(self.0, &mut v, &mut d)).map(|_| v as Frames)
     }
 
+    pub fn set_periods_near(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_periods_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
     pub fn set_periods(&self, v: u32, dir: ValueOr) -> Result<()> {
         acheck!(snd_pcm_hw_params_set_periods((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
+    }
+
+    pub fn set_periods_min(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_periods_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
+    pub fn set_periods_max(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_periods_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
     pub fn get_periods(&self) -> Result<u32> {
         let (mut v, mut d) = (0,0);
         acheck!(snd_pcm_hw_params_get_periods(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    pub fn get_periods_min(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_periods_min(self.0, &mut v, &mut d)).map(|_| v as u32)
+    }
+
+    pub fn get_periods_max(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_periods_max(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn set_buffer_size_near(&self, v: Frames) -> Result<Frames> {
@@ -989,6 +1060,22 @@ impl<'a> HwParams<'a> {
         acheck!(snd_pcm_hw_params_set_buffer_time_near((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
     }
 
+    pub fn set_buffer_time(&self, v: u32, dir: ValueOr) -> Result<()> {
+        acheck!(snd_pcm_hw_params_set_buffer_time((self.1).0, self.0, v as c_uint, dir as c_int)).map(|_| ())
+    }
+
+    pub fn set_buffer_time_min(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_buffer_time_min((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
+    pub fn set_buffer_time_max(&self, v: u32, dir: ValueOr) -> Result<u32> {
+        let mut d = dir as c_int;
+        let mut r = v as c_uint;
+        acheck!(snd_pcm_hw_params_set_buffer_time_max((self.1).0, self.0, &mut r, &mut d)).map(|_| r as u32)
+    }
+
     pub fn get_buffer_size(&self) -> Result<Frames> {
         let mut v = 0;
         acheck!(snd_pcm_hw_params_get_buffer_size(self.0, &mut v)).map(|_| v as Frames)
@@ -1002,6 +1089,11 @@ impl<'a> HwParams<'a> {
     pub fn get_buffer_size_max(&self) -> Result<Frames> {
         let mut v = 0;
         acheck!(snd_pcm_hw_params_get_buffer_size_max(self.0, &mut v)).map(|_| v as Frames)
+    }
+
+    pub fn get_buffer_time(&self) -> Result<u32> {
+        let (mut v, mut d) = (0,0);
+        acheck!(snd_pcm_hw_params_get_buffer_time(self.0, &mut v, &mut d)).map(|_| v as u32)
     }
 
     pub fn get_buffer_time_min(&self) -> Result<u32> {
