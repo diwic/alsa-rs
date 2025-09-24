@@ -17,6 +17,7 @@ pub struct Error(&'static str, c_int);
 
 pub type Result<T> = ::core::result::Result<T, Error>;
 
+#[cfg(not(feature = "std"))]
 extern "C" {
     pub(crate) static errno: c_int;
 }
@@ -70,10 +71,18 @@ impl Error {
     }
 
     pub fn last(func: &'static str) -> Error {
-        Self(
-            func,
-            unsafe {errno},
-        )
+        #[cfg(feature = "std")] {
+            Self(
+                func,
+                std::io::Error::last_os_error().raw_os_error().unwrap_or_default(),
+            )
+        }
+        #[cfg(not(feature = "std"))] {
+            Self(
+                func,
+                unsafe {errno},
+            )
+        }
     }
 
     pub fn unsupported(func: &'static str) -> Error {
