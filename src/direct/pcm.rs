@@ -22,12 +22,17 @@ For an example of how to use this mode, look in the "synth-example" directory.
 use libc;
 use core::{mem, ptr, fmt, cmp};
 use crate::error::{Error, Result};
-use core::ffi::c_int;
 use crate::{pcm, PollDescriptors, Direction};
 use crate::pcm::Frames;
 use core::marker::PhantomData;
 
 use super::ffi::*;
+
+#[cfg(feature = "std")]
+type RawFd = std::os::unix::io::RawFd;
+
+#[cfg(not(feature = "std"))]
+type RawFd = core::ffi::c_int;
 
 /// Read PCM status via a simple kernel syscall, bypassing alsa-lib.
 ///
@@ -40,7 +45,7 @@ impl SyncPtrStatus {
     /// Unsafe because
     ///  - setting appl_ptr and avail_min might make alsa-lib confused
     ///  - no check that the fd is really a PCM
-    pub unsafe fn sync_ptr(fd: c_int, hwsync: bool, appl_ptr: Option<pcm::Frames>, avail_min: Option<pcm::Frames>) -> Result<Self> {
+    pub unsafe fn sync_ptr(fd: RawFd, hwsync: bool, appl_ptr: Option<pcm::Frames>, avail_min: Option<pcm::Frames>) -> Result<Self> {
         let mut data = snd_pcm_sync_ptr {
 			flags: (if hwsync { SNDRV_PCM_SYNC_PTR_HWSYNC } else { 0 }) +
 				(if appl_ptr.is_some() { SNDRV_PCM_SYNC_PTR_APPL } else { 0 }) +
@@ -89,7 +94,7 @@ impl SyncPtrStatus {
 #[derive(Debug)]
 pub struct Status(DriverMemory<snd_pcm_mmap_status>);
 
-fn pcm_to_fd(p: &pcm::PCM) -> Result<c_int> {
+fn pcm_to_fd(p: &pcm::PCM) -> Result<RawFd> {
     let mut fds: [libc::pollfd; 1] = unsafe { mem::zeroed() };
     let c = PollDescriptors::fill(p, &mut fds)?;
     if c != 1 {
@@ -101,7 +106,7 @@ fn pcm_to_fd(p: &pcm::PCM) -> Result<c_int> {
 impl Status {
     pub fn new(p: &pcm::PCM) -> Result<Self> { Status::from_fd(pcm_to_fd(p)?) }
 
-    pub fn from_fd(fd: c_int) -> Result<Self> {
+    pub fn from_fd(fd: RawFd) -> Result<Self> {
         DriverMemory::new(fd, 1, SNDRV_PCM_MMAP_OFFSET_STATUS as libc::off_t, false).map(Status)
     }
 
@@ -160,7 +165,7 @@ pub struct Control(DriverMemory<snd_pcm_mmap_control>);
 impl Control {
     pub fn new(p: &pcm::PCM) -> Result<Self> { Self::from_fd(pcm_to_fd(p)?) }
 
-    pub fn from_fd(fd: c_int) -> Result<Self> {
+    pub fn from_fd(fd: RawFd) -> Result<Self> {
         DriverMemory::new(fd, 1, SNDRV_PCM_MMAP_OFFSET_CONTROL as libc::off_t, true).map(Control)
     }
 
@@ -209,7 +214,7 @@ impl<S> fmt::Debug for DriverMemory<S> {
 }
 
 impl<S> DriverMemory<S> {
-    fn new(fd: c_int, count: usize, offs: libc::off_t, writable: bool) -> Result<Self> {
+    fn new(fd: RawFd, count: usize, offs: libc::off_t, writable: bool) -> Result<Self> {
         let mut total = count * mem::size_of::<S>();
         let ps = pagesize();
         assert!(total > 0);
