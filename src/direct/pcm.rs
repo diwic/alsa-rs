@@ -626,7 +626,7 @@ fn playback_to_plughw_mmap() {
 
     std::println!("{:?}", m);
     let mut i = (0..(m.buffer_size() * 2)).map(|i|
-        (((i / 2) as f32 * 2.0 * ::core::f32::consts::PI / 128.0).sin() * 8192.0) as i16);
+        (((i / 2) as f32 * 2.0 * std::f32::consts::PI / 128.0).sin() * 8192.0) as i16);
     m.write(&mut i);
     assert_eq!(m.appl_ptr(), m.buffer_size());
 
