@@ -131,8 +131,6 @@ pub use crate::mixer::Mixer as Mixer;
 pub mod seq;
 pub use crate::seq::Seq as Seq;
 
-/// The io module uses the thread_local macro. There is no equivalent of it in `core` or `alloc`,
-/// and so if we do not have std we cannot compile it
 mod io;
 pub use crate::io::Output;
 
