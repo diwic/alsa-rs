@@ -4,7 +4,7 @@
 //! Print all devices found in various categories.
 //!
 //! ```
-//! use std::ffi::CString;
+//! use ::alloc::ffi::CString;
 //! use alsa::device_name::HintIter;
 //!
 //! for t in &["pcm", "ctl", "rawmidi", "timer", "seq", "hwdep"] {
@@ -14,12 +14,14 @@
 //! }
 //! ```
 
-use std::ptr;
+use core::ptr;
 use libc::{c_void, c_int};
 use crate::alsa;
 use super::{Card, Direction};
 use super::error::*;
-use std::ffi::{CStr, CString};
+use core::ffi::CStr;
+use ::alloc::ffi::CString;
+use ::alloc::string::String;
 
 /// [snd_device_name_hint](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 pub struct HintIter(*mut *mut c_void, isize);
@@ -82,9 +84,10 @@ impl Hint {
 
 #[test]
 fn print_hints() {
+    extern crate std;
     for t in &["pcm", "ctl", "rawmidi", "timer", "seq", "hwdep"] {
-        println!("{} devices:", t);
+        std::println!("{} devices:", t);
         let i = HintIter::new(None, &*CString::new(*t).unwrap()).unwrap();
-        for a in i { println!("  {:?}", a) }
+        for a in i { std::println!("  {:?}", a) }
     }
 }

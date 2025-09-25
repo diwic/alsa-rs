@@ -1,14 +1,15 @@
 
 use crate::alsa;
 use super::pcm::Info;
-use std::ffi::{CStr, CString};
+use core::ffi::CStr;
+use ::alloc::ffi::CString;
 use super::Direction;
 use super::error::*;
 use super::mixer::MilliBel;
 use super::Round;
-use std::{ptr, mem, fmt, cmp};
+use core::{ptr, mem, fmt, cmp};
 use crate::{Card, poll};
-use std::cell::UnsafeCell;
+use core::cell::UnsafeCell;
 use libc::{c_uint, c_void, size_t, c_long, c_int, pollfd, c_short};
 
 /// We prefer not to allocate for every ElemId, ElemInfo or ElemValue.
@@ -60,7 +61,7 @@ impl Ctl {
     }
 
     pub fn from_card(c: &Card, nonblock: bool) -> Result<Ctl> {
-        let s = format!("hw:{}", c.get_index());
+        let s = ::alloc::format!("hw:{}", c.get_index());
         Ctl::open(&CString::new(s).unwrap(), nonblock)
     }
 
@@ -294,7 +295,7 @@ impl ElemValue {
 
     pub fn get_bytes(&self) -> Option<&[u8]> {
         if self.etype != ElemType::Bytes { None }
-        else { Some( unsafe { ::std::slice::from_raw_parts(
+        else { Some( unsafe { ::core::slice::from_raw_parts(
             alsa::snd_ctl_elem_value_get_bytes(self.ptr) as *const u8, self.count as usize) } ) }
     }
 
@@ -546,6 +547,7 @@ impl EventMask {
 
 #[test]
 fn print_sizeof() {
+    extern crate std;
     let elemid = unsafe { alsa::snd_ctl_elem_id_sizeof() } as usize;
     let elemvalue = unsafe { alsa::snd_ctl_elem_value_sizeof() } as usize;
     let eleminfo = unsafe { alsa::snd_ctl_elem_info_sizeof() } as usize;
@@ -554,5 +556,5 @@ fn print_sizeof() {
 //    assert!(elemvalue <= ELEM_VALUE_SIZE);
 //    assert!(eleminfo <= ELEM_INFO_SIZE);
 
-    println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
+    std::println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
 }

@@ -6,7 +6,7 @@
 use crate::{alsa};
 use super::error::*;
 use super::Output;
-use std::ptr;
+use core::ptr;
 
 pub fn update() -> Result<bool> {
 	acheck!(snd_config_update()).map(|x| x != 0)
@@ -36,8 +36,9 @@ impl Config {
 
 #[test]
 fn config_save() {
+    extern crate std;
 	let c = update_ref().unwrap();
     let mut outp = Output::buffer_open().unwrap();
 	c.save(&mut outp).unwrap();
-    println!("== Config save ==\n{}", outp);
+    std::println!("== Config save ==\n{}", outp);
 }

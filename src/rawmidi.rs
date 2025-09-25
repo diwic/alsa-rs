@@ -5,8 +5,10 @@ use super::ctl_int::{ctl_ptr, Ctl};
 use super::{Direction, poll};
 use super::error::*;
 use crate::alsa;
-use std::{ptr, io};
-use std::ffi::{CStr, CString};
+use ::alloc::ffi::CString;
+use ::alloc::string::{String, ToString};
+use core::ptr;
+use core::ffi::CStr;
 
 /// Iterator over [Rawmidi](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) devices and subdevices
 pub struct Iter<'a> {
@@ -182,29 +184,33 @@ impl poll::Descriptors for Rawmidi {
 /// Implements `std::io::Read` and `std::io::Write` for `Rawmidi`
 pub struct IO<'a>(&'a Rawmidi);
 
-impl<'a> io::Read for IO<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+#[cfg(feature = "std")]
+impl<'a> std::io::Read for IO<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let r = unsafe { alsa::snd_rawmidi_read((self.0).0, buf.as_mut_ptr() as *mut c_void, buf.len() as size_t) };
-        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        if r < 0 { Err(std::io::Error::from_raw_os_error(r as i32)) }
         else { Ok(r as usize) }
     }
 }
 
-impl<'a> io::Write for IO<'a> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+#[cfg(feature = "std")]
+impl<'a> std::io::Write for IO<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let r = unsafe { alsa::snd_rawmidi_write((self.0).0, buf.as_ptr() as *const c_void, buf.len() as size_t) };
-        if r < 0 { Err(io::Error::from_raw_os_error(r as i32)) }
+        if r < 0 { Err(std::io::Error::from_raw_os_error(r as i32)) }
         else { Ok(r as usize) }
     }
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 
 #[test]
 fn print_rawmidis() {
+    extern crate std;
+
     for a in super::card::Iter::new().map(|a| a.unwrap()) {
         for b in Iter::new(&Ctl::from_card(&a, false).unwrap()).map(|b| b.unwrap()) {
-            println!("Rawmidi {:?} (hw:{},{},{}) {} - {}", b.get_stream(), a.get_index(), b.get_device(), b.get_subdevice(),
+            std::println!("Rawmidi {:?} (hw:{},{},{}) {} - {}", b.get_stream(), a.get_index(), b.get_device(), b.get_subdevice(),
                  a.get_name().unwrap(), b.get_subdevice_name().unwrap())
         }
     }

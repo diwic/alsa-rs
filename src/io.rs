@@ -1,8 +1,8 @@
 use crate::alsa;
 use super::error::*;
-use std::{slice, ptr, fmt};
-use std::cell::RefCell;
-use std::rc::Rc;
+use core::{slice, ptr, fmt};
+use core::cell::RefCell;
+use ::alloc::rc::Rc;
 use libc::{c_char, c_int};
 
 /// [snd_output_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___output.html) wrapper
@@ -10,7 +10,8 @@ pub struct Output(*mut alsa::snd_output_t);
 
 unsafe impl Send for Output {}
 
-thread_local! {
+#[cfg(feature = "std")]
+std::thread_local! {
     static ERROR_OUTPUT: RefCell<Option<Rc<RefCell<Output>>>> = RefCell::new(None);
 }
 
@@ -39,6 +40,9 @@ impl Output {
     ///
     /// Sometimes alsa-lib writes to stderr, but if you prefer, you can write it here instead.
     /// Should you wish to empty the buffer; just call local_error_handler again and drop the old instance.
+    ///
+    /// This is not available in `no-std` environments, because we use thread_local variables.
+    #[cfg(feature = "std")]
     pub fn local_error_handler() -> Result<Rc<RefCell<Output>>> {
         let output = Output::buffer_open()?;
         let r = Rc::new(RefCell::new(output));
@@ -60,7 +64,7 @@ impl fmt::Debug for Output {
 impl fmt::Display for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.buffer_string(|b| {
-            let s = String::from_utf8_lossy(b);
+            let s = ::alloc::string::String::from_utf8_lossy(b);
             f.write_str(&*s)
         })
     }
@@ -68,6 +72,7 @@ impl fmt::Display for Output {
 
 pub fn output_handle(o: &Output) -> *mut alsa::snd_output_t { o.0 }
 
+#[cfg(feature = "std")]
 unsafe extern "C" fn our_error_handler(file: *const c_char,
     line: c_int,
     func: *const c_char,

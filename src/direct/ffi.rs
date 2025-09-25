@@ -175,7 +175,7 @@ pub(crate) unsafe fn sndrv_pcm_ioctl_channel_info(
         READ,
         b'A',
         0x32,
-        std::mem::size_of::<snd_pcm_channel_info>(),
+        core::mem::size_of::<snd_pcm_channel_info>(),
     );
 
     unsafe {
@@ -195,7 +195,7 @@ pub(crate) unsafe fn sndrv_pcm_ioctl_sync_ptr(
         READ | WRITE,
         b'A',
         0x23,
-        std::mem::size_of::<snd_pcm_sync_ptr>(),
+        core::mem::size_of::<snd_pcm_sync_ptr>(),
     );
 
     unsafe {

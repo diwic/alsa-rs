@@ -15,8 +15,13 @@
 
 #![allow(clippy::all)]
 #![warn(clippy::correctness, clippy::suspicious, clippy::perf)]
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
 
 extern crate alsa_sys as alsa;
+extern crate alloc;
 extern crate libc;
 #[macro_use]
 extern crate bitflags;

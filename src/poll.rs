@@ -4,9 +4,9 @@
 
 use libc;
 use super::error::*;
-use std::io;
 pub use libc::pollfd;
-
+use ::alloc::vec;
+use ::alloc::vec::Vec;
 
 bitflags! {
     #[repr(transparent)]
@@ -44,7 +44,14 @@ impl Descriptors for pollfd {
 pub fn poll(fds: &mut[pollfd], timeout: i32) -> Result<usize> {
     let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout as libc::c_int) };
     if r >= 0 { Ok(r as usize) } else {
-         from_code("poll", -io::Error::last_os_error().raw_os_error().unwrap()).map(|_| unreachable!())
+        #[cfg(feature = "std")]
+        { from_code(
+            "poll",
+            -std::io::Error::last_os_error().raw_os_error().unwrap_or_default()).map(|_| unreachable!())
+        }
+        #[cfg(not(feature = "std"))]
+        { from_code("poll", -unsafe {super::error::errno}).map(|_| unreachable!()) }
+        
     }
 }
 

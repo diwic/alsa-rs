@@ -4,10 +4,11 @@ use libc::{c_uint, c_int, c_short, c_uchar, c_void, c_long, size_t, pollfd};
 use super::error::*;
 use crate::alsa;
 use super::{Direction, poll};
-use std::{ptr, fmt, mem, slice, time, cell};
-use std::str::{FromStr, Split};
-use std::ffi::CStr;
-use std::borrow::Cow;
+use core::{ptr, fmt, mem, slice, time, cell};
+use core::str::{FromStr, Split};
+use core::ffi::CStr;
+use ::alloc::borrow::Cow;
+use ::alloc::boxed::Box;
 
 // Workaround for improper alignment of snd_seq_ev_ext_t in alsa-sys
 #[repr(packed)]
@@ -490,9 +491,9 @@ pub struct Addr {
 }
 
 impl FromStr for Addr {
-    type Err = Box<dyn std::error::Error>;
+    type Err = Box<dyn core::error::Error>;
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
         let mut split: Split<'_, char> = s.trim().split(':');
         let client = split.next()
                           .ok_or("no client provided")?
@@ -1388,19 +1389,21 @@ impl MidiEvent {
 
 #[test]
 fn print_seqs() {
-    use std::ffi::CString;
+    extern crate std;
+    use ::alloc::ffi::CString;
+    use ::alloc::vec::Vec;
     let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_print_seqs").unwrap()).unwrap();
     let clients: Vec<_> = ClientIter::new(&s).collect();
     for a in &clients {
         let ports: Vec<_> = PortIter::new(&s, a.get_client()).collect();
-        println!("{:?}: {:?}", a, ports);
+        std::println!("{:?}: {:?}", a, ports);
     }
 }
 
 #[test]
 fn seq_subscribe() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_subscribe").unwrap()).unwrap();
     let timer_info = s.get_any_port_info(Addr { client: 0, port: 0 }).unwrap();
@@ -1415,7 +1418,8 @@ fn seq_subscribe() {
 
 #[test]
 fn seq_loopback() {
-    use std::ffi::CString;
+    extern crate std;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(Some(&CString::new("default").unwrap()), None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_loopback").unwrap()).unwrap();
 
@@ -1436,7 +1440,7 @@ fn seq_loopback() {
     subs.set_sender(Addr { client: s.client_id().unwrap(), port: sport });
     subs.set_dest(Addr { client: s.client_id().unwrap(), port: dport });
     s.subscribe_port(&subs).unwrap();
-    println!("Connected {:?} to {:?}", subs.get_sender(), subs.get_dest());
+    std::println!("Connected {:?} to {:?}", subs.get_sender(), subs.get_dest());
 
     // Send a note!
     let note = EvNote { channel: 0, note: 64, duration: 100, velocity: 100, off_velocity: 64 };
@@ -1444,14 +1448,14 @@ fn seq_loopback() {
     e.set_subs();
     e.set_direct();
     e.set_source(sport);
-    println!("Sending {:?}", e);
+    std::println!("Sending {:?}", e);
     s.event_output(&mut e).unwrap();
     s.drain_output().unwrap();
 
     // Receive the note!
     let mut input = s.input();
     let e2 = input.event_input().unwrap();
-    println!("Receiving {:?}", e2);
+    std::println!("Receiving {:?}", e2);
     assert_eq!(e2.get_type(), EventType::Noteon);
     assert_eq!(e2.get_data(), Some(note));
 }
@@ -1472,7 +1476,7 @@ fn seq_decode_sysex() {
     let sysex = [0xf0, 1, 2, 3, 4, 5, 6, 7, 0xf7];
     let mut ev = Event::new_ext(EventType::Sysex, &sysex[..]);
     let me = MidiEvent::new(0).unwrap();
-    let mut buffer = vec![0; sysex.len()];
+    let mut buffer = ::alloc::vec![0; sysex.len()];
     assert_eq!(me.decode(&mut buffer[..], &mut ev).unwrap(), sysex.len());
     assert_eq!(buffer, sysex);
 }
@@ -1480,7 +1484,7 @@ fn seq_decode_sysex() {
 #[test]
 #[should_panic]
 fn seq_get_input_twice() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let s = super::Seq::open(None, None, false).unwrap();
     s.set_client_name(&CString::new("rust_test_seq_get_input_twice").unwrap()).unwrap();
     let input1 = s.input();
@@ -1510,7 +1514,7 @@ fn seq_has_data() {
 }
 
 #[test]
-fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn seq_remove_events() -> core::result::Result<(), Box<dyn core::error::Error>> {
     let info = RemoveEvents::new()?;
 
 
@@ -1535,6 +1539,8 @@ fn seq_remove_events() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn seq_portsubscribeiter() {
+    use ::alloc::vec::Vec;
+
     let s = super::Seq::open(None, None, false).unwrap();
 
     // Create ports

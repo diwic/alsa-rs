@@ -1,9 +1,10 @@
 #![macro_use]
 
 use libc::{c_char, c_int, c_void, free};
-use std::error::Error as StdError;
-use std::ffi::CStr;
-use std::{fmt, str};
+use core::error::Error as StdError;
+use core::ffi::CStr;
+use core::{fmt, str};
+use ::alloc::string::{String, ToString};
 
 /// ALSA error
 ///
@@ -12,9 +13,14 @@ use std::{fmt, str};
 /// An Error is also returned in case ALSA returns a string that
 /// cannot be translated into Rust's UTF-8 strings.
 #[derive(Clone, PartialEq, Copy)]
-pub struct Error(&'static str, i32);
+pub struct Error(&'static str, c_int);
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T> = ::core::result::Result<T, Error>;
+
+#[cfg(not(feature = "std"))]
+extern "C" {
+    pub(crate) static errno: c_int;
+}
 
 macro_rules! acheck {
     ($f: ident ( $($x: expr),* ) ) => {{
@@ -65,12 +71,18 @@ impl Error {
     }
 
     pub fn last(func: &'static str) -> Error {
-        Self(
-            func,
-            std::io::Error::last_os_error()
-                .raw_os_error()
-                .unwrap_or_default(),
-        )
+        #[cfg(feature = "std")] {
+            Self(
+                func,
+                std::io::Error::last_os_error().raw_os_error().unwrap_or_default(),
+            )
+        }
+        #[cfg(not(feature = "std"))] {
+            Self(
+                func,
+                unsafe {errno},
+            )
+        }
     }
 
     pub fn unsupported(func: &'static str) -> Error {
@@ -123,8 +135,8 @@ impl fmt::Display for Error {
 ///
 /// Note this doesn't include the total set of possible errno variants, but they
 /// can easily be added in the future for better error messages
-fn desc(errno: i32) -> &'static str {
-    match errno {
+fn desc(err: i32) -> &'static str {
+    match err {
         libc::EPERM => "Operation not permitted",
         libc::ENOENT => "No such file or directory",
         libc::ESRCH => "No such process",
@@ -207,7 +219,7 @@ impl From<Error> for fmt::Error {
 
 #[test]
 fn broken_pcm_name() {
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     let e = crate::PCM::open(
         &*CString::new("this_PCM_does_not_exist").unwrap(),
         crate::Direction::Playback,

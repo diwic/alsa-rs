@@ -1,6 +1,8 @@
 use crate::alsa;
-use std::{fmt, mem, slice};
+use core::{fmt, mem, slice};
 use super::error::*;
+use ::alloc::vec::Vec;
+use ::alloc::vec;
 
 alsa_enum!(
     /// [SND_CHMAP_TYPE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
@@ -136,8 +138,9 @@ impl Iterator for ChmapsQuery {
 
 #[test]
 fn chmap_for_first_pcm() {
+    extern crate std;
     use super::*;
-    use std::ffi::CString;
+    use ::alloc::ffi::CString;
     use crate::device_name::HintIter;
 
     use crate::Output;
@@ -146,18 +149,18 @@ fn chmap_for_first_pcm() {
 
     let i = HintIter::new(None, &*CString::new("pcm").unwrap()).unwrap();
     for p in i.map(|n| n.name.unwrap()) {
-        println!("Chmaps for {:?}:", p);
+        std::println!("Chmaps for {:?}:", p);
         match PCM::open(&CString::new(p).unwrap(),  Direction::Playback, false) {
             Ok(a) => for c in a.query_chmaps() {
-               println!("  {:?}, {}", c.0, c.1);
+               std::println!("  {:?}, {}", c.0, c.1);
             },
-            Err(a) => println!("  {}", a) // It's okay to have entries in the name hint array that can't be opened
+            Err(a) => std::println!("  {}", a) // It's okay to have entries in the name hint array that can't be opened
         }
     }
 
     output.borrow_mut().buffer_string(|buf| {
         let str = CString::new(buf).unwrap();
-        println!("Errors:\n{}", str.to_str().unwrap());
+        std::println!("Errors:\n{}", str.to_str().unwrap());
     });
 
 }
