@@ -468,7 +468,7 @@ impl<'a, S: Copy> std::io::Read for IO<'a, S> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let size = self.0.bytes_to_frames(buf.len() as isize) as alsa::snd_pcm_uframes_t; // TODO: Do we need to check for overflow here?
         let r = unsafe { alsa::snd_pcm_readi((self.0).0, buf.as_mut_ptr() as *mut c_void, size) };
-        if r < 0 { Err(std::io::Error::from_raw_os_error(r as i32)) }
+        if r < 0 { Err(std::io::Error::from_raw_os_error(-r as i32)) }
         else { Ok(self.0.frames_to_bytes(r) as usize) }
     }
 }
