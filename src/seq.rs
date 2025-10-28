@@ -275,6 +275,10 @@ impl ClientInfo {
         let c = unsafe { alsa::snd_seq_client_info_get_name(self.0) };
         from_const("snd_seq_client_info_get_name", c)
     }
+
+    pub fn get_card(&self) -> Result<i32> {
+        acheck!(snd_seq_client_info_get_card(self.0))
+    }
 }
 
 impl fmt::Debug for ClientInfo {
