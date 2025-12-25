@@ -135,7 +135,7 @@ pub struct Elem<'a>{
 }
 
 /// Iterator for all elements of mixer
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Iter<'a>{
     last_handle: *mut alsa::snd_mixer_elem_t,
     mixer: &'a Mixer
@@ -163,7 +163,8 @@ impl<'a> Iterator for Iter<'a> {
 
 /// Wrapper for [snd_mixer_selem_id_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___simple_mixer.html)
 /// No allocation (uses fixed array)
-// #[derive(Copy, Clone, Debug)]
+// #[derive(Copy, Clone)]
+#[derive(Debug)]
 pub struct SelemId([u8; SELEM_ID_SIZE]);
 
 impl SelemId {
@@ -211,6 +212,7 @@ impl SelemId {
 
 /// Wraps an Elem as a Selem
 // #[derive(Copy, Clone)]
+#[derive(Debug)]
 pub struct Selem<'a>(Elem<'a>);
 
 impl<'a> Selem<'a> {
@@ -478,6 +480,7 @@ impl<'a> ops::Deref for Selem<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct IterEnum<'a>(&'a Selem<'a>, u32, u32);
 
 impl<'a> Iterator for IterEnum<'a> {

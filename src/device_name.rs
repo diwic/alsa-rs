@@ -24,6 +24,7 @@ use ::alloc::ffi::CString;
 use ::alloc::string::String;
 
 /// [snd_device_name_hint](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+#[derive(Debug)]
 pub struct HintIter(*mut *mut c_void, isize);
 
 impl Drop for HintIter {

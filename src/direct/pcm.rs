@@ -37,6 +37,7 @@ type RawFd = core::ffi::c_int;
 /// Read PCM status via a simple kernel syscall, bypassing alsa-lib.
 ///
 /// If Status is not available on your architecture, this is the second best option.
+#[derive(Debug)]
 pub struct SyncPtrStatus(snd_pcm_mmap_status);
 
 impl SyncPtrStatus {
@@ -476,6 +477,7 @@ impl<S> MmapCapture<S> {
 }
 
 /// Iterator over captured samples
+#[derive(Debug)]
 pub struct CaptureIter<'a, S: 'static> {
     m: &'a MmapCapture<S>,
     samples: RawSamples<S>,

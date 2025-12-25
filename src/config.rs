@@ -17,6 +17,7 @@ pub fn update_free_global() -> Result<()> {
 }
 
 /// [snd_config_t](https://alsa-project.org/alsa-doc/alsa-lib/group___config.html) wrapper
+#[derive(Debug)]
 pub struct Config(*mut alsa::snd_config_t);
 
 impl Drop for Config {

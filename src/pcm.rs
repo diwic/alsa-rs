@@ -62,6 +62,7 @@ pub use super::chmap::{Chmap, ChmapPosition, ChmapType, ChmapsQuery};
 pub type Frames = alsa::snd_pcm_sframes_t;
 
 /// [snd_pcm_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - PCM generic info container
+#[derive(Debug)]
 pub struct Info(pub(crate) *mut alsa::snd_pcm_info_t);
 
 impl Info {
@@ -135,6 +136,7 @@ impl Drop for Info {
 }
 
 /// [snd_pcm_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper - start here for audio playback and recording
+#[derive(Debug)]
 pub struct PCM(*mut alsa::snd_pcm_t, cell::Cell<bool>);
 
 unsafe impl Send for PCM {}
@@ -365,6 +367,7 @@ impl poll::Descriptors for PCM {
 /// Also implements `std::io::Read` and `std::io::Write`.
 ///
 /// Note: Only one IO object is allowed in scope at a time (for mmap safety).
+#[derive(Debug)]
 pub struct IO<'a, S: Copy>(&'a PCM, PhantomData<S>);
 
 impl<'a, S: Copy> Drop for IO<'a, S> {
@@ -1296,6 +1299,7 @@ impl Status {
 ///
 /// Allows setting the audio timestamp configuration before retrieving the
 /// status from the stream.
+#[derive(Debug)]
 pub struct StatusBuilder(Status);
 
 impl StatusBuilder {
