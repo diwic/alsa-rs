@@ -43,6 +43,7 @@ use libc::{c_short, c_uint, c_int, pollfd};
 
 
 /// [snd_hctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___h_control.html) wrapper
+#[derive(Debug)]
 pub struct HCtl(*mut alsa::snd_hctl_t);
 
 unsafe impl Send for HCtl {}
@@ -105,6 +106,7 @@ impl poll::Descriptors for HCtl {
 }
 
 /// Iterates over elements for a `HCtl`
+#[derive(Debug)]
 pub struct ElemIter<'a>(&'a HCtl, *mut alsa::snd_hctl_elem_t);
 
 impl<'a> Iterator for ElemIter<'a> {
@@ -119,6 +121,7 @@ impl<'a> Iterator for ElemIter<'a> {
 
 
 /// [snd_hctl_elem_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___h_control.html) wrapper
+#[derive(Debug)]
 pub struct Elem<'a>(&'a HCtl, *mut alsa::snd_hctl_elem_t);
 
 impl<'a> Elem<'a> {

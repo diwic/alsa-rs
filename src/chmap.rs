@@ -67,6 +67,7 @@ impl fmt::Display for ChmapPosition {
 
 
 /// [snd_pcm_chmap_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) wrapper
+#[derive(Debug)]
 pub struct Chmap(*mut alsa::snd_pcm_chmap_t, bool);
 
 impl Drop for Chmap {
@@ -114,6 +115,7 @@ pub fn chmap_handle(a: &Chmap) -> *mut alsa::snd_pcm_chmap_t { a.0 }
 
 
 /// Iterator over available channel maps - see [snd_pcm_chmap_query_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
+#[derive(Debug)]
 pub struct ChmapsQuery(*mut *mut alsa::snd_pcm_chmap_query_t, isize);
 
 impl Drop for ChmapsQuery {

@@ -29,3 +29,6 @@ is-it-maintained-open-issues = { repository = "diwic/alsa-rs" }
 [features]
 default = ["std"]
 std = []
+
+[lints.rust]
+missing-debug-implementations = "warn"

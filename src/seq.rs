@@ -22,6 +22,7 @@ struct EvExtPacked {
 /// To access the functions `event_input`, `event_input_pending` and `set_input_buffer_size`,
 /// you first have to obtain an instance of `Input` by calling `input()`. Only one instance of
 /// `Input` may exist at any time for a given `Seq`.
+#[derive(Debug)]
 pub struct Seq(*mut alsa::snd_seq_t, cell::Cell<bool>);
 
 unsafe impl Send for Seq {}
@@ -183,6 +184,7 @@ impl Seq {
 /// directly reference the sequencer's input buffer for variable-length messages (e.g. Sysex).
 ///
 /// Note: Only one `Input` object is allowed in scope at a time.
+#[derive(Debug)]
 pub struct Input<'a>(&'a Seq);
 
 impl<'a> Drop for Input<'a> {
@@ -287,7 +289,7 @@ impl fmt::Debug for ClientInfo {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 /// Iterates over clients connected to the seq API (both kernel and userspace clients).
 pub struct ClientIter<'a>(&'a Seq, i32);
 
@@ -408,7 +410,7 @@ impl fmt::Debug for PortInfo {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 /// Iterates over clients connected to the seq API (both kernel and userspace clients).
 pub struct PortIter<'a>(&'a Seq, i32, i32);
 
@@ -523,6 +525,7 @@ impl Addr {
 }
 
 /// [snd_seq_port_subscribe_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
+#[derive(Debug)]
 pub struct PortSubscribe(*mut alsa::snd_seq_port_subscribe_t);
 
 unsafe impl Send for PortSubscribe {}
@@ -577,7 +580,7 @@ impl PortSubscribe {
 }
 
 /// [snd_seq_query_subs_type_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_subscribe.html) wrapper
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum QuerySubsType {
     READ = alsa::SND_SEQ_QUERY_SUBS_READ as isize,
     WRITE = alsa::SND_SEQ_QUERY_SUBS_WRITE as isize,
@@ -619,7 +622,7 @@ impl QuerySubscribe {
     pub fn set_index(&self, value: i32) { unsafe { alsa::snd_seq_query_subscribe_set_index(self.0, value as c_int) } }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 /// Iterates over port subscriptions for a given client:port/type.
 pub struct PortSubscribeIter<'a> {
     seq: &'a Seq,
@@ -1214,6 +1217,7 @@ alsa_enum!(
 );
 
 /// [snd_seq_queue_tempo_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_queue.html) wrapper
+#[derive(Debug)]
 pub struct QueueTempo(*mut alsa::snd_seq_queue_tempo_t);
 
 unsafe impl Send for QueueTempo {}
@@ -1249,6 +1253,7 @@ impl QueueTempo {
 }
 
 /// [snd_seq_queue_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_queue.html) wrapper
+#[derive(Debug)]
 pub struct QueueStatus(*mut alsa::snd_seq_queue_status_t);
 
 unsafe impl Send for QueueStatus {}
@@ -1281,6 +1286,7 @@ impl QueueStatus {
 }
 
 /// [snd_seq_remove_events_t](https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html) wrapper
+#[derive(Debug)]
 pub struct RemoveEvents(*mut alsa::snd_seq_remove_events_t);
 
 unsafe impl Send for RemoveEvents {}
@@ -1343,6 +1349,7 @@ impl RemoveEvents {
 /// [snd_midi_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___m_i_d_i___event.html) Wrapper
 ///
 /// Sequencer event <-> MIDI byte stream coder
+#[derive(Debug)]
 pub struct MidiEvent(*mut alsa::snd_midi_event_t);
 
 impl Drop for MidiEvent {

@@ -11,6 +11,7 @@ use core::ptr;
 use core::ffi::CStr;
 
 /// Iterator over [Rawmidi](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) devices and subdevices
+#[derive(Debug)]
 pub struct Iter<'a> {
     ctl: &'a Ctl,
     device: c_int,
@@ -20,6 +21,7 @@ pub struct Iter<'a> {
 }
 
 /// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
+#[derive(Debug)]
 pub struct Info(*mut alsa::snd_rawmidi_info_t);
 
 impl Drop for Info {
@@ -69,6 +71,7 @@ impl Info {
 }
 
 /// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
+#[derive(Debug)]
 pub struct Status(*mut alsa::snd_rawmidi_status_t);
 
 impl Status {
@@ -123,6 +126,7 @@ impl<'a> Iterator for Iter<'a> {
 }
 
 /// [snd_rawmidi_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
+#[derive(Debug)]
 pub struct Rawmidi(*mut alsa::snd_rawmidi_t);
 
 unsafe impl Send for Rawmidi {}
@@ -182,6 +186,7 @@ impl poll::Descriptors for Rawmidi {
 }
 
 /// Implements `std::io::Read` and `std::io::Write` for `Rawmidi`
+#[derive(Debug)]
 pub struct IO<'a>(&'a Rawmidi);
 
 #[cfg(feature = "std")]

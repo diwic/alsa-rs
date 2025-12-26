@@ -22,6 +22,7 @@ const ELEM_ID_SIZE: usize = 64;
 
 /// [snd_ctl_pcm_next_device](https://www.alsa-project.org/alsa-doc/alsa-lib/control_8c.html#accbb0be6e5ca7361ffec0ea304ed1b05) wrapper.
 /// Iterate over devices of a card.
+#[derive(Debug)]
 pub struct DeviceIter<'a>(&'a Ctl, c_int);
 
 impl<'a> DeviceIter<'a>{
@@ -43,6 +44,7 @@ impl<'a> Iterator for DeviceIter<'a> {
 }
 
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+#[derive(Debug)]
 pub struct Ctl(*mut alsa::snd_ctl_t);
 
 unsafe impl Send for Ctl {}
@@ -161,6 +163,7 @@ impl poll::Descriptors for Ctl {
 pub fn ctl_ptr(a: &Ctl) -> *mut alsa::snd_ctl_t { a.0 }
 
 /// [snd_ctl_card_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+#[derive(Debug)]
 pub struct CardInfo(*mut alsa::snd_ctl_card_info_t);
 
 impl Drop for CardInfo {
@@ -344,6 +347,7 @@ impl fmt::Debug for ElemValue {
 }
 
 /// [snd_ctl_elem_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+#[derive(Debug)]
 pub struct ElemInfo(*mut alsa::snd_ctl_elem_info_t);
 
 pub fn elem_info_ptr(a: &ElemInfo) -> *mut alsa::snd_ctl_elem_info_t { a.0 }
@@ -460,6 +464,7 @@ impl fmt::Debug for ElemId {
 }
 
 /// [snd_ctl_elem_list_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+#[derive(Debug)]
 pub struct ElemList(*mut alsa::snd_ctl_elem_list_t);
 
 impl Drop for ElemList {
@@ -512,6 +517,7 @@ impl ElemList {
 }
 
 /// [snd_ctl_event_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
+#[derive(Debug)]
 pub struct Event(*mut alsa::snd_ctl_event_t);
 
 impl Drop for Event {

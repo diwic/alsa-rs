@@ -25,7 +25,7 @@ pub type snd_pcm_uframes_t = libc::c_ulong;
 pub type __kernel_off_t = libc::c_long;
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct snd_pcm_mmap_status {
     pub state: snd_pcm_state_t,    /* RO: state - SNDRV_PCM_STATE_XXXX */
     pub pad1: libc::c_int,         /* Needed for 64 bit alignment */

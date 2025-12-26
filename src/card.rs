@@ -10,6 +10,7 @@ use ::alloc::string::String;
 pub struct Card(c_int);
 
 /// Iterate over existing sound cards.
+#[derive(Debug)]
 pub struct Iter(c_int);
 
 impl Iter {
