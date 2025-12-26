@@ -4,7 +4,7 @@
 //! Print all devices found in various categories.
 //!
 //! ```
-//! use ::alloc::ffi::CString;
+//! use std::ffi::CString;
 //! use alsa::device_name::HintIter;
 //!
 //! for t in &["pcm", "ctl", "rawmidi", "timer", "seq", "hwdep"] {

@@ -5,7 +5,7 @@
 //!
 //! ```
 //! for a in ::alsa::card::Iter::new().map(|x| x.unwrap()) {
-//!     use ::alloc::ffi::CString;
+//!     use std::ffi::CString;
 //!     use alsa::hctl::HCtl;
 //!     let h = HCtl::open(&CString::new(format!("hw:{}", a.get_index())).unwrap(), false).unwrap();
 //!     h.load().unwrap();
