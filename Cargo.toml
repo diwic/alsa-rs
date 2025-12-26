@@ -12,6 +12,7 @@ categories = ["multimedia::audio", "api-bindings"]
 readme = "README.md"
 edition = "2021"
 include = ["README.md", "LICENSE-*", "Cargo.toml", "src/"]
+exclude = ["examples/"]
 
 [dependencies]
 libc = "0.2.178"
