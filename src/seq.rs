@@ -736,7 +736,7 @@ impl<'a> Event<'a> {
         let ext_data = if Event::has_ext_data(t) {
             assert_ne!((*z).flags & alsa::SND_SEQ_EVENT_LENGTH_MASK, alsa::SND_SEQ_EVENT_LENGTH_FIXED);
             Some(Cow::Borrowed({
-                let zz: &EvExtPacked = &*(&(*z).data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _);
+                let zz: &EvExtPacked = &*(&(*z).data as *const alsa::snd_seq_event_data as *const _);
                 slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
             }))
         } else {
@@ -755,7 +755,7 @@ impl<'a> Event<'a> {
             // The following case is always a logic error in the program, thus panicking is okay.
             None => panic!("event type requires variable-length data, but none was provided")
         };
-        let z: &mut EvExtPacked = unsafe { &mut *(&mut self.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+        let z: &mut EvExtPacked = unsafe { &mut *(&mut self.0.data as *mut alsa::snd_seq_event_data as *mut _) };
         z.len = slice.len() as c_uint;
         z.ptr = slice.as_ptr() as *mut c_void;
     }
@@ -928,7 +928,7 @@ pub struct EvNote {
 
 impl EventData for EvNote {
     fn get_data(ev: &Event) -> Self {
-         let z: &alsa::snd_seq_ev_note_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         let z: &alsa::snd_seq_ev_note_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event_data as *const _) };
          EvNote { channel: z.channel as u8, note: z.note as u8, velocity: z.velocity as u8, off_velocity: z.off_velocity as u8, duration: z.duration as u32 }
     }
     fn has_data(e: EventType) -> bool {
@@ -939,7 +939,7 @@ impl EventData for EvNote {
              EventType::Keypress)
     }
     fn set_data(&self, ev: &mut Event) {
-         let z: &mut alsa::snd_seq_ev_note_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+         let z: &mut alsa::snd_seq_ev_note_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event_data as *mut _) };
          z.channel = self.channel as c_uchar;
          z.note = self.note as c_uchar;
          z.velocity = self.velocity as c_uchar;
@@ -957,7 +957,7 @@ pub struct EvCtrl {
 
 impl EventData for EvCtrl {
     fn get_data(ev: &Event) -> Self {
-         let z: &alsa::snd_seq_ev_ctrl_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         let z: &alsa::snd_seq_ev_ctrl_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event_data as *const _) };
          EvCtrl { channel: z.channel as u8, param: z.param as u32, value: z.value as i32 }
     }
     fn has_data(e: EventType) -> bool {
@@ -976,7 +976,7 @@ impl EventData for EvCtrl {
              EventType::Keysign)
     }
     fn set_data(&self, ev: &mut Event) {
-         let z: &mut alsa::snd_seq_ev_ctrl_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+         let z: &mut alsa::snd_seq_ev_ctrl_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event_data as *mut _) };
          z.channel = self.channel as c_uchar;
          z.param = self.param as c_uint;
          z.value = self.value as c_int;
@@ -985,7 +985,7 @@ impl EventData for EvCtrl {
 
 impl EventData for Addr {
     fn get_data(ev: &Event) -> Self {
-         let z: &alsa::snd_seq_addr_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event__bindgen_ty_1 as *const _) };
+         let z: &alsa::snd_seq_addr_t = unsafe { &*(&ev.0.data as *const alsa::snd_seq_event_data as *const _) };
          Addr { client: z.client as i32, port: z.port as i32 }
     }
     fn has_data(e: EventType) -> bool {
@@ -998,7 +998,7 @@ impl EventData for Addr {
              EventType::PortChange)
     }
     fn set_data(&self, ev: &mut Event) {
-         let z: &mut alsa::snd_seq_addr_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event__bindgen_ty_1 as *mut _) };
+         let z: &mut alsa::snd_seq_addr_t = unsafe { &mut *(&mut ev.0.data as *mut alsa::snd_seq_event_data as *mut _) };
          z.client = self.client as c_uchar;
          z.port = self.port as c_uchar;
     }
