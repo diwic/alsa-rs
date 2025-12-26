@@ -83,7 +83,7 @@ impl Ctl {
     pub fn convert_to_db(&self, id: &ElemId, volume: i64) -> Result<MilliBel> {
         let mut m: c_long = 0;
         acheck!(snd_ctl_convert_to_dB(self.0, elem_id_ptr(id), volume as c_long, &mut m))
-            .map(|_| (MilliBel(m as i64)))
+            .map(|_| MilliBel(m as i64))
     }
 
     pub fn convert_from_db(&self, id: &ElemId, mb: MilliBel, dir: Round) -> Result<i64> {

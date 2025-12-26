@@ -225,21 +225,21 @@ impl PCM {
         }
     }
 
-    pub fn io_i8(&self) -> Result<IO<i8>> { self.io_checked() }
-    pub fn io_u8(&self) -> Result<IO<u8>> { self.io_checked() }
-    pub fn io_i16(&self) -> Result<IO<i16>> { self.io_checked() }
-    pub fn io_u16(&self) -> Result<IO<u16>> { self.io_checked() }
-    pub fn io_i32(&self) -> Result<IO<i32>> { self.io_checked() }
-    pub fn io_u32(&self) -> Result<IO<u32>> { self.io_checked() }
-    pub fn io_f32(&self) -> Result<IO<f32>> { self.io_checked() }
-    pub fn io_f64(&self) -> Result<IO<f64>> { self.io_checked() }
+    pub fn io_i8(&self) -> Result<IO<'_, i8>> { self.io_checked() }
+    pub fn io_u8(&self) -> Result<IO<'_, u8>> { self.io_checked() }
+    pub fn io_i16(&self) -> Result<IO<'_, i16>> { self.io_checked() }
+    pub fn io_u16(&self) -> Result<IO<'_, u16>> { self.io_checked() }
+    pub fn io_i32(&self) -> Result<IO<'_, i32>> { self.io_checked() }
+    pub fn io_u32(&self) -> Result<IO<'_, u32>> { self.io_checked() }
+    pub fn io_f32(&self) -> Result<IO<'_, f32>> { self.io_checked() }
+    pub fn io_f64(&self) -> Result<IO<'_, f64>> { self.io_checked() }
 
     /// For the `s24` format, represented by i32
-    pub fn io_i32_s24(&self) -> Result<IO<i32>> { self.verify_format(Format::s24()).map(|_| IO::new(self)) }
+    pub fn io_i32_s24(&self) -> Result<IO<'_, i32>> { self.verify_format(Format::s24()).map(|_| IO::new(self)) }
     /// For the `u24` format, represented by u32
-    pub fn io_u32_u24(&self) -> Result<IO<u32>> { self.verify_format(Format::u24()).map(|_| IO::new(self)) }
+    pub fn io_u32_u24(&self) -> Result<IO<'_, u32>> { self.verify_format(Format::u24()).map(|_| IO::new(self)) }
 
-    pub fn io_checked<S: IoFormat>(&self) -> Result<IO<S>> {
+    pub fn io_checked<S: IoFormat>(&self) -> Result<IO<'_, S>> {
         self.verify_format(S::FORMAT).map(|_| IO::new(self))
     }
 
@@ -248,17 +248,17 @@ impl PCM {
     /// SAFETY: Caller must guarantee `S` is valid type for this PCM stream
     /// and that no other IO objects exist at the same time for the same stream
     /// (or in some other way guarantee mmap safety)
-    pub unsafe fn io_unchecked<S: IoFormat>(&self) -> IO<S> {
+    pub unsafe fn io_unchecked<S: IoFormat>(&self) -> IO<'_, S> {
         IO::new_unchecked(self)
     }
 
     #[deprecated(note = "renamed to io_bytes")]
-    pub fn io(&self) -> IO<u8> { IO::new(self) }
+    pub fn io(&self) -> IO<'_, u8> { IO::new(self) }
 
     /// Call this if you have an unusual format, not supported by the regular access methods
     /// (io_i16 etc). It will succeed regardless of the sample format, but conversion to and from
     /// bytes to your format is up to you.
-    pub fn io_bytes(&self) -> IO<u8> { IO::new(self) }
+    pub fn io_bytes(&self) -> IO<'_, u8> { IO::new(self) }
 
     /// Read buffers by talking to the kernel directly, bypassing alsa-lib.
     pub fn direct_mmap_capture<S>(&self) -> Result<crate::direct::pcm::MmapCapture<S>> {
@@ -280,7 +280,7 @@ impl PCM {
     }
 
     /// Retreive current PCM hardware configuration.
-    pub fn hw_params_current(&self) -> Result<HwParams> {
+    pub fn hw_params_current(&self) -> Result<HwParams<'_>> {
         HwParams::new(self).and_then(|h|
             acheck!(snd_pcm_hw_params_current(self.0, h.0)).map(|_| h))
     }
@@ -289,7 +289,7 @@ impl PCM {
         acheck!(snd_pcm_sw_params(self.0, h.0)).map(|_| ())
     }
 
-    pub fn sw_params_current(&self) -> Result<SwParams> {
+    pub fn sw_params_current(&self) -> Result<SwParams<'_>> {
         SwParams::new(self).and_then(|h|
             acheck!(snd_pcm_sw_params_current(self.0, h.0)).map(|_| h))
     }

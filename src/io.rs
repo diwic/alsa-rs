@@ -73,10 +73,10 @@ impl fmt::Display for Output {
 pub fn output_handle(o: &Output) -> *mut alsa::snd_output_t { o.0 }
 
 #[cfg(feature = "std")]
-unsafe extern "C" fn our_error_handler(file: *const c_char,
-    line: c_int,
+unsafe extern "C" fn our_error_handler(_file: *const c_char,
+    _line: c_int,
     func: *const c_char,
-    err: c_int,
+    _err: c_int,
     fmt: *const c_char,
     arg: *mut alsa::__va_list_tag,
 ) {

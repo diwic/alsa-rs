@@ -464,7 +464,7 @@ impl<S> MmapCapture<S> {
     ///
     /// When the iterator is dropped or depleted, the read samples will be committed, i e,
     /// the kernel can then write data to the location again. So do this ASAP.
-    pub fn iter(&mut self) -> CaptureIter<S> {
+    pub fn iter(&mut self) -> CaptureIter<'_, S> {
         let (data, more_data) = self.data_ptr();
         CaptureIter {
             m: self,

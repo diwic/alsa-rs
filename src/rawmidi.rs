@@ -167,7 +167,7 @@ impl Rawmidi {
         from_const("snd_rawmidi_name", c).map(|s| s.to_string())
     }
 
-    pub fn io(&self) -> IO { IO(self) }
+    pub fn io(&self) -> IO<'_> { IO(self) }
 }
 
 impl poll::Descriptors for Rawmidi {

@@ -168,7 +168,7 @@ impl Seq {
 
     /// Call this function to obtain an instance of `Input` to access the functions `event_input`,
     /// `event_input_pending` and `set_input_buffer_size`. See the documentation of `Input` for details.
-    pub fn input(&self) -> Input {
+    pub fn input(&self) -> Input<'_> {
         Input::new(self)
     }
 
@@ -198,7 +198,7 @@ impl<'a> Input<'a> {
         Input(s)
     }
 
-    pub fn event_input(&mut self) -> Result<Event> {
+    pub fn event_input(&mut self) -> Result<Event<'_>> {
         // The returned event might reference the input buffer of the `Seq`.
         // Therefore we mutably borrow the `Input` structure, preventing any
         // other function call that might change the input buffer while the
