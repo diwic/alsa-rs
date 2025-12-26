@@ -18,7 +18,11 @@ fn list_devices_for_card(card: &Card, direction: Direction) -> Result<(), Error>
     let card_name = cardinfo.get_name()?;
     for device in DeviceIter::new(&ctl) {
         // Read info from Ctl
-        let pcm_info = ctl.pcm_info(device as u32, 0, direction)?;
+        let pcm_info = match ctl.pcm_info(device as u32, 0, direction) {
+            // If pcm_info returns ENOENT, there are no streams in this direction
+            Err(x) if x.errno() == libc::ENOENT => continue,
+            x => x,
+        }?;
 
         // Read PCM name
         let pcm_name = pcm_info.get_name()?.to_string();
@@ -28,7 +32,7 @@ fn list_devices_for_card(card: &Card, direction: Direction) -> Result<(), Error>
         // Loop through subdevices and get their names
         let subdevs = pcm_info.get_subdevices_count();
         for subdev in 0..subdevs {
-            // Get subdevice name 
+            // Get subdevice name
             let pcm_info = ctl.pcm_info(device as u32, subdev, direction)?;
             let subdev_name = pcm_info.get_subdevice_name()?;
 
