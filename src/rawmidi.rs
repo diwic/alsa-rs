@@ -109,6 +109,7 @@ impl<'a> Iterator for Iter<'a> {
 
         let r = acheck!(snd_ctl_rawmidi_next_device(ctl_ptr(self.ctl), &mut self.device));
         match r {
+            Err(e) if e.errno() == libc::ENOTTY => return None,
             Err(e) => return Some(Err(e)),
             Ok(_) if self.device == -1 => return None,
             _ => {},
