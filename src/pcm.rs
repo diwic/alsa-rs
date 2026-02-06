@@ -272,6 +272,12 @@ impl PCM {
         crate::direct::pcm::new_mmap(self)
     }
 
+    /// Remove PCM hardware configuration and free associated resources.
+    pub fn hw_free(&self) -> Result<()> {
+        self.check_has_io();
+        acheck!(snd_pcm_hw_free(self.0)).map(|_| ())
+    }
+
     /// Sets hw parameters. Note: No IO object can exist for this PCM
     /// when hw parameters are set.
     pub fn hw_params(&self, h: &HwParams) -> Result<()> {
