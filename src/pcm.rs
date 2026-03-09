@@ -47,7 +47,7 @@ use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
 use crate::alsa;
 use core::convert::Infallible;
 use core::marker::PhantomData;
-use core::mem::size_of;
+use core::mem::{size_of, zeroed};
 use core::ffi::CStr;
 use core::str::FromStr;
 use ::alloc::ffi::CString;
@@ -1271,19 +1271,19 @@ impl Status {
     fn ptr(&self) -> *mut alsa::snd_pcm_status_t { self.0.as_ptr() as *const _ as *mut alsa::snd_pcm_status_t }
 
     pub fn get_htstamp(&self) -> timespec {
-        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
+        let mut h: timespec = unsafe { zeroed() };
         unsafe { alsa::snd_pcm_status_get_htstamp(self.ptr(), &mut h) };
         h
     }
 
     pub fn get_trigger_htstamp(&self) -> timespec {
-        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
+        let mut h: timespec = unsafe { zeroed() };
         unsafe { alsa::snd_pcm_status_get_trigger_htstamp(self.ptr(), &mut h) };
         h
     }
 
     pub fn get_audio_htstamp(&self) -> timespec {
-        let mut h = timespec {tv_sec: 0, tv_nsec: 0};
+        let mut h: timespec = unsafe { zeroed() };
         unsafe { alsa::snd_pcm_status_get_audio_htstamp(self.ptr(), &mut h) };
         h
     }
