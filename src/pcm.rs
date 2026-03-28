@@ -47,7 +47,7 @@ use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
 use crate::alsa;
 use core::convert::Infallible;
 use core::marker::PhantomData;
-use core::mem::size_of;
+use core::mem::{size_of, zeroed};
 use core::ffi::CStr;
 use core::str::FromStr;
 use ::alloc::ffi::CString;
@@ -1258,6 +1258,18 @@ impl<'a> fmt::Debug for SwParams<'a> {
 
 const STATUS_SIZE: usize = 152;
 
+#[cfg(target_pointer_width = "32")]
+unsafe fn timespec_from_htstamp_buf(buf: &[u8; 16]) -> timespec {
+    let tv_sec = ptr::read_unaligned(buf.as_ptr() as *const i64) as libc::time_t;
+    // glibc on big-endian places the padding before tv_nsec (offset 12).
+    // Other libc and glibc on little-endian use offset 8.
+    #[cfg(all(target_env = "gnu", target_endian = "big"))]
+    let tv_nsec = ptr::read_unaligned(buf.as_ptr().add(12) as *const libc::c_long);
+    #[cfg(not(all(target_env = "gnu", target_endian = "big")))]
+    let tv_nsec = ptr::read_unaligned(buf.as_ptr().add(8) as *const libc::c_long);
+    timespec { tv_sec, tv_nsec }
+}
+
 /// [snd_pcm_status_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___status.html) wrapper
 #[derive(Debug)]
 pub struct Status([u64; (STATUS_SIZE+7)/8]);
@@ -1271,26 +1283,53 @@ impl Status {
     fn ptr(&self) -> *mut alsa::snd_pcm_status_t { self.0.as_ptr() as *const _ as *mut alsa::snd_pcm_status_t }
 
     pub fn get_htstamp(&self) -> timespec {
-        let mut buf = [0u8; 16];
-        unsafe {
-            alsa::snd_pcm_status_get_htstamp(self.ptr(), buf.as_mut_ptr() as *mut timespec);
-            std::ptr::read_unaligned(buf.as_ptr() as *const timespec)
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            let mut h: timespec = unsafe { zeroed() };
+            unsafe { alsa::snd_pcm_status_get_htstamp(self.ptr(), &mut h) };
+            h
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            let mut buf = [0u8; 16];
+            unsafe {
+                alsa::snd_pcm_status_get_htstamp(self.ptr(), buf.as_mut_ptr() as *mut timespec);
+                timespec_from_htstamp_buf(&buf)
+            }
         }
     }
 
     pub fn get_trigger_htstamp(&self) -> timespec {
-        let mut buf = [0u8; 16];
-        unsafe {
-            alsa::snd_pcm_status_get_trigger_htstamp(self.ptr(), buf.as_mut_ptr() as *mut timespec);
-            std::ptr::read_unaligned(buf.as_ptr() as *const timespec)
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            let mut h: timespec = unsafe { zeroed() };
+            unsafe { alsa::snd_pcm_status_get_trigger_htstamp(self.ptr(), &mut h) };
+            h
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            let mut buf = [0u8; 16];
+            unsafe {
+                alsa::snd_pcm_status_get_trigger_htstamp(self.ptr(), buf.as_mut_ptr() as *mut timespec);
+                timespec_from_htstamp_buf(&buf)
+            }
         }
     }
 
     pub fn get_audio_htstamp(&self) -> timespec {
-        let mut buf = [0u8; 16];
-        unsafe {
-            alsa::snd_pcm_status_get_audio_htstamp(self.ptr(), buf.as_mut_ptr() as *mut timespec);
-            std::ptr::read_unaligned(buf.as_ptr() as *const timespec)
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            let mut h: timespec = unsafe { zeroed() };
+            unsafe { alsa::snd_pcm_status_get_audio_htstamp(self.ptr(), &mut h) };
+            h
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            let mut buf = [0u8; 16];
+            unsafe {
+                alsa::snd_pcm_status_get_audio_htstamp(self.ptr(), buf.as_mut_ptr() as *mut timespec);
+                timespec_from_htstamp_buf(&buf)
+            }
         }
     }
 
