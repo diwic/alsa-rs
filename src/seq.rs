@@ -42,11 +42,11 @@ impl Seq {
     pub fn open(name: Option<&CStr>, dir: Option<Direction>, nonblock: bool) -> Result<Seq> {
         let n2 = name.unwrap_or(unsafe { CStr::from_bytes_with_nul_unchecked(b"default\0") });
         let mut h = ptr::null_mut();
-        let mode = if nonblock { alsa::SND_SEQ_NONBLOCK } else { 0 };
+        let mode = if nonblock { alsa::SND_SEQ_NONBLOCK as i32 } else { 0 };
         let streams = match dir {
-            None => alsa::SND_SEQ_OPEN_DUPLEX,
-            Some(Direction::Playback) => alsa::SND_SEQ_OPEN_OUTPUT,
-            Some(Direction::Capture) => alsa::SND_SEQ_OPEN_INPUT,
+            None => alsa::SND_SEQ_OPEN_DUPLEX as i32,
+            Some(Direction::Playback) => alsa::SND_SEQ_OPEN_OUTPUT as i32,
+            Some(Direction::Capture) => alsa::SND_SEQ_OPEN_INPUT as i32,
         };
         acheck!(snd_seq_open(&mut h, n2.as_ptr(), streams, mode))
             .map(|_| Seq(h, cell::Cell::new(false)))
@@ -715,26 +715,35 @@ impl<'a> Event<'a> {
 
     fn get_length_flag(t: EventType) -> u8 {
         match t {
-            EventType::Sysex => alsa::SND_SEQ_EVENT_LENGTH_VARIABLE,
-            EventType::Bounce => alsa::SND_SEQ_EVENT_LENGTH_VARIABLE, // not clear whether this should be VARIABLE or VARUSR
-            EventType::UsrVar0 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
-            EventType::UsrVar1 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
-            EventType::UsrVar2 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
-            EventType::UsrVar3 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
-            EventType::UsrVar4 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR,
-            _ => alsa::SND_SEQ_EVENT_LENGTH_FIXED
+            EventType::Sysex => alsa::SND_SEQ_EVENT_LENGTH_VARIABLE as u8,
+            EventType::Bounce => alsa::SND_SEQ_EVENT_LENGTH_VARIABLE as u8, // not clear whether this should be VARIABLE or VARUSR
+            EventType::UsrVar0 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR as u8,
+            EventType::UsrVar1 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR as u8,
+            EventType::UsrVar2 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR as u8,
+            EventType::UsrVar3 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR as u8,
+            EventType::UsrVar4 => alsa::SND_SEQ_EVENT_LENGTH_VARUSR as u8,
+            _ => alsa::SND_SEQ_EVENT_LENGTH_FIXED as u8
         }
     }
 
+    fn has_flag(&self, flag: u32) -> bool {
+        (self.0.flags as u32) & flag != 0
+    }
+    fn set_flag(&mut self, flag: u32, on: bool) {
+        let flag = flag as u8;
+        if on { self.0.flags |= flag }
+        else { self.0.flags &= !flag }
+    }
+
     fn has_ext_data(t: EventType) -> bool {
-        Event::get_length_flag(t) != alsa::SND_SEQ_EVENT_LENGTH_FIXED
+        Event::get_length_flag(t) != alsa::SND_SEQ_EVENT_LENGTH_FIXED as u8
     }
 
     /// Extracts event type and data. Produces a result with an arbitrary lifetime, hence the unsafety.
     unsafe fn extract<'any>(z: &mut alsa::snd_seq_event_t, func: &'static str) -> Result<Event<'any>> {
         let t = EventType::from_c_int((*z).type_ as c_int, func)?;
         let ext_data = if Event::has_ext_data(t) {
-            assert_ne!((*z).flags & alsa::SND_SEQ_EVENT_LENGTH_MASK, alsa::SND_SEQ_EVENT_LENGTH_FIXED);
+            assert_ne!((*z).flags & (alsa::SND_SEQ_EVENT_LENGTH_MASK as u8), (alsa::SND_SEQ_EVENT_LENGTH_FIXED as u8));
             Some(Cow::Borrowed({
                 let zz: &EvExtPacked = &*(&(*z).data as *const alsa::snd_seq_event_data as *const _);
                 slice::from_raw_parts((*zz).ptr as *mut u8, (*zz).len as usize)
@@ -782,8 +791,8 @@ impl<'a> Event<'a> {
     }
 
     pub fn set_subs(&mut self) {
-        self.0.dest.client = alsa::SND_SEQ_ADDRESS_SUBSCRIBERS;
-        self.0.dest.port = alsa::SND_SEQ_ADDRESS_UNKNOWN;
+        self.0.dest.client = alsa::SND_SEQ_ADDRESS_SUBSCRIBERS as u8;
+        self.0.dest.port = alsa::SND_SEQ_ADDRESS_UNKNOWN as u8;
     }
 
     pub fn set_source(&mut self, p: i32) { self.0.source.port = p as u8 }
@@ -797,8 +806,8 @@ impl<'a> Event<'a> {
     pub fn get_queue(&self) -> i32 { self.0.queue as i32 }
 
     pub fn schedule_real(&mut self, queue: i32, relative: bool, rtime: time::Duration) {
-        self.0.flags &= !(alsa::SND_SEQ_TIME_STAMP_MASK | alsa::SND_SEQ_TIME_MODE_MASK);
-        self.0.flags |= alsa::SND_SEQ_TIME_STAMP_REAL | (if relative { alsa::SND_SEQ_TIME_MODE_REL } else { alsa::SND_SEQ_TIME_MODE_ABS });
+        self.set_flag(alsa::SND_SEQ_TIME_STAMP_MASK | alsa::SND_SEQ_TIME_MODE_MASK, false);
+        self.set_flag(alsa::SND_SEQ_TIME_STAMP_REAL | (if relative { alsa::SND_SEQ_TIME_MODE_REL } else { alsa::SND_SEQ_TIME_MODE_ABS }), true);
         self.0.queue = queue as u8;
         let t = unsafe { &mut self.0.time.time };
         t.tv_sec = rtime.as_secs() as c_uint;
@@ -806,19 +815,19 @@ impl<'a> Event<'a> {
     }
 
     pub fn schedule_tick(&mut self, queue: i32, relative: bool, ttime: u32) {
-        self.0.flags &= !(alsa::SND_SEQ_TIME_STAMP_MASK | alsa::SND_SEQ_TIME_MODE_MASK);
-        self.0.flags |= alsa::SND_SEQ_TIME_STAMP_TICK | (if relative { alsa::SND_SEQ_TIME_MODE_REL } else { alsa::SND_SEQ_TIME_MODE_ABS });
+        self.set_flag(alsa::SND_SEQ_TIME_STAMP_MASK | alsa::SND_SEQ_TIME_MODE_MASK, false);
+        self.set_flag(alsa::SND_SEQ_TIME_STAMP_TICK | (if relative { alsa::SND_SEQ_TIME_MODE_REL } else { alsa::SND_SEQ_TIME_MODE_ABS }), true);
         self.0.queue = queue as u8;
         let t = unsafe { &mut self.0.time.tick };
         *t = ttime as c_uint;
     }
 
-    pub fn set_direct(&mut self) { self.0.queue = alsa::SND_SEQ_QUEUE_DIRECT }
+    pub fn set_direct(&mut self) { self.0.queue = alsa::SND_SEQ_QUEUE_DIRECT as u8 }
 
-    pub fn get_relative(&self) -> bool { (self.0.flags & alsa::SND_SEQ_TIME_MODE_REL) != 0 }
+    pub fn get_relative(&self) -> bool { self.has_flag(alsa::SND_SEQ_TIME_MODE_REL) }
 
     pub fn get_time(&self) -> Option<time::Duration> {
-        if (self.0.flags & alsa::SND_SEQ_TIME_STAMP_REAL) != 0 {
+        if self.has_flag(alsa::SND_SEQ_TIME_STAMP_REAL) {
             let d = self.0.time;
             let t = unsafe { &d.time };
             Some(time::Duration::new(t.tv_sec as u64, t.tv_nsec as u32))
@@ -826,7 +835,7 @@ impl<'a> Event<'a> {
     }
 
     pub fn get_tick(&self) -> Option<u32> {
-        if (self.0.flags & alsa::SND_SEQ_TIME_STAMP_REAL) == 0 {
+        if self.has_flag(alsa::SND_SEQ_TIME_STAMP_REAL) {
             let d = self.0.time;
             let t = unsafe { &d.tick };
             Some(*t)
@@ -834,12 +843,9 @@ impl<'a> Event<'a> {
     }
 
     /// Returns true if the message is high priority.
-    pub fn get_priority(&self) -> bool { (self.0.flags & alsa::SND_SEQ_PRIORITY_HIGH) != 0 }
+    pub fn get_priority(&self) -> bool { self.has_flag(alsa::SND_SEQ_PRIORITY_HIGH) }
 
-    pub fn set_priority(&mut self, is_high_prio: bool) {
-        if is_high_prio { self.0.flags |= alsa::SND_SEQ_PRIORITY_HIGH; }
-        else { self.0.flags &= !alsa::SND_SEQ_PRIORITY_HIGH; }
-    }
+    pub fn set_priority(&mut self, is_high_prio: bool) { self.set_flag(alsa::SND_SEQ_PRIORITY_HIGH, is_high_prio) }
 }
 
 impl<'a> Clone for Event<'a> {

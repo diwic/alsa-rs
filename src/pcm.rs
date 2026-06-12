@@ -158,7 +158,7 @@ impl PCM {
             Direction::Capture => alsa::SND_PCM_STREAM_CAPTURE,
             Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK
         };
-        let flags = if nonblock { alsa::SND_PCM_NONBLOCK } else { 0 };
+        let flags = if nonblock { alsa::SND_PCM_NONBLOCK as i32 } else { 0 };
         acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r, cell::Cell::new(false)))
     }
 
