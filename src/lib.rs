@@ -118,7 +118,10 @@ pub use crate::pcm::PCM as PCM;
 pub mod config;
 
 pub mod rawmidi;
-pub use crate::rawmidi::Rawmidi as Rawmidi;
+pub use crate::rawmidi::Rawmidi;
+
+pub mod ump;
+pub use crate::ump::Ump;
 
 pub mod device_name;
 

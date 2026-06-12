@@ -15,9 +15,9 @@ include = ["README.md", "LICENSE-*", "Cargo.toml", "src/"]
 exclude = ["examples/"]
 
 [dependencies]
-libc = "0.2.178"
+libc = "0.2.186"
 alsa-sys = "0.4.0"
-bitflags = "2.4.0"
+bitflags = "2.13.0"
 cfg-if = "1.0"
 
 [dev-dependencies]

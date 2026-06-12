@@ -22,14 +22,14 @@ pub struct Iter<'a> {
 
 /// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
-pub struct Info(*mut alsa::snd_rawmidi_info_t);
+pub struct Info(pub(crate) *mut alsa::snd_rawmidi_info_t);
 
 impl Drop for Info {
     fn drop(&mut self) { unsafe { alsa::snd_rawmidi_info_free(self.0) }; }
 }
 
 impl Info {
-    fn new() -> Result<Info> {
+    pub(crate) fn new() -> Result<Info> {
         let mut p = ptr::null_mut();
         acheck!(snd_rawmidi_info_malloc(&mut p)).map(|_| Info(p))
     }
@@ -72,10 +72,10 @@ impl Info {
 
 /// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
-pub struct Status(*mut alsa::snd_rawmidi_status_t);
+pub struct Status(pub(crate) *mut alsa::snd_rawmidi_status_t);
 
 impl Status {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let mut p = ptr::null_mut();
         acheck!(snd_rawmidi_status_malloc(&mut p)).map(|_| Status(p))
     }
