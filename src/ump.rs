@@ -12,6 +12,7 @@ use libc::{c_short, c_uint, c_void, pollfd, size_t, timespec};
 pub use super::rawmidi::Info;
 pub use super::rawmidi::Iter;
 pub use super::rawmidi::Status;
+pub use super::rawmidi::Params;
 
 /// [snd_ump_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
@@ -107,6 +108,15 @@ impl Ump {
 
     pub fn nonblock(&mut self, nonblock: i32) -> Result<()> {
         acheck!(snd_ump_nonblock(self.0, nonblock)).map(|_| ())
+    }
+
+    pub fn params_current(&self) -> Result<Params> {
+        let params = Params::new()?;
+        acheck!(snd_ump_rawmidi_params_current(self.0, params.0)).map(|_| params)
+    }
+
+    pub fn params(&mut self, params: &Params) -> Result<()> {
+        acheck!(snd_ump_rawmidi_params(self.0, params.0)).map(|_| ())
     }
 }
 

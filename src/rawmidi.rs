@@ -70,6 +70,48 @@ impl Info {
     }
 }
 
+/// [snd_rawmidi_params_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
+#[derive(Debug)]
+pub struct Params(pub(crate) *mut alsa::snd_rawmidi_params_t);
+
+impl Drop for Params {
+    fn drop(&mut self) {
+        unsafe { alsa::snd_rawmidi_params_free(self.0) };
+    }
+}
+
+impl Params {
+    pub fn new() -> Result<Params> {
+        let mut p = ptr::null_mut();
+        acheck!(snd_rawmidi_params_malloc(&mut p)).map(|_| Params(p))
+    }
+
+    pub fn copy(&mut self, source: &Self) {
+        unsafe { alsa::snd_rawmidi_params_copy(self.0, source.0); }
+    }
+
+    pub fn get_buffer_size(&self) -> usize {
+        unsafe { alsa::snd_rawmidi_params_get_buffer_size(self.0) as usize }
+    }
+
+    pub fn get_avail_min(&self) -> usize {
+        unsafe { alsa::snd_rawmidi_params_get_avail_min(self.0) as usize }
+    }
+
+    pub fn get_no_active_sensing(&self) -> bool {
+        let v = unsafe { alsa::snd_rawmidi_params_get_no_active_sensing(self.0) };
+        v != 0
+    }
+
+    pub fn get_read_mode(&self) -> alsa::snd_rawmidi_read_mode_t {
+        unsafe { alsa::snd_rawmidi_params_get_read_mode(self.0) }
+    }
+
+    pub fn get_clock_type(&self) -> alsa::snd_rawmidi_clock_t {
+        unsafe { alsa::snd_rawmidi_params_get_clock_type(self.0) }
+    }
+}
+
 /// [snd_rawmidi_info_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
 pub struct Status(pub(crate) *mut alsa::snd_rawmidi_status_t);
@@ -189,6 +231,31 @@ impl Rawmidi {
 
     #[cfg(feature = "std")]
     pub fn io(&self) -> IO<'_> { IO(self) }
+
+    pub fn params_set_avail_min(&self, params: &mut Params, val: usize)-> Result<()> {
+        acheck!(snd_rawmidi_params_set_avail_min(self.0, params.0, val)).map(|_| ())
+    }
+
+    pub fn params_set_no_active_sensing(&self, params: &mut Params, val: bool)-> Result<()> {
+        acheck!(snd_rawmidi_params_set_no_active_sensing(self.0, params.0, if val { 1 } else { 0 })).map(|_| ())
+    }
+
+    pub fn params_set_read_mode(&self, params: &mut Params, val: alsa::snd_rawmidi_read_mode_t) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_read_mode(self.0, params.0, val)).map(|_| ())
+    }
+
+    pub fn params_set_clock_type(&self, params: &mut Params, val: alsa::snd_rawmidi_clock_t) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_clock_type(self.0, params.0, val)).map(|_| ())
+    }
+
+    pub fn params_current(&self) -> Result<Params> {
+        let params = Params::new()?;
+        acheck!(snd_rawmidi_params_current(self.0, params.0)).map(|_| params)
+    }
+
+    pub fn params(&mut self, params: &Params) -> Result<()> {
+        acheck!(snd_rawmidi_params(self.0, params.0)).map(|_| ())
+    }
 }
 
 impl poll::Descriptors for Rawmidi {
