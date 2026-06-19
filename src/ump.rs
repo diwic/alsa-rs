@@ -5,6 +5,7 @@ use super::{poll, Direction};
 use crate::alsa;
 use ::alloc::ffi::CString;
 use ::alloc::string::{String, ToString};
+use alsa::snd_ump_rawmidi;
 use core::ffi::CStr;
 use core::ptr;
 use libc::{c_short, c_uint, c_void, pollfd, size_t, timespec};
@@ -108,6 +109,26 @@ impl Ump {
 
     pub fn nonblock(&mut self, nonblock: i32) -> Result<()> {
         acheck!(snd_ump_nonblock(self.0, nonblock)).map(|_| ())
+    }
+
+    fn rawmidi(&self) -> *mut alsa::snd_rawmidi_t {
+        unsafe { snd_ump_rawmidi(self.0) }
+    }
+
+    pub fn params_set_avail_min(&self, params: &mut Params, val: usize)-> Result<()> {
+        acheck!(snd_rawmidi_params_set_avail_min(self.rawmidi(), params.0, val)).map(|_| ())
+    }
+
+    pub fn params_set_no_active_sensing(&self, params: &mut Params, val: bool)-> Result<()> {
+        acheck!(snd_rawmidi_params_set_no_active_sensing(self.rawmidi(), params.0, if val { 1 } else { 0 })).map(|_| ())
+    }
+
+    pub fn params_set_read_mode(&self, params: &mut Params, val: alsa::snd_rawmidi_read_mode_t) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_read_mode(self.rawmidi(), params.0, val)).map(|_| ())
+    }
+
+    pub fn params_set_clock_type(&self, params: &mut Params, val: alsa::snd_rawmidi_clock_t) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_clock_type(self.rawmidi(), params.0, val)).map(|_| ())
     }
 
     pub fn params_current(&self) -> Result<Params> {
