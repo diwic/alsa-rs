@@ -98,17 +98,33 @@ impl Params {
         unsafe { alsa::snd_rawmidi_params_get_avail_min(self.0) as usize }
     }
 
+    pub fn params_set_avail_min(&mut self, rawmidi: &Rawmidi, val: usize)-> Result<()> {
+        acheck!(snd_rawmidi_params_set_avail_min(rawmidi.0, self.0, val)).map(|_| ())
+    }
+
     pub fn get_no_active_sensing(&self) -> bool {
         let v = unsafe { alsa::snd_rawmidi_params_get_no_active_sensing(self.0) };
         v != 0
+    }
+
+    pub fn params_set_no_active_sensing(&mut self, rawmidi: &Rawmidi, val: bool)-> Result<()> {
+        acheck!(snd_rawmidi_params_set_no_active_sensing(rawmidi.0, self.0, if val { 1 } else { 0 })).map(|_| ())
     }
 
     pub fn get_read_mode(&self) -> alsa::snd_rawmidi_read_mode_t {
         unsafe { alsa::snd_rawmidi_params_get_read_mode(self.0) }
     }
 
+    pub fn params_set_read_mode(&mut self, rawmidi: &Rawmidi, val: alsa::snd_rawmidi_read_mode_t) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_read_mode(rawmidi.0, self.0, val)).map(|_| ())
+    }
+
     pub fn get_clock_type(&self) -> alsa::snd_rawmidi_clock_t {
         unsafe { alsa::snd_rawmidi_params_get_clock_type(self.0) }
+    }
+
+    pub fn params_set_clock_type(&mut self, rawmidi: &Rawmidi, val: alsa::snd_rawmidi_clock_t) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_clock_type(rawmidi.0, self.0, val)).map(|_| ())
     }
 }
 
@@ -231,22 +247,6 @@ impl Rawmidi {
 
     #[cfg(feature = "std")]
     pub fn io(&self) -> IO<'_> { IO(self) }
-
-    pub fn params_set_avail_min(&self, params: &mut Params, val: usize)-> Result<()> {
-        acheck!(snd_rawmidi_params_set_avail_min(self.0, params.0, val)).map(|_| ())
-    }
-
-    pub fn params_set_no_active_sensing(&self, params: &mut Params, val: bool)-> Result<()> {
-        acheck!(snd_rawmidi_params_set_no_active_sensing(self.0, params.0, if val { 1 } else { 0 })).map(|_| ())
-    }
-
-    pub fn params_set_read_mode(&self, params: &mut Params, val: alsa::snd_rawmidi_read_mode_t) -> Result<()> {
-        acheck!(snd_rawmidi_params_set_read_mode(self.0, params.0, val)).map(|_| ())
-    }
-
-    pub fn params_set_clock_type(&self, params: &mut Params, val: alsa::snd_rawmidi_clock_t) -> Result<()> {
-        acheck!(snd_rawmidi_params_set_clock_type(self.0, params.0, val)).map(|_| ())
-    }
 
     pub fn params_current(&self) -> Result<Params> {
         let params = Params::new()?;
