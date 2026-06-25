@@ -12,17 +12,19 @@ use libc::{c_short, c_uint, c_void, pollfd, size_t, timespec};
 
 pub use super::rawmidi::Info;
 pub use super::rawmidi::Iter;
-pub use super::rawmidi::Status;
 pub use super::rawmidi::Params;
+pub use super::rawmidi::Rawmidi;
+pub use super::rawmidi::Status;
 
 /// [snd_ump_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
-pub struct Ump(*mut alsa::snd_ump_t);
+pub struct Ump(*mut alsa::snd_ump_t, Rawmidi);
 
 unsafe impl Send for Ump {}
 
 impl Drop for Ump {
     fn drop(&mut self) {
+        self.1 .0 = core::ptr::null_mut();
         unsafe { alsa::snd_ump_close(self.0) };
     }
 }
@@ -50,7 +52,7 @@ impl Ump {
             name.as_ptr(),
             flags
         ))
-        .map(|_| Ump(h))
+        .map(|_| Ump(h, Rawmidi(unsafe { snd_ump_rawmidi(h) })))
     }
 
     pub fn rawmidi_info(&self) -> Result<Info> {
@@ -111,24 +113,8 @@ impl Ump {
         acheck!(snd_ump_nonblock(self.0, nonblock)).map(|_| ())
     }
 
-    fn rawmidi(&self) -> *mut alsa::snd_rawmidi_t {
-        unsafe { snd_ump_rawmidi(self.0) }
-    }
-
-    pub fn params_set_avail_min(&self, params: &mut Params, val: usize)-> Result<()> {
-        acheck!(snd_rawmidi_params_set_avail_min(self.rawmidi(), params.0, val)).map(|_| ())
-    }
-
-    pub fn params_set_no_active_sensing(&self, params: &mut Params, val: bool)-> Result<()> {
-        acheck!(snd_rawmidi_params_set_no_active_sensing(self.rawmidi(), params.0, if val { 1 } else { 0 })).map(|_| ())
-    }
-
-    pub fn params_set_read_mode(&self, params: &mut Params, val: alsa::snd_rawmidi_read_mode_t) -> Result<()> {
-        acheck!(snd_rawmidi_params_set_read_mode(self.rawmidi(), params.0, val)).map(|_| ())
-    }
-
-    pub fn params_set_clock_type(&self, params: &mut Params, val: alsa::snd_rawmidi_clock_t) -> Result<()> {
-        acheck!(snd_rawmidi_params_set_clock_type(self.rawmidi(), params.0, val)).map(|_| ())
+    pub fn rawmidi(&self) -> &Rawmidi {
+        &self.1
     }
 
     pub fn params_current(&self) -> Result<Params> {

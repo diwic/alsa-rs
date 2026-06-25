@@ -186,12 +186,16 @@ impl<'a> Iterator for Iter<'a> {
 
 /// [snd_rawmidi_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
-pub struct Rawmidi(*mut alsa::snd_rawmidi_t);
+pub struct Rawmidi(pub(crate) *mut alsa::snd_rawmidi_t);
 
 unsafe impl Send for Rawmidi {}
 
 impl Drop for Rawmidi {
-    fn drop(&mut self) { unsafe { alsa::snd_rawmidi_close(self.0) }; }
+    fn drop(&mut self) {
+        if self.0 != core::ptr::null_mut() {
+            unsafe { alsa::snd_rawmidi_close(self.0) };
+        }
+    }
 }
 
 impl Rawmidi {
