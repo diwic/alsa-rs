@@ -117,12 +117,12 @@ impl Ump {
         &self.1
     }
 
-    pub fn params_current(&self) -> Result<Params> {
+    pub fn rawmidi_params_current(&self) -> Result<Params> {
         let params = Params::new()?;
         acheck!(snd_ump_rawmidi_params_current(self.0, params.0)).map(|_| params)
     }
 
-    pub fn params(&mut self, params: &Params) -> Result<()> {
+    pub fn rawmidi_params(&mut self, params: &Params) -> Result<()> {
         acheck!(snd_ump_rawmidi_params(self.0, params.0)).map(|_| ())
     }
 }
