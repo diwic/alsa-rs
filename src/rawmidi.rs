@@ -70,6 +70,24 @@ impl Info {
     }
 }
 
+alsa_enum!(
+    /// [SND_RAWMIDI_READ_XXX](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) constants
+    ReadMode, ALL_READ_MODES[2],
+
+    Standard = SND_RAWMIDI_READ_STANDARD,
+    Timestamp= SND_RAWMIDI_READ_TSTAMP,
+);
+
+alsa_enum!(
+    /// [SND_RAWMIDI_CLOCK_XXX](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) constants
+    Clock, ALL_CLOCKS[4],
+
+    None = SND_RAWMIDI_CLOCK_NONE,
+    Realtime = SND_RAWMIDI_CLOCK_REALTIME,
+    Monotonic = SND_RAWMIDI_CLOCK_MONOTONIC,
+    MonotonicRaw = SND_RAWMIDI_CLOCK_MONOTONIC_RAW,
+);
+
 /// [snd_rawmidi_params_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___raw_midi.html) wrapper
 #[derive(Debug)]
 pub struct Params(pub(crate) *mut alsa::snd_rawmidi_params_t);
@@ -111,20 +129,22 @@ impl Params {
         acheck!(snd_rawmidi_params_set_no_active_sensing(rawmidi.0, self.0, if val { 1 } else { 0 })).map(|_| ())
     }
 
-    pub fn get_read_mode(&self) -> alsa::snd_rawmidi_read_mode_t {
-        unsafe { alsa::snd_rawmidi_params_get_read_mode(self.0) }
+    pub fn get_read_mode(&self) -> Result<ReadMode> {
+        let c_value = unsafe { alsa::snd_rawmidi_params_get_read_mode(self.0) };
+        ReadMode::from_c_int(c_value as i32, "snd_rawmidi_params_get_read_mode")
     }
 
-    pub fn params_set_read_mode(&mut self, rawmidi: &Rawmidi, val: alsa::snd_rawmidi_read_mode_t) -> Result<()> {
-        acheck!(snd_rawmidi_params_set_read_mode(rawmidi.0, self.0, val)).map(|_| ())
+    pub fn params_set_read_mode(&mut self, rawmidi: &Rawmidi, val: ReadMode) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_read_mode(rawmidi.0, self.0, val.to_c_int() as u32)).map(|_| ())
     }
 
-    pub fn get_clock_type(&self) -> alsa::snd_rawmidi_clock_t {
-        unsafe { alsa::snd_rawmidi_params_get_clock_type(self.0) }
+    pub fn get_clock_type(&self) -> Result<Clock> {
+        let c_value = unsafe { alsa::snd_rawmidi_params_get_clock_type(self.0) };
+        Clock::from_c_int(c_value as i32, "snd_rawmidi_params_get_clock_type")
     }
 
-    pub fn params_set_clock_type(&mut self, rawmidi: &Rawmidi, val: alsa::snd_rawmidi_clock_t) -> Result<()> {
-        acheck!(snd_rawmidi_params_set_clock_type(rawmidi.0, self.0, val)).map(|_| ())
+    pub fn params_set_clock_type(&mut self, rawmidi: &Rawmidi, val: Clock) -> Result<()> {
+        acheck!(snd_rawmidi_params_set_clock_type(rawmidi.0, self.0, val.to_c_int() as u32)).map(|_| ())
     }
 }
 
