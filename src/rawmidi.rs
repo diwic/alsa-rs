@@ -75,7 +75,7 @@ alsa_enum!(
     ReadMode, ALL_READ_MODES[2],
 
     Standard = SND_RAWMIDI_READ_STANDARD,
-    Timestamp= SND_RAWMIDI_READ_TSTAMP,
+    Timestamp = SND_RAWMIDI_READ_TSTAMP,
 );
 
 alsa_enum!(
@@ -116,7 +116,7 @@ impl Params {
         unsafe { alsa::snd_rawmidi_params_get_avail_min(self.0) as usize }
     }
 
-    pub fn params_set_avail_min(&mut self, rawmidi: &Rawmidi, val: usize)-> Result<()> {
+    pub fn set_avail_min(&mut self, rawmidi: &Rawmidi, val: usize)-> Result<()> {
         acheck!(snd_rawmidi_params_set_avail_min(rawmidi.0, self.0, val)).map(|_| ())
     }
 
@@ -125,7 +125,7 @@ impl Params {
         v != 0
     }
 
-    pub fn params_set_no_active_sensing(&mut self, rawmidi: &Rawmidi, val: bool)-> Result<()> {
+    pub fn set_no_active_sensing(&mut self, rawmidi: &Rawmidi, val: bool)-> Result<()> {
         acheck!(snd_rawmidi_params_set_no_active_sensing(rawmidi.0, self.0, if val { 1 } else { 0 })).map(|_| ())
     }
 
@@ -134,7 +134,7 @@ impl Params {
         ReadMode::from_c_int(c_value as i32, "snd_rawmidi_params_get_read_mode")
     }
 
-    pub fn params_set_read_mode(&mut self, rawmidi: &Rawmidi, val: ReadMode) -> Result<()> {
+    pub fn set_read_mode(&mut self, rawmidi: &Rawmidi, val: ReadMode) -> Result<()> {
         acheck!(snd_rawmidi_params_set_read_mode(rawmidi.0, self.0, val.to_c_int() as u32)).map(|_| ())
     }
 
@@ -143,7 +143,7 @@ impl Params {
         Clock::from_c_int(c_value as i32, "snd_rawmidi_params_get_clock_type")
     }
 
-    pub fn params_set_clock_type(&mut self, rawmidi: &Rawmidi, val: Clock) -> Result<()> {
+    pub fn set_clock_type(&mut self, rawmidi: &Rawmidi, val: Clock) -> Result<()> {
         acheck!(snd_rawmidi_params_set_clock_type(rawmidi.0, self.0, val.to_c_int() as u32)).map(|_| ())
     }
 }
@@ -212,7 +212,7 @@ unsafe impl Send for Rawmidi {}
 
 impl Drop for Rawmidi {
     fn drop(&mut self) {
-        if self.0 != core::ptr::null_mut() {
+        if self.0 != ptr::null_mut() {
             unsafe { alsa::snd_rawmidi_close(self.0) };
         }
     }
