@@ -24,7 +24,7 @@ unsafe impl Send for Ump {}
 
 impl Drop for Ump {
     fn drop(&mut self) {
-        self.1 .0 = core::ptr::null_mut();
+        self.1.0 = ptr::null_mut();
         unsafe { alsa::snd_ump_close(self.0) };
     }
 }
