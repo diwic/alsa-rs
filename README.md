@@ -18,9 +18,9 @@ The ALSA API is rather big, so everything is not covered yet, but expect the fol
 
  * HCtl API (jack detection example in `hctl` module docs)
 
- * Raw midi
+ * Raw MIDI (and some UMP)
 
- * Midi sequencer (most of it)
+ * MIDI sequencer (most of it)
 
  * Ctl API
 
