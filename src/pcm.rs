@@ -153,13 +153,18 @@ impl PCM {
 
     // Does not offer async mode (it's not very Rustic anyway)
     pub fn open(name: &CStr, dir: Direction, nonblock: bool) -> Result<PCM> {
+        unsafe { Self::open_with_flags(name, dir, nonblock, 0) }
+    }
+
+    /// Same as open, except you can pass additional and undocumented flags at your own risk.
+    pub unsafe fn open_with_flags(name: &CStr, dir: Direction, nonblock: bool, user_flags: i32) -> Result<PCM> {
         let mut r = ptr::null_mut();
         let stream = match dir {
             Direction::Capture => alsa::SND_PCM_STREAM_CAPTURE,
             Direction::Playback => alsa::SND_PCM_STREAM_PLAYBACK
         };
         let flags = if nonblock { alsa::SND_PCM_NONBLOCK as i32 } else { 0 };
-        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags)).map(|_| PCM(r, cell::Cell::new(false)))
+        acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags | user_flags)).map(|_| PCM(r, cell::Cell::new(false)))
     }
 
     pub fn start(&self) -> Result<()> { acheck!(snd_pcm_start(self.0)).map(|_| ()) }
