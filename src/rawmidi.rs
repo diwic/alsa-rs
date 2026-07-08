@@ -7,6 +7,7 @@ use super::error::*;
 use crate::alsa;
 use ::alloc::ffi::CString;
 use ::alloc::string::{String, ToString};
+use core::mem::zeroed;
 use core::ptr;
 use core::ffi::CStr;
 
@@ -256,10 +257,7 @@ impl Rawmidi {
     }
 
     pub fn tread(&self, buf: &mut [u8]) -> Result<(timespec, usize)> {
-        let mut timestamp: timespec = timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
+        let mut timestamp: timespec = unsafe { zeroed() };
         acheck!(snd_rawmidi_tread(self.0, (&mut timestamp) as *mut timespec, buf.as_mut_ptr() as *mut c_void, buf.len()))
             .map(|sz| (timestamp, sz as usize))
     }

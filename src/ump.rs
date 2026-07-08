@@ -7,6 +7,7 @@ use ::alloc::ffi::CString;
 use ::alloc::string::{String, ToString};
 use alsa::snd_ump_rawmidi;
 use core::ffi::CStr;
+use core::mem::zeroed;
 use core::ptr;
 use libc::{c_short, c_uint, c_void, pollfd, size_t, timespec};
 
@@ -86,10 +87,7 @@ impl Ump {
     }
 
     pub fn tread(&mut self, buf: &mut [u32]) -> Result<(timespec, usize)> {
-        let mut timestamp: timespec = timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
+        let mut timestamp: timespec = unsafe { zeroed() };
 
         acheck!(snd_ump_tread(
             self.0,
