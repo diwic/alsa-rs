@@ -43,8 +43,11 @@
 //! ```
 
 
-use libc::{c_int, c_uint, c_void, ssize_t, c_short, timespec, pollfd};
+use libc::{c_int, c_uint, c_void, ssize_t, c_short, pollfd};
 use crate::alsa;
+// alsa_sys::timespec, not libc::timespec: they diverge on 32-bit glibc
+// targets with a 64-bit time_t, and these FFI calls are sized for the former.
+use crate::alsa::timespec;
 use core::convert::Infallible;
 use core::marker::PhantomData;
 use core::mem::{size_of, zeroed};

@@ -9,7 +9,10 @@ use alsa::snd_ump_rawmidi;
 use core::ffi::CStr;
 use core::mem::zeroed;
 use core::ptr;
-use libc::{c_short, c_uint, c_void, pollfd, size_t, timespec};
+use libc::{c_short, c_uint, c_void, pollfd, size_t};
+// alsa_sys::timespec, not libc::timespec: they diverge on 32-bit glibc
+// targets with a 64-bit time_t, and this FFI call is sized for the former.
+use crate::alsa::timespec;
 
 pub use super::rawmidi::Info;
 pub use super::rawmidi::Iter;
