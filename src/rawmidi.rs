@@ -1,10 +1,13 @@
 //! MIDI devices I/O and enumeration
 
-use libc::{c_int, c_short, c_uint, c_void, pollfd, size_t, timespec};
+use libc::{c_int, c_short, c_uint, c_void, pollfd, size_t};
 use super::ctl_int::{ctl_ptr, Ctl};
 use super::{Direction, poll};
 use super::error::*;
 use crate::alsa;
+// alsa_sys::timespec, not libc::timespec: they diverge on 32-bit glibc
+// targets with a 64-bit time_t, and this FFI call is sized for the former.
+use crate::alsa::timespec;
 use ::alloc::ffi::CString;
 use ::alloc::string::{String, ToString};
 use core::mem::zeroed;

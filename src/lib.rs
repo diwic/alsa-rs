@@ -98,6 +98,12 @@ pub enum Round {
 mod error;
 pub use crate::error::{Error, Result};
 
+/// Use this `timespec`, not `libc::timespec`, to hold values returned by
+/// functions such as [`pcm::Status::get_htstamp`]. `libc::timespec` is
+/// undersized on 32-bit targets with a 64-bit kernel `time_t`; passing it by
+/// pointer to these FFI calls will otherwise segfault.
+pub use crate::alsa::timespec;
+
 pub mod card;
 pub use crate::card::Card as Card;
 
