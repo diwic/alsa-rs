@@ -170,6 +170,13 @@ impl PCM {
         acheck!(snd_pcm_open(&mut r, name.as_ptr(), stream, flags | user_flags)).map(|_| PCM(r, cell::Cell::new(false)))
     }
 
+    /// Returns the backend type of this PCM handle using `snd_pcm_type`.
+    ///
+    /// Returns an error if ALSA reports a type not recognized by this crate.
+    pub fn get_type(&self) -> Result<Type> {
+        Type::from_native(unsafe { alsa::snd_pcm_type(self.0) })
+    }
+
     pub fn start(&self) -> Result<()> { acheck!(snd_pcm_start(self.0)).map(|_| ()) }
     pub fn drop(&self) -> Result<()> { acheck!(snd_pcm_drop(self.0)).map(|_| ()) }
     pub fn pause(&self, pause: bool) -> Result<()> {
@@ -501,6 +508,51 @@ impl<'a, S: Copy> std::io::Write for IO<'a, S> {
     fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
+
+alsa_enum!(
+    #[non_exhaustive]
+    /// [SND_PCM_TYPE_xxx](https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) backend types
+    Type, ALL_TYPES[31],
+
+    HW = SND_PCM_TYPE_HW,
+    HOOKS = SND_PCM_TYPE_HOOKS,
+    MULTI = SND_PCM_TYPE_MULTI,
+    FILE = SND_PCM_TYPE_FILE,
+    NULL = SND_PCM_TYPE_NULL,
+    SHM = SND_PCM_TYPE_SHM,
+    INET = SND_PCM_TYPE_INET,
+    COPY = SND_PCM_TYPE_COPY,
+    LINEAR = SND_PCM_TYPE_LINEAR,
+    ALAW = SND_PCM_TYPE_ALAW,
+    MULAW = SND_PCM_TYPE_MULAW,
+    ADPCM = SND_PCM_TYPE_ADPCM,
+    RATE = SND_PCM_TYPE_RATE,
+    ROUTE = SND_PCM_TYPE_ROUTE,
+    PLUG = SND_PCM_TYPE_PLUG,
+    SHARE = SND_PCM_TYPE_SHARE,
+    METER = SND_PCM_TYPE_METER,
+    MIX = SND_PCM_TYPE_MIX,
+    DROUTE = SND_PCM_TYPE_DROUTE,
+    LBSERVER = SND_PCM_TYPE_LBSERVER,
+    LinearFloat = SND_PCM_TYPE_LINEAR_FLOAT,
+    LADSPA = SND_PCM_TYPE_LADSPA,
+    DMIX = SND_PCM_TYPE_DMIX,
+    JACK = SND_PCM_TYPE_JACK,
+    DSNOOP = SND_PCM_TYPE_DSNOOP,
+    DSHARE = SND_PCM_TYPE_DSHARE,
+    IEC958 = SND_PCM_TYPE_IEC958,
+    SOFTVOL = SND_PCM_TYPE_SOFTVOL,
+    IOPLUG = SND_PCM_TYPE_IOPLUG,
+    EXTPLUG = SND_PCM_TYPE_EXTPLUG,
+    MmapEmul = SND_PCM_TYPE_MMAP_EMUL,
+);
+
+impl Type {
+    fn from_native(value: alsa::snd_pcm_type_t) -> Result<Self> {
+        let value = c_int::try_from(value).map_err(|_| Error::unsupported("snd_pcm_type"))?;
+        Self::from_c_int(value, "snd_pcm_type")
+    }
+}
 
 alsa_enum!(
     /// [SND_PCM_STATE_xxx](http://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) constants
@@ -1460,5 +1512,38 @@ fn format_display_from_str() {
 
     for format in ALL_FORMATS {
         assert_eq!(format, format.to_string().parse().unwrap());
+    }
+}
+
+#[test]
+fn pcm_type_known_values() {
+    assert_eq!(Type::all().len(), 31);
+    for &kind in Type::all() {
+        assert_eq!(Type::from_native(kind as alsa::snd_pcm_type_t), Ok(kind));
+    }
+    assert_eq!(Type::from_native(alsa::SND_PCM_TYPE_HW), Ok(Type::HW));
+    assert_eq!(Type::from_native(alsa::SND_PCM_TYPE_NULL), Ok(Type::NULL));
+}
+
+#[test]
+fn pcm_type_unknown_values() {
+    for value in [
+        alsa::SND_PCM_TYPE_LAST + 1,
+        c_int::MAX as alsa::snd_pcm_type_t,
+        c_int::MAX as alsa::snd_pcm_type_t + 1,
+        alsa::snd_pcm_type_t::MAX,
+    ] {
+        let error = Type::from_native(value).unwrap_err();
+        assert_eq!(error.func(), "snd_pcm_type");
+        assert_eq!(error.errno(), libc::ENOTSUP);
+    }
+}
+
+#[test]
+fn pcm_type_from_null() {
+    for direction in [Direction::Capture, Direction::Playback] {
+        let pcm = PCM::open(c"null", direction, false).unwrap();
+        assert_eq!(pcm.get_type(), Ok(Type::NULL));
+        assert_eq!(pcm.get_type(), Ok(Type::NULL));
     }
 }
