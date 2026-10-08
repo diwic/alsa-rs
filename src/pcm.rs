@@ -514,36 +514,36 @@ alsa_enum!(
     /// [SND_PCM_TYPE_xxx](https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html) backend types
     Type, ALL_TYPES[31],
 
-    HW = SND_PCM_TYPE_HW,
-    HOOKS = SND_PCM_TYPE_HOOKS,
-    MULTI = SND_PCM_TYPE_MULTI,
-    FILE = SND_PCM_TYPE_FILE,
-    NULL = SND_PCM_TYPE_NULL,
-    SHM = SND_PCM_TYPE_SHM,
-    INET = SND_PCM_TYPE_INET,
-    COPY = SND_PCM_TYPE_COPY,
-    LINEAR = SND_PCM_TYPE_LINEAR,
-    ALAW = SND_PCM_TYPE_ALAW,
-    MULAW = SND_PCM_TYPE_MULAW,
-    ADPCM = SND_PCM_TYPE_ADPCM,
-    RATE = SND_PCM_TYPE_RATE,
-    ROUTE = SND_PCM_TYPE_ROUTE,
-    PLUG = SND_PCM_TYPE_PLUG,
-    SHARE = SND_PCM_TYPE_SHARE,
-    METER = SND_PCM_TYPE_METER,
-    MIX = SND_PCM_TYPE_MIX,
-    DROUTE = SND_PCM_TYPE_DROUTE,
-    LBSERVER = SND_PCM_TYPE_LBSERVER,
+    Hw = SND_PCM_TYPE_HW,
+    Hooks = SND_PCM_TYPE_HOOKS,
+    Multi = SND_PCM_TYPE_MULTI,
+    File = SND_PCM_TYPE_FILE,
+    Null = SND_PCM_TYPE_NULL,
+    Shm = SND_PCM_TYPE_SHM,
+    Inet = SND_PCM_TYPE_INET,
+    Copy = SND_PCM_TYPE_COPY,
+    Linear = SND_PCM_TYPE_LINEAR,
+    Alaw = SND_PCM_TYPE_ALAW,
+    Mulaw = SND_PCM_TYPE_MULAW,
+    Adpcm = SND_PCM_TYPE_ADPCM,
+    Rate = SND_PCM_TYPE_RATE,
+    Route = SND_PCM_TYPE_ROUTE,
+    Plug = SND_PCM_TYPE_PLUG,
+    Share = SND_PCM_TYPE_SHARE,
+    Meter = SND_PCM_TYPE_METER,
+    Mix = SND_PCM_TYPE_MIX,
+    Droute = SND_PCM_TYPE_DROUTE,
+    Lbserver = SND_PCM_TYPE_LBSERVER,
     LinearFloat = SND_PCM_TYPE_LINEAR_FLOAT,
-    LADSPA = SND_PCM_TYPE_LADSPA,
-    DMIX = SND_PCM_TYPE_DMIX,
-    JACK = SND_PCM_TYPE_JACK,
-    DSNOOP = SND_PCM_TYPE_DSNOOP,
-    DSHARE = SND_PCM_TYPE_DSHARE,
-    IEC958 = SND_PCM_TYPE_IEC958,
-    SOFTVOL = SND_PCM_TYPE_SOFTVOL,
-    IOPLUG = SND_PCM_TYPE_IOPLUG,
-    EXTPLUG = SND_PCM_TYPE_EXTPLUG,
+    Ladspa = SND_PCM_TYPE_LADSPA,
+    Dmix = SND_PCM_TYPE_DMIX,
+    Jack = SND_PCM_TYPE_JACK,
+    Dsnoop = SND_PCM_TYPE_DSNOOP,
+    Dshare = SND_PCM_TYPE_DSHARE,
+    Iec958 = SND_PCM_TYPE_IEC958,
+    Softvol = SND_PCM_TYPE_SOFTVOL,
+    Ioplug = SND_PCM_TYPE_IOPLUG,
+    Extplug = SND_PCM_TYPE_EXTPLUG,
     MmapEmul = SND_PCM_TYPE_MMAP_EMUL,
 );
 
@@ -1521,8 +1521,8 @@ fn pcm_type_known_values() {
     for &kind in Type::all() {
         assert_eq!(Type::from_native(kind as alsa::snd_pcm_type_t), Ok(kind));
     }
-    assert_eq!(Type::from_native(alsa::SND_PCM_TYPE_HW), Ok(Type::HW));
-    assert_eq!(Type::from_native(alsa::SND_PCM_TYPE_NULL), Ok(Type::NULL));
+    assert_eq!(Type::from_native(alsa::SND_PCM_TYPE_HW), Ok(Type::Hw));
+    assert_eq!(Type::from_native(alsa::SND_PCM_TYPE_NULL), Ok(Type::Null));
 }
 
 #[test]
@@ -1543,7 +1543,7 @@ fn pcm_type_unknown_values() {
 fn pcm_type_from_null() {
     for direction in [Direction::Capture, Direction::Playback] {
         let pcm = PCM::open(c"null", direction, false).unwrap();
-        assert_eq!(pcm.get_type(), Ok(Type::NULL));
-        assert_eq!(pcm.get_type(), Ok(Type::NULL));
+        assert_eq!(pcm.get_type(), Ok(Type::Null));
+        assert_eq!(pcm.get_type(), Ok(Type::Null));
     }
 }
