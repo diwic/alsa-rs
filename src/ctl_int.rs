@@ -43,6 +43,23 @@ impl<'a> Iterator for DeviceIter<'a> {
     }
 }
 
+fn pcm_device_cursor(previous: Option<i32>) -> Result<c_int> {
+    match previous {
+        None => Ok(-1),
+        Some(device) if device >= 0 => Ok(device),
+        Some(_) => Err(Error::new("snd_ctl_pcm_next_device", libc::EINVAL)),
+    }
+}
+
+fn pcm_device_result(result: Result<c_int>, device: c_int) -> Result<Option<i32>> {
+    result?;
+    match device {
+        -1 => Ok(None),
+        device if device >= 0 => Ok(Some(device)),
+        _ => Err(Error::new("snd_ctl_pcm_next_device", libc::EINVAL)),
+    }
+}
+
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 #[derive(Debug)]
 pub struct Ctl(*mut alsa::snd_ctl_t);
@@ -128,6 +145,32 @@ impl Ctl {
     pub fn read(&self) -> Result<Option<Event>> {
         let e = event_new()?;
         acheck!(snd_ctl_read(self.0, e.0)).map(|r| if r == 1 { Some(e) } else { None })
+    }
+
+    /// Returns the next PCM device number reported by this control handle.
+    ///
+    /// Pass `None` to start traversal, then `Some(device)` with the last returned
+    /// device number to continue. `Ok(Some(device))` reports a device, `Ok(None)`
+    /// reports successful exhaustion, and `Err` reports a failure rather than
+    /// exhaustion. Unlike [`DeviceIter`], this method preserves native errors.
+    ///
+    /// Negative input device numbers and unexpected negative output numbers
+    /// other than the exhaustion sentinel (-1) return `EINVAL`.
+    ///
+    /// ```no_run
+    /// # fn devices(ctl: &alsa::Ctl) -> alsa::Result<()> {
+    /// let mut previous = None;
+    /// while let Some(device) = ctl.pcm_next_device(previous)? {
+    ///     println!("PCM device: {}", device);
+    ///     previous = Some(device);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn pcm_next_device(&self, previous: Option<i32>) -> Result<Option<i32>> {
+        let mut device = pcm_device_cursor(previous)?;
+        let result = acheck!(snd_ctl_pcm_next_device(self.0, &mut device));
+        pcm_device_result(result, device)
     }
 
     pub fn pcm_info(&self, device: u32, subdevice: u32, direction: Direction) -> Result<Info> {
@@ -563,4 +606,59 @@ fn print_sizeof() {
 //    assert!(eleminfo <= ELEM_INFO_SIZE);
 
     std::println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
+}
+
+#[cfg(test)]
+mod pcm_next_device_tests {
+    use super::*;
+
+    #[test]
+    fn initial_and_continuation_cursors() {
+        assert_eq!(pcm_device_cursor(None), Ok(-1));
+        for device in [0, 7, i32::MAX] {
+            assert_eq!(pcm_device_cursor(Some(device)), Ok(device));
+        }
+    }
+
+    #[test]
+    fn negative_input_is_rejected() {
+        for device in [-1, -2, i32::MIN] {
+            let error = pcm_device_cursor(Some(device)).unwrap_err();
+            assert_eq!(error.func(), "snd_ctl_pcm_next_device");
+            assert_eq!(error.errno(), libc::EINVAL);
+        }
+    }
+
+    #[test]
+    fn successful_device_and_exhaustion() {
+        for device in [0, 7, i32::MAX] {
+            assert_eq!(pcm_device_result(Ok(0), device), Ok(Some(device)));
+        }
+        assert_eq!(pcm_device_result(Ok(0), -1), Ok(None));
+    }
+
+    #[test]
+    fn native_error_wins_over_any_cursor() {
+        let error = Error::new("snd_ctl_pcm_next_device", libc::EIO);
+        for device in [-1, -2, 0, 7] {
+            assert_eq!(pcm_device_result(Err(error), device), Err(error));
+        }
+    }
+
+    #[test]
+    fn unexpected_negative_output_is_rejected() {
+        for device in [-2, i32::MIN] {
+            let error = pcm_device_result(Ok(0), device).unwrap_err();
+            assert_eq!(error.func(), "snd_ctl_pcm_next_device");
+            assert_eq!(error.errno(), libc::EINVAL);
+        }
+    }
+
+    #[test]
+    fn existing_iterator_api_is_available() {
+        fn assert_iterator<I: Iterator<Item = c_int>>() {}
+        assert_iterator::<DeviceIter<'static>>();
+        let _: fn(&'static Ctl) -> DeviceIter<'static> = DeviceIter::new;
+        let _: fn(&Ctl, Option<i32>) -> Result<Option<i32>> = Ctl::pcm_next_device;
+    }
 }
