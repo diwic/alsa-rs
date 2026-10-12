@@ -110,7 +110,11 @@ pub use crate::card::Card as Card;
 mod ctl_int;
 pub mod ctl {
     //! Control device API
-    pub use super::ctl_int::{Ctl, CardInfo, DeviceIter, ElemIface, ElemId, ElemList, ElemType, ElemValue, ElemInfo};
+    #[allow(deprecated)]
+    pub use super::ctl_int::{
+        CardInfo, Ctl, DeviceIter, ElemId, ElemIface, ElemInfo, ElemList, ElemType, ElemValue,
+        PcmDeviceIter,
+    };
 }
 
 pub use crate::ctl::Ctl as Ctl;
