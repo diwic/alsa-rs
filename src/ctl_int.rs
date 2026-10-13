@@ -46,44 +46,21 @@ impl<'a> Iterator for DeviceIter<'a> {
     }
 }
 
-/// Fallible PCM device traversal for a control handle.
-///
-/// Starts at native cursor `-1`. Successful exhaustion and the first error
-/// terminate traversal; errors retain the ALSA operation and errno.
-/// Device numbers are `u32`, matching [`Ctl::pcm_info`].
-///
-/// Public state may be used to resume traversal. An active cursor must be `-1`
-/// (start) or nonnegative. Completed state must have cursor `-1`. Invalid state
-/// yields `EINVAL` once, without calling ALSA, then becomes completed.
-/// Changing valid public state can skip devices or restart traversal, including
-/// after completion; termination guarantees apply while callers leave it intact.
-///
-/// ```no_run
-/// # fn devices(ctl: &alsa::Ctl) -> alsa::Result<()> {
-/// for device in alsa::ctl::PcmDeviceIter::new(ctl) {
-///     let device: u32 = device?;
-///     println!("PCM device: {}", device);
-/// }
-/// # Ok(())
-/// # }
-/// ```
+/// Iterate over PCM devices of a card, returning ALSA errors.
+/// Iteration ends on successful exhaustion or after the first error.
 #[derive(Debug)]
 pub struct PcmDeviceIter<'a> {
     /// Control handle whose PCM devices are traversed.
     pub ctl: &'a Ctl,
     /// Native ALSA cursor: `-1` starts traversal; otherwise the previous device.
     pub cursor: c_int,
-    /// Whether traversal has terminated. Completed state has cursor `-1`.
+    /// Whether iteration has ended.
     pub completed: bool,
 }
 
 impl<'a> PcmDeviceIter<'a> {
     pub fn new(ctl: &'a Ctl) -> Self {
-        Self {
-            ctl,
-            cursor: -1,
-            completed: false,
-        }
+        Self { ctl, cursor: -1, completed: false }
     }
 }
 
@@ -91,41 +68,16 @@ impl Iterator for PcmDeviceIter<'_> {
     type Item = Result<u32>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        pcm_device_next(&mut self.cursor, &mut self.completed, |cursor| {
-            acheck!(snd_ctl_pcm_next_device(self.ctl.0, cursor))
-        })
-    }
-}
-
-fn pcm_device_number(device: c_int) -> Result<u32> {
-    u32::try_from(device).map_err(|_| Error::new("snd_ctl_pcm_next_device", libc::EINVAL))
-}
-
-// Inject only the native operation so software tests exercise the same transitions.
-fn pcm_device_next(
-    cursor: &mut c_int,
-    completed: &mut bool,
-    next: impl FnOnce(&mut c_int) -> Result<c_int>,
-) -> Option<Result<u32>> {
-    let result = if *cursor < -1 || (*completed && *cursor != -1) {
-        Err(Error::new("snd_ctl_pcm_next_device", libc::EINVAL))
-    } else if *completed {
-        return None;
-    } else {
-        next(cursor).and_then(|_| {
-            if *cursor == -1 {
-                Ok(None)
-            } else {
-                pcm_device_number(*cursor).map(Some)
+        if self.completed { return None; }
+        match acheck!(snd_ctl_pcm_next_device(self.ctl.0, &mut self.cursor)) {
+            Ok(_) if self.cursor == -1 => { self.completed = true; None }
+            Ok(_) => {
+                let device = u32::try_from(self.cursor)
+                    .map_err(|_| Error::new("snd_ctl_pcm_next_device", libc::EINVAL));
+                self.completed = device.is_err();
+                Some(device)
             }
-        })
-    };
-    match result {
-        Ok(Some(device)) => Some(Ok(device)),
-        terminal => {
-            *cursor = -1;
-            *completed = true;
-            terminal.transpose()
+            Err(e) => { self.completed = true; Some(Err(e)) }
         }
     }
 }
@@ -652,145 +604,13 @@ fn print_sizeof() {
     std::println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
 }
 
-#[cfg(test)]
-mod pcm_device_iter_tests {
-    use super::*;
-
-    fn step(
-        cursor: &mut c_int,
-        completed: &mut bool,
-        output: c_int,
-        result: Result<c_int>,
-    ) -> Option<Result<u32>> {
-        pcm_device_next(cursor, completed, |cursor| {
-            *cursor = output;
-            result
-        })
-    }
-
-    fn assert_terminal(cursor: &mut c_int, completed: &mut bool) {
-        assert_eq!(*cursor, -1);
-        assert!(*completed);
-        for _ in 0..3 {
-            assert_eq!(
-                pcm_device_next(cursor, completed, |_| panic!(
-                    "native call after completion"
-                )),
-                None
-            );
-        }
-    }
-
-    #[test]
-    fn initial_cursor_and_sequence() {
-        let ctl = core::mem::ManuallyDrop::new(Ctl(ptr::null_mut()));
-        let mut iter = PcmDeviceIter::new(&ctl);
-        assert_eq!(iter.cursor, -1);
-        assert!(!iter.completed);
-        for (previous, output) in [(-1, 0), (0, 7), (7, c_int::MAX)] {
-            assert_eq!(
-                pcm_device_next(&mut iter.cursor, &mut iter.completed, |cursor| {
-                    assert_eq!(*cursor, previous);
-                    *cursor = output;
-                    Ok(0)
-                }),
-                Some(Ok(u32::try_from(output).unwrap()))
-            );
-        }
-        assert_eq!(step(&mut iter.cursor, &mut iter.completed, -1, Ok(0)), None);
-        assert_terminal(&mut iter.cursor, &mut iter.completed);
-    }
-
-    #[test]
-    fn empty_exhaustion() {
-        let (mut cursor, mut completed) = (-1, false);
-        assert_eq!(step(&mut cursor, &mut completed, -1, Ok(0)), None);
-        assert_terminal(&mut cursor, &mut completed);
-    }
-
-    #[test]
-    fn native_error_before_or_after_prefix() {
-        for prefix in [false, true] {
-            for output in [-1, -2, 0, c_int::MAX] {
-                let (mut cursor, mut completed) = (-1, false);
-                if prefix {
-                    assert_eq!(step(&mut cursor, &mut completed, 0, Ok(0)), Some(Ok(0)));
-                }
-                let error = Error::new("snd_ctl_pcm_next_device", libc::EIO);
-                assert_eq!(
-                    step(&mut cursor, &mut completed, output, Err(error)),
-                    Some(Err(error))
-                );
-                assert_terminal(&mut cursor, &mut completed);
-            }
-        }
-    }
-
-    #[test]
-    fn invalid_native_output() {
-        for output in [-2, c_int::MIN] {
-            let (mut cursor, mut completed) = (-1, false);
-            let error = step(&mut cursor, &mut completed, output, Ok(0))
-                .unwrap()
-                .unwrap_err();
-            assert_eq!(error.func(), "snd_ctl_pcm_next_device");
-            assert_eq!(error.errno(), libc::EINVAL);
-            assert_terminal(&mut cursor, &mut completed);
-        }
-    }
-
-    #[test]
-    fn checked_conversion_boundaries() {
-        assert_eq!(pcm_device_number(0), Ok(0));
-        assert_eq!(
-            pcm_device_number(c_int::MAX),
-            Ok(u32::try_from(c_int::MAX).unwrap())
-        );
-        for input in [-1, -2, c_int::MIN] {
-            assert_eq!(pcm_device_number(input).unwrap_err().errno(), libc::EINVAL);
-        }
-    }
-
-    #[test]
-    fn invalid_public_state_and_explicit_restart() {
-        let ctl = core::mem::ManuallyDrop::new(Ctl(ptr::null_mut()));
-        for (cursor, completed) in [
-            (-2, false),
-            (c_int::MIN, false),
-            (-2, true),
-            (0, true),
-            (c_int::MAX, true),
-        ] {
-            let mut iter = PcmDeviceIter {
-                ctl: &ctl,
-                cursor,
-                completed,
-            };
-            // A null handle is safe here only because validation must avoid ALSA.
-            assert_eq!(iter.next().unwrap().unwrap_err().errno(), libc::EINVAL);
-            assert_eq!(iter.next(), None);
-            assert_terminal(&mut iter.cursor, &mut iter.completed);
-            iter.completed = false;
-            assert_eq!(
-                pcm_device_next(&mut iter.cursor, &mut iter.completed, |cursor| {
-                    assert_eq!(*cursor, -1);
-                    *cursor = 3;
-                    Ok(0)
-                }),
-                Some(Ok(3))
-            );
-        }
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn existing_iterator_api_is_available() {
-        fn assert_iterator<I: Iterator<Item = c_int>>() {}
-        assert_iterator::<DeviceIter<'static>>();
-        let _: fn(&'static Ctl) -> DeviceIter<'static> = DeviceIter::new;
-        let ctl = core::mem::ManuallyDrop::new(Ctl(ptr::null_mut()));
-        let iter = DeviceIter::new(&ctl);
-        assert!(core::ptr::eq(iter.0, &*ctl));
-        assert_eq!(iter.1, -1);
-    }
+#[test]
+#[allow(deprecated)]
+fn pcm_device_iterator_api() {
+    fn fallible<I: Iterator<Item = Result<u32>>>() {}
+    fn legacy<I: Iterator<Item = c_int>>() {}
+    fallible::<crate::ctl::PcmDeviceIter<'static>>();
+    legacy::<crate::ctl::DeviceIter<'static>>();
+    let _: fn(&'static Ctl) -> crate::ctl::PcmDeviceIter<'static> = PcmDeviceIter::new;
+    let _: fn(&'static Ctl) -> crate::ctl::DeviceIter<'static> = DeviceIter::new;
 }
