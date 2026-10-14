@@ -3,7 +3,7 @@
 use alsa::Card;
 use alsa::card::Iter;
 use alsa::device_name::HintIter;
-use alsa::ctl::{Ctl, DeviceIter};
+use alsa::ctl::{Ctl, PcmDeviceIter};
 use alsa::{Direction, Error};
 
 // Each card can have multiple devices and subdevices, list them all
@@ -16,9 +16,10 @@ fn list_devices_for_card(card: &Card, direction: Direction) -> Result<(), Error>
     let cardinfo = ctl.card_info()?;
     let card_id = cardinfo.get_id()?;
     let card_name = cardinfo.get_name()?;
-    for device in DeviceIter::new(&ctl) {
+    for device in PcmDeviceIter::new(&ctl) {
+        let device = device?;
         // Read info from Ctl
-        let pcm_info = match ctl.pcm_info(device as u32, 0, direction) {
+        let pcm_info = match ctl.pcm_info(device, 0, direction) {
             // If pcm_info returns ENOENT, there are no streams in this direction
             Err(x) if x.errno() == libc::ENOENT => continue,
             x => x,
@@ -33,7 +34,7 @@ fn list_devices_for_card(card: &Card, direction: Direction) -> Result<(), Error>
         let subdevs = pcm_info.get_subdevices_count();
         for subdev in 0..subdevs {
             // Get subdevice name
-            let pcm_info = ctl.pcm_info(device as u32, subdev, direction)?;
+            let pcm_info = ctl.pcm_info(device, subdev, direction)?;
             let subdev_name = pcm_info.get_subdevice_name()?;
 
             println!("  subdevice: {:<2} name: '{}'", subdev, subdev_name);
@@ -45,7 +46,18 @@ fn list_devices_for_card(card: &Card, direction: Direction) -> Result<(), Error>
 
 pub fn list_hw_devices(direction: Direction) {
     let cards = Iter::new();
-    cards.for_each(|card| if let Ok(c) = card { list_devices_for_card(&c, direction).unwrap_or_default() });
+    cards.for_each(|card| {
+        if let Ok(c) = card {
+            if let Err(e) = list_devices_for_card(&c, direction) {
+                eprintln!(
+                    "Error listing {:?} devices for card {}: {}",
+                    direction,
+                    c.get_index(),
+                    e
+                );
+            }
+        }
+    });
 }
 
 pub fn list_pcm_devices(direction: Direction) {

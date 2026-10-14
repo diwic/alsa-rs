@@ -22,15 +22,18 @@ const ELEM_ID_SIZE: usize = 64;
 
 /// [snd_ctl_pcm_next_device](https://www.alsa-project.org/alsa-doc/alsa-lib/control_8c.html#accbb0be6e5ca7361ffec0ea304ed1b05) wrapper.
 /// Iterate over devices of a card.
+#[deprecated(note = "Use PcmDeviceIter to distinguish errors from successful exhaustion")]
 #[derive(Debug)]
 pub struct DeviceIter<'a>(&'a Ctl, c_int);
 
+#[allow(deprecated)]
 impl<'a> DeviceIter<'a>{
     pub fn new(ctl: &'a Ctl) -> DeviceIter<'a> {
         DeviceIter(ctl, -1)
     }
 }
 
+#[allow(deprecated)]
 impl<'a> Iterator for DeviceIter<'a> {
     type Item = c_int;
 
@@ -39,6 +42,42 @@ impl<'a> Iterator for DeviceIter<'a> {
             Ok(_) if self.1 == -1 => None,
             Ok(_) => Some(self.1),
             Err(_) => None,
+        }
+    }
+}
+
+/// Iterate over PCM devices of a card, returning ALSA errors.
+/// Iteration ends on successful exhaustion or after the first error.
+#[derive(Debug)]
+pub struct PcmDeviceIter<'a> {
+    /// Control handle whose PCM devices are traversed.
+    pub ctl: &'a Ctl,
+    /// Native ALSA cursor: `-1` starts traversal; otherwise the previous device.
+    pub cursor: c_int,
+    /// Whether iteration has ended.
+    pub completed: bool,
+}
+
+impl<'a> PcmDeviceIter<'a> {
+    pub fn new(ctl: &'a Ctl) -> Self {
+        Self { ctl, cursor: -1, completed: false }
+    }
+}
+
+impl Iterator for PcmDeviceIter<'_> {
+    type Item = Result<u32>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.completed { return None; }
+        match acheck!(snd_ctl_pcm_next_device(self.ctl.0, &mut self.cursor)) {
+            Ok(_) if self.cursor == -1 => { self.completed = true; None }
+            Ok(_) => {
+                let device = u32::try_from(self.cursor)
+                    .map_err(|_| Error::new("snd_ctl_pcm_next_device", libc::EINVAL));
+                self.completed = device.is_err();
+                Some(device)
+            }
+            Err(e) => { self.completed = true; Some(Err(e)) }
         }
     }
 }
@@ -563,4 +602,15 @@ fn print_sizeof() {
 //    assert!(eleminfo <= ELEM_INFO_SIZE);
 
     std::println!("Elem id: {}, Elem value: {}, Elem info: {}", elemid, elemvalue, eleminfo);
+}
+
+#[test]
+#[allow(deprecated)]
+fn pcm_device_iterator_api() {
+    fn fallible<I: Iterator<Item = Result<u32>>>() {}
+    fn legacy<I: Iterator<Item = c_int>>() {}
+    fallible::<crate::ctl::PcmDeviceIter<'static>>();
+    legacy::<crate::ctl::DeviceIter<'static>>();
+    let _: fn(&'static Ctl) -> crate::ctl::PcmDeviceIter<'static> = PcmDeviceIter::new;
+    let _: fn(&'static Ctl) -> crate::ctl::DeviceIter<'static> = DeviceIter::new;
 }
