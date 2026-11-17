@@ -48,6 +48,33 @@ impl Mixer {
         acheck!(snd_mixer_attach(self.0, name.as_ptr())).map(|_| ())
     }
 
+    /// Attaches an already opened HCtl, for example one opened with
+    /// [`HCtl::open_readonly`](crate::hctl::HCtl::open_readonly).
+    ///
+    /// The HCtl must not have been loaded: the mixer loads it in `load`, and
+    /// alsa-lib asserts that it was not loaded before. A loaded HCtl is
+    /// refused with `EINVAL` (and closed).
+    ///
+    /// The mixer takes ownership of the HCtl and closes it when the mixer is
+    /// dropped. On error, alsa-lib has already closed it.
+    pub fn attach_hctl(&mut self, hctl: crate::hctl::HCtl) -> Result<()> {
+        if hctl.count() > 0 {
+            return Err(Error::new("snd_mixer_attach_hctl", libc::EINVAL));
+        }
+        let h = hctl.into_raw();
+        acheck!(snd_mixer_attach_hctl(self.0, h)).map(|_| ())
+    }
+
+    /// Like `new`, but opens the card's control device read-only
+    /// (see [`Ctl::open_readonly`](crate::ctl::Ctl::open_readonly)).
+    pub fn new_readonly(name: &str, nonblock: bool) -> Result<Mixer> {
+        let mut mixer = Mixer::open(nonblock)?;
+        mixer.attach_hctl(crate::hctl::HCtl::new_readonly(name, false)?)?;
+        Selem::register(&mut mixer)?;
+        mixer.load()?;
+        Ok(mixer)
+    }
+
     pub fn load(&mut self) -> Result<()> {
         acheck!(snd_mixer_load(self.0)).map(|_| ())
     }
@@ -676,4 +703,57 @@ fn print_sizeof() {
 
     assert!(selemid <= SELEM_ID_SIZE);
     std::println!("Selem id: {}", selemid);
+}
+
+#[cfg(test)]
+fn access_modes<D: poll::Descriptors>(d: &D) -> ::alloc::vec::Vec<i32> {
+    // Reads the access mode (O_ACCMODE bits) of each descriptor from /proc/self/fdinfo.
+    extern crate std;
+    use ::alloc::string::String;
+    let fds = poll::Descriptors::get(d).unwrap();
+    fds.iter().map(|p| {
+        let info: String = std::fs::read_to_string(::alloc::format!("/proc/self/fdinfo/{}", p.fd)).unwrap();
+        let flags = info.lines().find_map(|l| l.strip_prefix("flags:")).unwrap().trim();
+        i32::from_str_radix(flags, 8).unwrap() & libc::O_ACCMODE
+    }).collect()
+}
+
+#[test]
+fn readonly_opens_are_readonly() {
+    use super::card;
+    use crate::{ctl::Ctl, hctl::HCtl};
+    for c in card::Iter::new().map(|x| x.unwrap()) {
+        let name = ::alloc::format!("hw:{}", c.get_index());
+        let ctl = Ctl::new_readonly(&name, false).unwrap();
+        ctl.card_info().unwrap();
+        let modes = access_modes(&ctl);
+        assert!(!modes.is_empty() && modes.iter().all(|m| *m == libc::O_RDONLY));
+        let hctl = HCtl::new_readonly(&name, false).unwrap();
+        hctl.load().unwrap();
+        let modes = access_modes(&hctl);
+        assert!(!modes.is_empty() && modes.iter().all(|m| *m == libc::O_RDONLY));
+        // A loaded HCtl cannot be attached to a mixer.
+        assert!(Mixer::open(false).unwrap().attach_hctl(hctl).is_err());
+        let mixer = Mixer::new_readonly(&name, false).unwrap();
+        let modes = access_modes(&mixer);
+        assert!(!modes.is_empty() && modes.iter().all(|m| *m == libc::O_RDONLY));
+        for s in mixer.iter().filter_map(Selem::new) {
+            let _ = s.get_id();
+        }
+        // The default open is unchanged.
+        let rw = Ctl::new(&name, false).unwrap();
+        let modes = access_modes(&rw);
+        assert!(!modes.is_empty() && modes.iter().all(|m| *m == libc::O_RDWR));
+    }
+}
+
+#[test]
+fn open_flags_add_readonly_bit() {
+    use crate::ctl_int::open_flags;
+    assert_eq!(alsa::SND_CTL_NONBLOCK, 1);
+    assert_eq!(alsa::SND_CTL_READONLY, 4);
+    assert_eq!(open_flags(false, false), 0);
+    assert_eq!(open_flags(true, false), 1);
+    assert_eq!(open_flags(false, true), alsa::SND_CTL_READONLY as c_int);
+    assert_eq!(open_flags(true, true), 1 | alsa::SND_CTL_READONLY as c_int);
 }

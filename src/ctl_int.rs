@@ -82,6 +82,14 @@ impl Iterator for PcmDeviceIter<'_> {
     }
 }
 
+/// Mode flags for snd_ctl_open / snd_hctl_open.
+pub(crate) fn open_flags(nonblock: bool, readonly: bool) -> c_int {
+    let mut flags = 0;
+    if nonblock { flags |= alsa::SND_CTL_NONBLOCK as c_int; }
+    if readonly { flags |= alsa::SND_CTL_READONLY as c_int; }
+    flags
+}
+
 /// [snd_ctl_t](http://www.alsa-project.org/alsa-doc/alsa-lib/group___control.html) wrapper
 #[derive(Debug)]
 pub struct Ctl(*mut alsa::snd_ctl_t);
@@ -96,8 +104,30 @@ impl Ctl {
 
     /// Open does not support async mode (it's not very Rustic anyway)
     pub fn open(c: &CStr, nonblock: bool) -> Result<Ctl> {
+        Self::open_mode(c, nonblock, false)
+    }
+
+    /// Wrapper around open_readonly that takes a &str instead of a &CStr
+    pub fn new_readonly(c: &str, nonblock: bool) -> Result<Self> {
+        Self::open_readonly(&CString::new(c).unwrap(), nonblock)
+    }
+
+    /// Like `open`, but asks for read-only access (`SND_CTL_READONLY`).
+    ///
+    /// For the `hw` plugin this opens the control device with `O_RDONLY`
+    /// instead of `O_RDWR`, which is useful for tools that only inspect
+    /// controls and should not hold a write-capable descriptor.
+    ///
+    /// Note: this sets the access mode of the descriptor. The kernel does not
+    /// refuse control writes on a read-only descriptor, so it documents intent
+    /// and satisfies file-mode based policies; it is not a write barrier.
+    pub fn open_readonly(c: &CStr, nonblock: bool) -> Result<Ctl> {
+        Self::open_mode(c, nonblock, true)
+    }
+
+    fn open_mode(c: &CStr, nonblock: bool, readonly: bool) -> Result<Ctl> {
         let mut r = ptr::null_mut();
-        let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_CTL_NONBLOCK does not exist in alsa-sys
+        let flags = open_flags(nonblock, readonly);
         acheck!(snd_ctl_open(&mut r, c.as_ptr(), flags)).map(|_| Ctl(r))
     }
 
