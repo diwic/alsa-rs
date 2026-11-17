@@ -61,10 +61,33 @@ impl HCtl {
     /// Open does not support async mode (it's not very Rustic anyway)
     /// Note: You probably want to call `load` afterwards.
     pub fn open(c: &CStr, nonblock: bool) -> Result<HCtl> {
+        Self::open_mode(c, nonblock, false)
+    }
+
+    /// Wrapper around open_readonly that takes a &str instead of a &CStr
+    pub fn new_readonly(c: &str, nonblock: bool) -> Result<HCtl> {
+        Self::open_readonly(&CString::new(c).unwrap(), nonblock)
+    }
+
+    /// Like `open`, but asks for read-only access (`SND_CTL_READONLY`).
+    /// See [`Ctl::open_readonly`](crate::ctl::Ctl::open_readonly) for what this does and does not guarantee.
+    /// Note: You probably want to call `load` afterwards.
+    pub fn open_readonly(c: &CStr, nonblock: bool) -> Result<HCtl> {
+        Self::open_mode(c, nonblock, true)
+    }
+
+    fn open_mode(c: &CStr, nonblock: bool, readonly: bool) -> Result<HCtl> {
         let mut r = ptr::null_mut();
-        let flags = if nonblock { 1 } else { 0 }; // FIXME: alsa::SND_CTL_NONBLOCK does not exist in alsa-sys
+        let flags = ctl_int::open_flags(nonblock, readonly);
         acheck!(snd_hctl_open(&mut r, c.as_ptr(), flags))
             .map(|_| HCtl(r))
+    }
+
+    /// Gives up ownership of the handle without closing it.
+    pub(crate) fn into_raw(self) -> *mut alsa::snd_hctl_t {
+        let r = self.0;
+        core::mem::forget(self);
+        r
     }
 
     /// Wrapper around open. You probably want to call `load` afterwards.
@@ -74,6 +97,9 @@ impl HCtl {
     }
 
     pub fn load(&self) -> Result<()> { acheck!(snd_hctl_load(self.0)).map(|_| ()) }
+
+    /// Number of loaded elements (0 before `load`).
+    pub(crate) fn count(&self) -> c_uint { unsafe { alsa::snd_hctl_get_count(self.0) } }
 
     pub fn elem_iter(&self) -> ElemIter<'_> { ElemIter(self, ptr::null_mut()) }
 
